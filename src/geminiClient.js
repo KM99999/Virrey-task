@@ -16,8 +16,8 @@ const API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 // siguiente. El modelo que funcione se recuerda para las siguientes peticiones.
 const MODEL_CANDIDATES = [...new Set([
   process.env.GEMINI_MODEL,
-  "gemini-2.5-flash-lite", // rápido y sin "thinking" → primero
-  "gemini-2.5-flash",
+  "gemini-2.5-flash",       // capaz: genera buenas explicaciones pedagógicas
+  "gemini-2.5-flash-lite",  // rápido, reserva si el anterior no está disponible
   "gemini-flash-latest",
   "gemini-2.0-flash",
 ].filter(Boolean))];
