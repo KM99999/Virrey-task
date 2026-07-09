@@ -48,6 +48,9 @@ export async function generateLSG(query, intent) {
       temperature: 0.4,
       responseMimeType: "application/json",
       responseSchema: LSG_RESPONSE_SCHEMA,
+      // Desactiva el "thinking" (razonamiento extendido) de los modelos 2.5+: sin
+      // esto, gemini-flash-latest tarda >30 s con salida estructurada y da timeout.
+      thinkingConfig: { thinkingBudget: 0 },
     },
   };
 
@@ -82,9 +85,9 @@ export async function generateLSG(query, intent) {
 async function callGemini(apiKey, model, body) {
   const url = `${API_BASE}/${model}:generateContent?key=${apiKey}`;
 
-  // Timeout defensivo: si Gemini no responde en 30 s, abortamos.
+  // Timeout defensivo: si Gemini no responde en 45 s, abortamos.
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30_000);
+  const timeout = setTimeout(() => controller.abort(), 45_000);
 
   let res;
   try {
@@ -96,7 +99,7 @@ async function callGemini(apiKey, model, body) {
     });
   } catch (err) {
     if (err.name === "AbortError") {
-      throw new Error("Gemini no respondió a tiempo (timeout de 30 s).");
+      throw new Error("Gemini no respondió a tiempo (timeout de 45 s).");
     }
     throw err;
   } finally {
