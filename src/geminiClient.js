@@ -16,8 +16,8 @@ const API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 // siguiente. El modelo que funcione se recuerda para las siguientes peticiones.
 const MODEL_CANDIDATES = [...new Set([
   process.env.GEMINI_MODEL,
-  "gemini-2.5-flash",       // capaz: genera buenas explicaciones pedagógicas
-  "gemini-2.5-flash-lite",  // rápido, reserva si el anterior no está disponible
+  "gemini-2.5-flash-lite",  // rápido y fiable (con reintento) → camino común
+  "gemini-2.5-flash",       // capaz, pero a veces 404/lento → solo de reserva
 ].filter(Boolean))];
 // Nota: "gemini-flash-latest" se excluye a propósito (colgaba >30 s).
 
@@ -109,9 +109,10 @@ export async function generateLSG(query, intent) {
         // Lección pobre (sin explicaciones) → reintentar (otra ronda / otro modelo).
       } catch (err) {
         lastErr = err;
-        if (err.notFound) { dead.add(model); continue; } // modelo retirado
-        if (err.retryable) continue;                      // timeout
-        throw err;                                        // otro error → propagar
+        // 404 (retirado) o timeout → descartar este modelo el resto de la petición,
+        // para no perder segundos reintentándolo en las siguientes rondas.
+        if (err.notFound || err.retryable) { dead.add(model); continue; }
+        throw err; // otro error → propagar
       }
     }
     if (dead.size >= candidates.length) break; // todos los modelos caídos
@@ -127,10 +128,10 @@ export async function generateLSG(query, intent) {
 async function callGemini(apiKey, model, body) {
   const url = `${API_BASE}/${model}:generateContent?key=${apiKey}`;
 
-  // Timeout defensivo por intento: si el modelo no responde en 25 s, abortamos y
+  // Timeout defensivo por intento: si el modelo no responde en 20 s, abortamos y
   // dejamos que el fallback pruebe el siguiente (marcado como retryable).
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 25_000);
+  const timeout = setTimeout(() => controller.abort(), 20_000);
 
   let res;
   try {
