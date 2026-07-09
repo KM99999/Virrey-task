@@ -120,11 +120,19 @@ async function liveGate(q, intentEsperada, minHablar) {
 }
 
 async function liveTests() {
-  console.log(`\n[2] Producción real — ${BASE}`);
-  await liveGate("desarrolla 2x + x = 12", "resolver", 4);
-  await liveGate("enséñame ecuaciones de primer grado", "aprender", 4);
-  await liveGate("¿por qué se factoriza x² - 9?", "explicar", 3);
-  await liveGate("dame un ejercicio de fracciones", "practicar", 2);
+  // Cada consulta se corre varias veces (QA_REPS, por defecto 2) para cazar fallos
+  // INTERMITENTES: una lección puede salir bien una vez y sin explicaciones la otra.
+  const REPS = Number(process.env.QA_REPS || 2);
+  console.log(`\n[2] Producción real — ${BASE}  (x${REPS} cada consulta)`);
+  const cases = [
+    ["desarrolla 2x + x = 12", "resolver", 3],
+    ["enséñame ecuaciones de primer grado", "aprender", 3],
+    ["¿por qué se factoriza x² - 9?", "explicar", 2],
+    ["dame un ejercicio de fracciones", "practicar", 2],
+  ];
+  for (const [q, intent, minH] of cases) {
+    for (let r = 0; r < REPS; r++) await liveGate(q, intent, minH);
+  }
 }
 
 // ---------- Ejecutar ----------

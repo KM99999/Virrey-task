@@ -23,10 +23,8 @@ const MODEL_CANDIDATES = [...new Set([
 
 let workingModel = null; // caché del último modelo que respondió bien
 
-// ¿La lección salió SIN explicaciones (hablar vacío)? La IA a veces genera "hablar"
-// sin texto; una lección con pizarra pero sin ninguna explicación es inaceptable
-// para un tutor. En ese caso probamos otro modelo.
-function isDegenerate(lsg) {
+// Cuenta explicaciones (hablar con texto) y pasos de pizarra de una lección.
+function lessonStats(lsg) {
   let hablar = 0;
   let pizarra = 0;
   const scan = (arr) => {
@@ -37,7 +35,15 @@ function isDegenerate(lsg) {
   };
   if (Array.isArray(lsg?.modulos)) for (const m of lsg.modulos) scan(m?.directivas);
   else scan(lsg?.directivas);
-  return hablar === 0 && pizarra >= 1;
+  return { hablar, pizarra };
+}
+
+// ¿La lección tiene explicaciones suficientes? El modelo "lite" a veces genera
+// "hablar" vacío → lección solo de pizarra, inaceptable para un tutor. Se considera
+// buena si tiene al menos 3 explicaciones, o si explica al menos tanto como escribe.
+function isGoodLesson(lsg) {
+  const { hablar, pizarra } = lessonStats(lsg);
+  return hablar >= 3 || (hablar >= 1 && hablar >= pizarra);
 }
 
 /**
@@ -74,34 +80,45 @@ export async function generateLSG(query, intent) {
     ? [workingModel, ...MODEL_CANDIDATES.filter((m) => m !== workingModel)]
     : MODEL_CANDIDATES;
 
+  // El modelo "lite" genera explicaciones de forma intermitente. Reintentamos hasta
+  // MAX_ROUNDS veces para obtener una lección CON explicaciones, quedándonos con la
+  // mejor (más explicaciones) que hayamos visto por si ninguna es ideal.
+  const MAX_ROUNDS = 3;
+  const dead = new Set(); // modelos que dieron 404 (no reintentar)
   let lastErr = null;
-  let firstOk = null; // primera lección válida, por si todas salen "pobres"
-  for (const model of candidates) {
-    try {
-      const text = await callGemini(apiKey, model, body);
-      let lsg;
+  let best = null; // { lsg, model, stats }
+
+  for (let round = 0; round < MAX_ROUNDS; round++) {
+    for (const model of candidates) {
+      if (dead.has(model)) continue;
       try {
-        lsg = JSON.parse(text);
+        const text = await callGemini(apiKey, model, body);
+        let lsg;
+        try {
+          lsg = JSON.parse(text);
+        } catch {
+          lastErr = new Error("La respuesta de Gemini no es JSON válido.");
+          continue;
+        }
+        const stats = lessonStats(lsg);
+        if (!best || stats.hablar > best.stats.hablar) best = { lsg, model, stats };
+        if (isGoodLesson(lsg)) {
+          workingModel = model; // recordar el modelo que dio una buena lección
+          return { lsg, source: "gemini", model };
+        }
+        // Lección pobre (sin explicaciones) → reintentar (otra ronda / otro modelo).
       } catch (err) {
-        throw new Error(`La respuesta de Gemini no es JSON válido: ${err.message}`);
+        lastErr = err;
+        if (err.notFound) { dead.add(model); continue; } // modelo retirado
+        if (err.retryable) continue;                      // timeout
+        throw err;                                        // otro error → propagar
       }
-      if (!firstOk) firstOk = { lsg, model };
-      // Lección sin explicaciones → NO cachear este modelo; probar uno mejor.
-      if (isDegenerate(lsg)) {
-        lastErr = new Error(`El modelo ${model} generó una lección sin explicaciones.`);
-        continue;
-      }
-      workingModel = model; // recordar el modelo que dio una buena lección
-      return { lsg, source: "gemini", model };
-    } catch (err) {
-      lastErr = err;
-      // Modelo retirado (404) o lento (timeout) → probar el siguiente candidato.
-      if (err.notFound || err.retryable) continue;
-      throw err; // cualquier otro error se propaga
     }
+    if (dead.size >= candidates.length) break; // todos los modelos caídos
   }
-  // Si ninguna fue "buena", usar la primera válida (mejor que fallar la petición).
-  if (firstOk) return { lsg: firstOk.lsg, source: "gemini", model: firstOk.model };
+
+  // Ninguna fue ideal: devolver la mejor vista (más explicaciones) — mejor que fallar.
+  if (best) return { lsg: best.lsg, source: "gemini", model: best.model };
   throw lastErr || new Error("Ningún modelo de Gemini está disponible.");
 }
 
