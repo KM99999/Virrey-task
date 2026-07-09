@@ -1,0 +1,25 @@
+# Blueprint de despliegue para Render (https://render.com)
+# Región US (oregon) — necesaria porque la API de Gemini bloquea otras regiones.
+#
+# Cómo usarlo:
+#   1) Sube este repo a GitHub (ver README → Despliegue).
+#   2) En Render: New + → Blueprint → conecta el repo. Render lee este archivo.
+#   3) En el dashboard del servicio, añade la variable secreta GEMINI_API_KEY
+#      (sync:false ⇒ NO se guarda en el repo; se pega a mano una sola vez).
+services:
+  - type: web
+    name: math-ia
+    runtime: node
+    region: oregon          # región US: aquí sí funciona la API de Gemini
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false          # secreto: se define en el dashboard, nunca en el repo
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: NODE_VERSION
+        value: "20"

@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Math IA — Prototipo (Fases 1 + 2)</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">∑</span>
+      <div>
+        <h1>Math IA</h1>
+        <p class="tagline">Tutor de matemáticas · avatar + voz + sincronización (PSE Light)</p>
+      </div>
+    </div>
+    <div class="status" id="status" title="Estado del servicio">
+      <span class="dot" id="statusDot"></span>
+      <span id="statusText">conectando…</span>
+    </div>
+  </header>
+
+  <!-- ESCENARIO (Fase 2): avatar + pizarra + reproducción sincronizada -->
+  <section class="panel stage" id="stage">
+    <div class="stage-head">
+      <h2>Escenario · avatar y pizarra</h2>
+      <div class="stage-controls">
+        <span class="tts-info" id="ttsInfo"></span>
+        <button id="playBtn" class="btn primary small" disabled>▶ Reproducir lección</button>
+        <button id="stopBtn" class="btn ghost small" disabled>■ Detener</button>
+      </div>
+    </div>
+
+    <div class="stage-body">
+      <div class="avatar-wrap">
+        <div id="avatar" class="avatar" data-state="neutral"></div>
+        <div class="avatar-name">Tutor</div>
+      </div>
+
+      <div class="board-wrap">
+        <div class="board-label">Pizarra</div>
+        <div id="board" class="board" aria-live="polite"></div>
+        <p id="caption" class="caption" aria-live="polite"></p>
+
+        <!-- Ramificación ligera: caja de respuesta del alumno -->
+        <div id="answerBox" class="answer-box" hidden>
+          <input id="answerInput" type="text" placeholder="Tu respuesta…" autocomplete="off" />
+          <button id="answerBtn" class="btn primary small">Responder</button>
+        </div>
+        <div id="feedback" class="feedback" hidden></div>
+      </div>
+    </div>
+    <p class="stage-hint">
+      Genera una lección abajo y pulsa <strong>Reproducir</strong>: el avatar habla en
+      español (TTS) mientras la pizarra revela el contenido paso a paso. En las
+      preguntas, responde para ver la <strong>ramificación</strong> (correcto → continúa ·
+      incorrecto → otro ejemplo, un reintento).
+    </p>
+  </section>
+
+  <main class="layout">
+    <!-- Panel de consulta -->
+    <section class="panel query-panel">
+      <h2>Tu consulta</h2>
+      <p class="hint">
+        Escribe o dicta una consulta. Ejemplos:
+        <button class="chip" data-example="Resuelve 2x + 5 = 15">Resuelve 2x + 5 = 15</button>
+        <button class="chip" data-example="Enséñame derivadas">Enséñame derivadas</button>
+        <button class="chip" data-example="Explícame por qué se factoriza x² - 9">¿Por qué factorizar x² - 9?</button>
+        <button class="chip" data-example="Dame un ejercicio de fracciones">Ejercicio de fracciones</button>
+      </p>
+
+      <div class="input-row">
+        <textarea id="queryInput" rows="3"
+          placeholder="Ej.: Resuelve 2x + 5 = 15"></textarea>
+        <div class="controls">
+          <button id="micBtn" class="btn mic" title="Dictar por voz" aria-label="Dictar por voz">
+            🎤
+          </button>
+          <button id="sendBtn" class="btn primary">Enviar</button>
+        </div>
+      </div>
+      <p class="voice-status" id="voiceStatus" aria-live="polite"></p>
+
+      <!-- Diagnóstico del pipeline -->
+      <div class="pipeline" id="pipeline" hidden>
+        <div class="pill" id="pillIntent">Intención: —</div>
+        <div class="pill" id="pillSource">IA: —</div>
+        <div class="pill" id="pillDuration">Duración: —</div>
+      </div>
+    </section>
+
+    <!-- Panel de resultado (LSG procesado) -->
+    <section class="panel result-panel">
+      <div class="result-head">
+        <h2>Lección generada (LSG)</h2>
+        <button id="toggleJson" class="btn ghost small">Ver LSG (JSON)</button>
+      </div>
+
+      <div id="empty" class="empty">
+        Aún no hay lección. Envía una consulta para ver el
+        <strong>Learning Scene Graph</strong> procesado por el PRE Light.
+      </div>
+
+      <ol id="steps" class="steps"></ol>
+
+      <pre id="jsonView" class="json-view" hidden></pre>
+
+      <div id="warnings" class="warnings" hidden></div>
+    </section>
+  </main>
+
+  <!-- Historial de sesión -->
+  <section class="panel history-panel">
+    <div class="result-head">
+      <h2>Historial de la sesión</h2>
+      <button id="clearHistory" class="btn ghost small">Limpiar</button>
+    </div>
+    <ul id="history" class="history"></ul>
+  </section>
+
+  <footer class="footer">
+    Fase 1 — texto/voz · clasificador · IA (Gemini) con salida LSG · PRE Light &nbsp;·&nbsp;
+    Fase 2 — avatar 2D · voz TTS (español) · PSE Light (sincronización) · ramificación ligera.
+  </footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
