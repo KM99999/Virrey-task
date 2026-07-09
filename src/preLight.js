@@ -144,7 +144,7 @@ function sanitizeDirectiva(raw, warnings, context) {
         warnings.push(`"hablar" sin texto descartada en ${context}.`);
         return null;
       }
-      d.texto = str(raw.texto);
+      d.texto = sanitizeMath(str(raw.texto));
       break;
     case "esperar":
       d.segundos = clampNumber(raw.segundos, 1, 10, 2);
@@ -155,7 +155,7 @@ function sanitizeDirectiva(raw, warnings, context) {
         warnings.push(`"pizarra" sin contenido descartada en ${context}.`);
         return null;
       }
-      d.contenido = str(raw.contenido);
+      d.contenido = sanitizeMath(str(raw.contenido));
       break;
     case "puntero":
       d.accion = str(raw.accion) || "resaltar";
@@ -166,7 +166,7 @@ function sanitizeDirectiva(raw, warnings, context) {
         warnings.push(`"preguntar" sin texto descartada en ${context}.`);
         return null;
       }
-      d.texto = str(raw.texto);
+      d.texto = sanitizeMath(str(raw.texto));
       d.esperar_respuesta = raw.esperar_respuesta !== false;
       d.si_correcto = str(raw.si_correcto) || "continuar";
       d.si_incorrecto = str(raw.si_incorrecto) || "mostrar_otro_ejemplo";
@@ -205,6 +205,33 @@ function estimateDuration(pasos) {
 // --- helpers ---
 function str(v) {
   return typeof v === "string" ? v.trim() : "";
+}
+
+// Limpia notación LaTeX / signos de dólar que la IA pueda deslizar, y la convierte
+// a texto plano legible (la pizarra y el TTS no renderizan LaTeX). Ej.:
+//   "$x^2 - 9 = (x-3)(x+3)$"  →  "x² - 9 = (x-3)(x+3)"
+//   "$a^2 \\implies a = x$"    →  "a² ⇒ a = x"
+function sanitizeMath(s) {
+  if (typeof s !== "string") return s;
+  return s
+    .replace(/\$+/g, "")                                   // delimitadores $…$
+    .replace(/\\implies|\\Rightarrow/g, " ⇒ ")
+    .replace(/\\rightarrow|\\to\b/g, " → ")
+    .replace(/\\times/g, "×")
+    .replace(/\\cdot/g, "·")
+    .replace(/\\div/g, "÷")
+    .replace(/\\pm/g, "±")
+    .replace(/\\leq/g, "≤").replace(/\\geq/g, "≥").replace(/\\neq/g, "≠")
+    .replace(/\\sqrt\s*\{([^}]*)\}/g, "√($1)")
+    .replace(/\\sqrt/g, "√")
+    .replace(/\\frac\s*\{([^}]*)\}\s*\{([^}]*)\}/g, "($1)/($2)")
+    .replace(/\^\{\s*2\s*\}|\^2/g, "²")
+    .replace(/\^\{\s*3\s*\}|\^3/g, "³")
+    .replace(/\^\{\s*n\s*\}|\^n/g, "ⁿ")
+    .replace(/\\[a-zA-Z]+/g, "")                            // comandos LaTeX restantes
+    .replace(/[{}]/g, "")                                   // llaves sueltas
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
 }
 
 function clampNumber(v, min, max, fallback) {

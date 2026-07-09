@@ -38,8 +38,12 @@ export function extractExpectedAnswer(timeline, questionIndex) {
   for (let i = 0; i < questionIndex; i++) {
     const d = timeline[i];
     if (d?.tipo === "pizarra" && typeof d.contenido === "string" && d.contenido.includes("=")) {
-      const rhs = d.contenido.split("=").pop().trim();
-      if (/^[-+]?\d+([.,/]\d+)?$/.test(rhs)) expected = rhs; // solo respuestas numéricas simples
+      const parts = d.contenido.split("=");
+      const lhs = parts[0].trim();
+      const rhs = parts.slice(1).join("=").trim();
+      // Solo la FORMA RESUELTA: una variable sola = número (p.ej. "x = 5", "y = -3/2").
+      // NO tomar el "7" de un ejemplo como "x + 3 = 7" (cuya solución es 4, no 7).
+      if (/^[a-zA-Z]$/.test(lhs) && /^[-+]?\d+([.,/]\d+)?$/.test(rhs)) expected = rhs;
     }
   }
   return expected;
@@ -217,27 +221,30 @@ export class PSELight {
       return;
     }
 
-    // Incorrecto → un reintento con "otro ejemplo" / repaso.
-    this.ui.showFeedback(false, "Casi. Veamos otro ejemplo y lo intentas de nuevo.");
-    await this._speak("No pasa nada. Veamos otro ejemplo y lo intentas de nuevo.", "hablando", signal);
+    // Incorrecto → un reintento. NO prometemos "otro ejemplo" (no se genera uno nuevo);
+    // guiamos al alumno a revisar lo que ya está en la pizarra, sin escribir pistas
+    // que puedan ser engañosas.
+    const guia = expected != null
+      ? "Casi. Fíjate en la solución de la pizarra e inténtalo otra vez."
+      : "Casi. Repasa el ejemplo de la pizarra e inténtalo otra vez.";
+    this.ui.showFeedback(false, guia);
+    await this._speak(guia, "hablando", signal);
     if (signal.aborted) return;
-
-    if (expected != null) {
-      this.ui.writeBoard(`Pista: la respuesta es ${expected}`);
-      await sleep(700, signal);
-    }
 
     const retry = await this.ui.askAnswer("Inténtalo otra vez: " + d.texto, { signal });
     if (signal.aborted || retry == null) return;
 
-    let r = checkAnswer(retry, expected);
-    let ok = r.known ? r.correct : /^s[ií]|correct|bien|entend/i.test(retry.trim());
+    const r = checkAnswer(retry, expected);
+    const ok = r.known ? r.correct : /^s[ií]|correct|bien|entend/i.test(retry.trim());
     if (ok) {
       this.ui.showFeedback(true, "¡Eso es! Ahora sí. 🎉");
       await this._speak("¡Eso es! Ahora sí lo tienes.", "sonriendo", signal);
+    } else if (expected != null) {
+      this.ui.showFeedback(false, `La solución correcta es ${expected}. ¡Sigue practicando!`);
+      await this._speak(`La solución correcta es ${expected}. ¡Sigue practicando, vas bien!`, "hablando", signal);
     } else {
-      this.ui.showFeedback(false, `La respuesta era ${expected ?? "la mostrada"}. ¡Sigue practicando!`);
-      await this._speak("La respuesta correcta era esa. ¡Sigue practicando, vas bien!", "hablando", signal);
+      this.ui.showFeedback(false, "No pasa nada, se aprende practicando. ¡Sigamos!");
+      await this._speak("No pasa nada, se aprende practicando. ¡Sigamos!", "hablando", signal);
     }
   }
 }

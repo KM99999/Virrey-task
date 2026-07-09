@@ -81,7 +81,9 @@ REGLAS DE SALIDA:
 - Devuelve SOLO JSON, sin texto adicional ni markdown.
 - "intencion" debe ser exactamente: "${intent}".
 - Todo el texto hablado ("hablar") y las preguntas van en ESPAÑOL, claros y didácticos.
-- Usa notación matemática legible en "contenido" (p.ej. "2x + 5 = 15", "x = 5", "f'(x) = 3x²").
+- Usa notación matemática legible en TEXTO PLANO (p.ej. "2x + 5 = 15", "x = 5", "f'(x) = 3x²").
+- PROHIBIDO usar LaTeX o signos de dólar: NO escribas "$...$", "\\frac", "\\implies", "\\sqrt", "^{}".
+  Usa Unicode directo: potencias con ² ³ ⁿ (p.ej. "x²"), raíz "√", multiplicación "·", "⇒", fracciones "a/b".
 - Ordena las directivas en el orden pedagógico correcto: habla, escribe, resalta, pausa.
 - Incluye pausas ("esperar", 1-3 s) para que el alumno siga el ritmo.
 - Cierra con una directiva "preguntar" que verifique comprensión, con "esperar_respuesta": true,

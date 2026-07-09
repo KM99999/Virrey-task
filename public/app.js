@@ -60,14 +60,16 @@ const ui = {
     el.className = "board-module";
     el.textContent = `Módulo: ${label}`;
     els.board.appendChild(el);
-    el.scrollIntoView({ block: "nearest" });
+    // Scroll SOLO dentro de la pizarra (no mover la página).
+    els.board.scrollTop = els.board.scrollHeight;
   },
   writeBoard(text) {
     const line = document.createElement("div");
     line.className = "board-line reveal";
     line.textContent = text;
     els.board.appendChild(line);
-    line.scrollIntoView({ block: "nearest" });
+    // Scroll SOLO dentro de la pizarra (no mover la página).
+    els.board.scrollTop = els.board.scrollHeight;
     return line;
   },
   highlightBoard(objetivo) {
@@ -90,10 +92,9 @@ const ui = {
     els.steps.querySelectorAll(".step.active").forEach((s) => s.classList.remove("active"));
     if (index == null) return;
     const li = els.steps.querySelector(`.step[data-idx="${index}"]`);
-    if (li) {
-      li.classList.add("active");
-      li.scrollIntoView({ block: "nearest", behavior: "smooth" });
-    }
+    // Solo resaltar el paso activo; NO hacer scroll de la página (antes arrastraba
+    // la vista al último paso del transcript mientras se reproducía).
+    if (li) li.classList.add("active");
   },
   showFeedback(ok, msg) {
     els.feedback.hidden = false;
