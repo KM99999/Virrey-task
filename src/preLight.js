@@ -33,18 +33,46 @@ function normLabel(v, fallback) {
 export function solveLinearFromText(text) {
   if (typeof text !== "string") return null;
   const t = text.toLowerCase();
-  // <coef?><var><±b?> = <c>   (coef y b opcionales, espacios permitidos).
-  // Ej: "2x - 3 = 7", "resuelve 4x + 2 = 10", "x+5=12", "3x = 9", "-x + 4 = 1".
+  // Ecuación lineal compacta: términos (coef·var o número) unidos por + / -, = número.
+  // Captura toda la parte izquierda (varios términos), p.ej. "3x + x", "2x - 3".
   const m = t.match(
-    /(?:^|[^a-z0-9.])(-?\d*)\s*([a-z])\s*([+-]\s*\d+(?:\.\d+)?)?\s*=\s*(-?\s*\d+(?:\.\d+)?)(?![a-z0-9.])/
+    /((?:[+-]\s*)?(?:\d*[a-z]|\d+(?:\.\d+)?)(?:\s*[+-]\s*(?:\d*[a-z]|\d+(?:\.\d+)?))*)\s*=\s*(-?\d+(?:\.\d+)?)(?![a-z0-9.])/
   );
   if (!m) return null;
-  const coef = m[1];
-  const a = coef === "" || coef === "+" ? 1 : coef === "-" ? -1 : Number(coef);
-  const b = m[3] ? Number(m[3].replace(/\s+/g, "")) : 0;
-  const c = Number(m[4].replace(/\s+/g, ""));
-  if (!Number.isFinite(a) || a === 0 || !Number.isFinite(b) || !Number.isFinite(c)) return null;
-  const x = (c - b) / a;
+  const lhs = m[1];
+  const c = Number(m[2]);
+  if (!Number.isFinite(c)) return null;
+
+  // Debe haber exactamente UNA variable (rechaza multivariable y expresiones raras).
+  const letters = new Set((lhs.match(/[a-z]/g) || []));
+  if (letters.size !== 1) return null;
+  const v = [...letters][0];
+
+  // Sumar términos semejantes: coeficiente total de la variable y constante total.
+  let expr = lhs.replace(/\s+/g, "");
+  if (!/^[+-]/.test(expr)) expr = "+" + expr;
+  const terms = expr.match(/[+-](?:\d*[a-z]|\d+(?:\.\d+)?)/g);
+  if (!terms) return null;
+
+  let coef = 0;
+  let konst = 0;
+  for (const term of terms) {
+    const sign = term[0] === "-" ? -1 : 1;
+    const body = term.slice(1);
+    if (body.includes(v)) {
+      const num = body.replace(v, "");
+      const k = num === "" ? 1 : Number(num);
+      if (!Number.isFinite(k)) return null; // p.ej. "x²" → no lineal
+      coef += sign * k;
+    } else {
+      const k = Number(body);
+      if (!Number.isFinite(k)) return null;
+      konst += sign * k;
+    }
+  }
+  if (coef === 0) return null;
+
+  const x = (c - konst) / coef;
   if (!Number.isFinite(x)) return null;
   return Number.isInteger(x) ? String(x) : String(Math.round(x * 1000) / 1000);
 }
@@ -223,10 +251,10 @@ function sanitizeDirectiva(raw, warnings, context) {
   return d;
 }
 
-// Añade una pregunta de cierre si la última directiva no lo es.
+// Añade una pregunta de cierre SOLO si no hay ya ninguna "preguntar". Evita mostrar
+// dos cajas de respuesta cuando la IA ya incluyó una pregunta (aunque no fuera la última).
 function ensureClosingQuestion(directivas, counter, pasos, intent) {
-  const last = directivas[directivas.length - 1];
-  if (last && last.tipo === "preguntar") return;
+  if (directivas.some((d) => d.tipo === "preguntar")) return;
 
   const pregunta = {
     id: ++counter.n,
