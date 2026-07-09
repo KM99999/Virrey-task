@@ -112,10 +112,17 @@ El corazón de la app es CÓMO se enseña. Resolver el ejercicio sin explicar es
 ${
   modular
     ? `FORMATO MODULAR (intención "${intent}"):
-Escena con "modulos": array de { "id", "directivas": [...] }. Módulos: "concepto" (explica la
-idea con "hablar" + ejemplo en "pizarra"), "regla" (la regla clave explicada), "ejemplo_guiado"
-(un ejemplo resuelto paso a paso, cada paso explicado con "hablar"), "practica" (termina con la
-directiva "preguntar" del ejercicio nuevo). Cada módulo empieza explicando con "hablar".`
+Escena con "modulos": array de { "id", "directivas": [...] }. Módulos: "concepto", "regla",
+"ejemplo_guiado", "practica" (este último termina con la "preguntar" del ejercicio nuevo).
+OBLIGATORIO en CADA módulo: la PRIMERA directiva es un "hablar" con TEXTO REAL, y CADA "pizarra"
+va precedida de un "hablar" que la explica. Un módulo con "pizarra" pero sin "hablar" es un ERROR.
+Ejemplo de módulo bien hecho (fíjate que cada "hablar" tiene texto de verdad):
+{ "id": "concepto", "directivas": [
+  { "tipo": "hablar", "texto": "Una ecuación es como una balanza: lo de un lado vale igual que lo del otro." },
+  { "tipo": "pizarra", "accion": "escribir", "contenido": "x + 3 = 5" },
+  { "tipo": "hablar", "texto": "La x es el número que no conocemos y que queremos descubrir." },
+  { "tipo": "esperar", "segundos": 2 }
+]}`
     : `FORMATO SECUENCIAL (intención "${intent}"):
 Escena con "directivas": array plano en orden. Resuelve/explica paso a paso: para CADA paso,
 "hablar" (el porqué) y luego "pizarra" (el paso). Cierra con la "preguntar" del ejercicio nuevo.`
