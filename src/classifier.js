@@ -57,6 +57,13 @@ function countMatches(norm, list) {
   return list.reduce((acc, kw) => (norm.includes(kw) ? acc + 1 : acc), 0);
 }
 
+// ¿El texto es una pregunta que pide la RAZÓN de algo? ("¿por qué…?", "para qué…").
+// Señal fuerte de "explicar": desempata frente a palabras que también apuntan a
+// "resolver" (p.ej. "¿por qué se factoriza?" → explicar, no resolver).
+function asksForReason(norm) {
+  return /\bpor que\b|\bpara que\b|\bpor que razon\b|\brazon de\b/.test(norm);
+}
+
 /**
  * Clasifica el texto en una de las 4 intenciones.
  * @param {string} text
@@ -74,6 +81,9 @@ export function classifyIntent(text) {
 
   // Señal estructural: una ecuación/expresión concreta refuerza "resolver".
   if (looksLikeConcreteExercise(norm)) scores.resolver += 1;
+
+  // Señal estructural: una pregunta por la razón ("¿por qué…?") refuerza "explicar".
+  if (asksForReason(norm)) scores.explicar += 1;
 
   // Elegir la intención con mayor puntaje.
   let best = "resolver"; // fallback razonable para un tutor de matemáticas
