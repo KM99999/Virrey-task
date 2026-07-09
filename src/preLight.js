@@ -25,6 +25,30 @@ function normLabel(v, fallback) {
   return CONTROL_LABELS.has(s) ? s : fallback;
 }
 
+// Deriva la respuesta esperada resolviendo una ecuación lineal simple embebida en
+// el texto de una pregunta: "a·x + b = c" → x = (c - b)/a. Gemini no rellena el
+// campo "respuesta" de forma fiable, así que la calculamos para poder calificar.
+// Devuelve la solución como string, o null si no es una ecuación lineal simple
+// (en cuyo caso el PSE Light tratará la pregunta como de comprensión, sin juzgar).
+export function solveLinearFromText(text) {
+  if (typeof text !== "string") return null;
+  const t = text.toLowerCase();
+  // <coef?><var><±b?> = <c>   (coef y b opcionales, espacios permitidos).
+  // Ej: "2x - 3 = 7", "resuelve 4x + 2 = 10", "x+5=12", "3x = 9", "-x + 4 = 1".
+  const m = t.match(
+    /(?:^|[^a-z0-9.])(-?\d*)\s*([a-z])\s*([+-]\s*\d+(?:\.\d+)?)?\s*=\s*(-?\s*\d+(?:\.\d+)?)(?![a-z0-9.])/
+  );
+  if (!m) return null;
+  const coef = m[1];
+  const a = coef === "" || coef === "+" ? 1 : coef === "-" ? -1 : Number(coef);
+  const b = m[3] ? Number(m[3].replace(/\s+/g, "")) : 0;
+  const c = Number(m[4].replace(/\s+/g, ""));
+  if (!Number.isFinite(a) || a === 0 || !Number.isFinite(b) || !Number.isFinite(c)) return null;
+  const x = (c - b) / a;
+  if (!Number.isFinite(x)) return null;
+  return Number.isInteger(x) ? String(x) : String(Math.round(x * 1000) / 1000);
+}
+
 // Segundos estimados que "cuesta" cada directiva (para duracion_estimada).
 const COSTO_SEGUNDOS = {
   avatar: 1,
@@ -174,7 +198,7 @@ function sanitizeDirectiva(raw, warnings, context) {
         warnings.push(`"preguntar" sin texto descartada en ${context}.`);
         return null;
       }
-      const respuesta = sanitizeMath(str(raw.respuesta));
+      let respuesta = sanitizeMath(str(raw.respuesta));
       // Gemini a veces mete ecuaciones, opciones o enunciados como "preguntar".
       // Si no es una pregunta real (sin "?" y sin respuesta esperada), se narra en
       // vez de abrir la caja de respuesta — evita pedir "responder" a una ecuación.
@@ -182,6 +206,9 @@ function sanitizeDirectiva(raw, warnings, context) {
         warnings.push(`"preguntar" sin forma de pregunta convertida a "hablar" en ${context}.`);
         return { tipo: "hablar", texto };
       }
+      // Si es una pregunta real pero la IA no dio respuesta, intentamos derivarla
+      // resolviendo la ecuación lineal embebida (p.ej. "¿valor de x en 2x-3=7?" → "5").
+      if (!respuesta) respuesta = solveLinearFromText(texto) || "";
       d.texto = texto;
       d.esperar_respuesta = raw.esperar_respuesta !== false;
       if (respuesta) d.respuesta = respuesta;
