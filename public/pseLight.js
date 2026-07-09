@@ -64,7 +64,9 @@ export function normalizeAnswer(s) {
 // Devuelve { known:boolean, correct:boolean }. Si no hay respuesta esperada
 // deducible, known=false (el PSE hará autoevaluación Sí/No).
 export function checkAnswer(student, expected) {
-  if (expected == null) return { known: false, correct: false };
+  if (expected == null || String(expected).trim() === "") {
+    return { known: false, correct: false };
+  }
   const a = normalizeAnswer(student);
   const b = normalizeAnswer(expected);
   if (!a) return { known: true, correct: false };
@@ -74,6 +76,11 @@ export function checkAnswer(student, expected) {
   const nb = Number(b.replace(/^[a-z]+=/, ""));
   if (Number.isFinite(na) && Number.isFinite(nb)) {
     return { known: true, correct: Math.abs(na - nb) < 1e-9 };
+  }
+  // Tolerancia de texto para respuestas cortas: una contiene a la otra
+  // (p.ej. alumno "sumar 7" vs esperado "sumar 7 a ambos lados").
+  if (a.length >= 3 && b.length >= 3 && (a.includes(b) || b.includes(a))) {
+    return { known: true, correct: true };
   }
   return { known: true, correct: false };
 }
@@ -204,15 +211,26 @@ export class PSELight {
     await this._speak(d.texto, "preguntando", signal);
     if (signal.aborted) return;
 
-    const expected = extractExpectedAnswer(timeline, index);
+    // Verdad-base para calificar: la respuesta que dio la IA (d.respuesta) o, en su
+    // defecto, la forma resuelta escrita en la pizarra. Si no hay ninguna, la pregunta
+    // es solo de comprensión y NUNCA se marca como incorrecta.
+    const expected = (d.respuesta && d.respuesta.trim()) || extractExpectedAnswer(timeline, index);
+
     const answer = await this.ui.askAnswer(d.texto, { signal });
     if (signal.aborted || answer == null) return;
 
-    let { known, correct } = checkAnswer(answer, expected);
-    // Sin respuesta deducible → autoevaluación: "si"/"no".
-    if (!known) correct = /^s[ií]|correct|bien|entend/i.test(answer.trim());
+    // Sin verdad-base → verificación de comprensión (no se juzga correcto/incorrecto).
+    if (!expected) {
+      const negativa = /^(no|nop|nel|para nada|no s[eé])\b/i.test(answer.trim());
+      const msg = negativa
+        ? "Sin problema, repasémoslo con calma. ¡Sigamos!"
+        : "¡Bien! Gracias por participar. Sigamos avanzando.";
+      this.ui.showFeedback(true, msg);
+      await this._speak(msg, "sonriendo", signal);
+      return;
+    }
 
-    if (correct) {
+    if (checkAnswer(answer, expected).correct) {
       const msg = d.si_correcto === "felicitar"
         ? "¡Muy bien! 🎉 Respuesta correcta."
         : "¡Correcto! Continuemos.";
@@ -221,30 +239,20 @@ export class PSELight {
       return;
     }
 
-    // Incorrecto → un reintento. NO prometemos "otro ejemplo" (no se genera uno nuevo);
-    // guiamos al alumno a revisar lo que ya está en la pizarra, sin escribir pistas
-    // que puedan ser engañosas.
-    const guia = expected != null
-      ? "Casi. Fíjate en la solución de la pizarra e inténtalo otra vez."
-      : "Casi. Repasa el ejemplo de la pizarra e inténtalo otra vez.";
-    this.ui.showFeedback(false, guia);
-    await this._speak(guia, "hablando", signal);
+    // Incorrecto → un reintento (ramificación ligera).
+    this.ui.showFeedback(false, "Casi. Piénsalo un momento e inténtalo otra vez.");
+    await this._speak("Casi. Piénsalo un momento e inténtalo otra vez.", "hablando", signal);
     if (signal.aborted) return;
 
     const retry = await this.ui.askAnswer("Inténtalo otra vez: " + d.texto, { signal });
     if (signal.aborted || retry == null) return;
 
-    const r = checkAnswer(retry, expected);
-    const ok = r.known ? r.correct : /^s[ií]|correct|bien|entend/i.test(retry.trim());
-    if (ok) {
+    if (checkAnswer(retry, expected).correct) {
       this.ui.showFeedback(true, "¡Eso es! Ahora sí. 🎉");
       await this._speak("¡Eso es! Ahora sí lo tienes.", "sonriendo", signal);
-    } else if (expected != null) {
-      this.ui.showFeedback(false, `La solución correcta es ${expected}. ¡Sigue practicando!`);
-      await this._speak(`La solución correcta es ${expected}. ¡Sigue practicando, vas bien!`, "hablando", signal);
     } else {
-      this.ui.showFeedback(false, "No pasa nada, se aprende practicando. ¡Sigamos!");
-      await this._speak("No pasa nada, se aprende practicando. ¡Sigamos!", "hablando", signal);
+      this.ui.showFeedback(false, `La respuesta correcta es: ${expected}. ¡Sigue practicando!`);
+      await this._speak(`La respuesta correcta es ${expected}. ¡Sigue practicando, vas bien!`, "hablando", signal);
     }
   }
 }

@@ -58,6 +58,7 @@ function directivaSchema() {
       segundos: { type: "number" },
       objetivo: { type: "string" },
       esperar_respuesta: { type: "boolean" },
+      respuesta: { type: "string" },
       si_correcto: { type: "string" },
       si_incorrecto: { type: "string" },
     },
@@ -86,8 +87,14 @@ REGLAS DE SALIDA:
   Usa Unicode directo: potencias con ² ³ ⁿ (p.ej. "x²"), raíz "√", multiplicación "·", "⇒", fracciones "a/b".
 - Ordena las directivas en el orden pedagógico correcto: habla, escribe, resalta, pausa.
 - Incluye pausas ("esperar", 1-3 s) para que el alumno siga el ritmo.
-- Cierra con una directiva "preguntar" que verifique comprensión, con "esperar_respuesta": true,
-  "si_correcto" y "si_incorrecto" (usa "continuar", "felicitar" o "mostrar_otro_ejemplo").
+- Cierra con UNA sola directiva "preguntar" que verifique comprensión. REGLAS de "preguntar":
+  * Debe ser UNA pregunta real y terminar con "?". NO uses varias "preguntar" seguidas para
+    una misma pregunta. Las opciones (A, B, C…), ecuaciones o enunciados van dentro del propio
+    campo "texto" de esa pregunta, o en directivas "pizarra"/"hablar" — NUNCA como "preguntar".
+  * Incluye SIEMPRE el campo "respuesta" con la respuesta correcta esperada, corta (p.ej. "x = 4",
+    "A", "desconocido"). Sin "respuesta" el sistema no puede evaluar al alumno.
+  * "esperar_respuesta": true. "si_correcto"/"si_incorrecto" son ETIQUETAS de control, usa
+    EXACTAMENTE una de: "continuar", "felicitar", "mostrar_otro_ejemplo" (no pongas frases ahí).
 
 ${
   modular

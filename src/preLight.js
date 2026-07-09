@@ -18,6 +18,13 @@ const TIPOS_VALIDOS = new Set([
   "avatar", "hablar", "esperar", "pizarra", "puntero", "preguntar",
 ]);
 
+// Etiquetas de control válidas para si_correcto / si_incorrecto.
+const CONTROL_LABELS = new Set(["continuar", "felicitar", "mostrar_otro_ejemplo"]);
+function normLabel(v, fallback) {
+  const s = (typeof v === "string" ? v : "").trim().toLowerCase();
+  return CONTROL_LABELS.has(s) ? s : fallback;
+}
+
 // Segundos estimados que "cuesta" cada directiva (para duracion_estimada).
 const COSTO_SEGUNDOS = {
   avatar: 1,
@@ -161,16 +168,29 @@ function sanitizeDirectiva(raw, warnings, context) {
       d.accion = str(raw.accion) || "resaltar";
       if (str(raw.objetivo)) d.objetivo = str(raw.objetivo);
       break;
-    case "preguntar":
-      if (!str(raw.texto)) {
+    case "preguntar": {
+      const texto = sanitizeMath(str(raw.texto));
+      if (!texto) {
         warnings.push(`"preguntar" sin texto descartada en ${context}.`);
         return null;
       }
-      d.texto = sanitizeMath(str(raw.texto));
+      const respuesta = sanitizeMath(str(raw.respuesta));
+      // Gemini a veces mete ecuaciones, opciones o enunciados como "preguntar".
+      // Si no es una pregunta real (sin "?" y sin respuesta esperada), se narra en
+      // vez de abrir la caja de respuesta — evita pedir "responder" a una ecuación.
+      if (!texto.includes("?") && !respuesta) {
+        warnings.push(`"preguntar" sin forma de pregunta convertida a "hablar" en ${context}.`);
+        return { tipo: "hablar", texto };
+      }
+      d.texto = texto;
       d.esperar_respuesta = raw.esperar_respuesta !== false;
-      d.si_correcto = str(raw.si_correcto) || "continuar";
-      d.si_incorrecto = str(raw.si_incorrecto) || "mostrar_otro_ejemplo";
+      if (respuesta) d.respuesta = respuesta;
+      // si_correcto/si_incorrecto son etiquetas de CONTROL; si la IA metió una frase,
+      // se normaliza a la etiqueta por defecto para no romper la lógica de ramificación.
+      d.si_correcto = normLabel(raw.si_correcto, "continuar");
+      d.si_incorrecto = normLabel(raw.si_incorrecto, "mostrar_otro_ejemplo");
       break;
+    }
   }
 
   return d;
