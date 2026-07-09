@@ -124,8 +124,18 @@ Ejemplo de módulo bien hecho (fíjate que cada "hablar" tiene texto de verdad):
   { "tipo": "esperar", "segundos": 2 }
 ]}`
     : `FORMATO SECUENCIAL (intención "${intent}"):
-Escena con "directivas": array plano en orden. Resuelve/explica paso a paso: para CADA paso,
-"hablar" (el porqué) y luego "pizarra" (el paso). Cierra con la "preguntar" del ejercicio nuevo.`
+Escena con "directivas": array plano en orden. Para CADA paso: PRIMERO un "hablar" con TEXTO
+REAL que explique el porqué, y LUEGO la "pizarra" con el paso. Un paso en "pizarra" sin su
+"hablar" antes es un ERROR. Cierra con la "preguntar" del ejercicio nuevo.
+Ejemplo bien hecho (fíjate que cada "hablar" tiene texto de verdad):
+"directivas": [
+  { "tipo": "hablar", "texto": "Vamos a resolver 2x + x = 12. Primero juntamos los términos que tienen x." },
+  { "tipo": "pizarra", "accion": "escribir", "contenido": "3x = 12" },
+  { "tipo": "hablar", "texto": "Ahora dividimos ambos lados entre 3 para dejar la x sola." },
+  { "tipo": "pizarra", "accion": "escribir", "contenido": "x = 4" },
+  { "tipo": "preguntar", "texto": "Ahora te toca a ti: ¿cuánto vale x en x + 5 = 9?", "respuesta": "4",
+    "esperar_respuesta": true, "si_correcto": "felicitar", "si_incorrecto": "mostrar_otro_ejemplo" }
+]`
 }
 
 Estructura general:
