@@ -16,11 +16,10 @@ const API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 // siguiente. El modelo que funcione se recuerda para las siguientes peticiones.
 const MODEL_CANDIDATES = [...new Set([
   process.env.GEMINI_MODEL,
+  "gemini-2.5-flash-lite", // rápido y sin "thinking" → primero
+  "gemini-2.5-flash",
   "gemini-flash-latest",
   "gemini-2.0-flash",
-  "gemini-2.5-flash",
-  "gemini-2.5-flash-lite",
-  "gemini-pro-latest",
 ].filter(Boolean))];
 
 let workingModel = null; // caché del último modelo que respondió bien
@@ -73,7 +72,8 @@ export async function generateLSG(query, intent) {
       return { lsg, source: "gemini", model };
     } catch (err) {
       lastErr = err;
-      if (err.notFound) continue; // modelo retirado → probar el siguiente
+      // Modelo retirado (404) o lento (timeout) → probar el siguiente candidato.
+      if (err.notFound || err.retryable) continue;
       throw err; // cualquier otro error se propaga
     }
   }
@@ -85,9 +85,10 @@ export async function generateLSG(query, intent) {
 async function callGemini(apiKey, model, body) {
   const url = `${API_BASE}/${model}:generateContent?key=${apiKey}`;
 
-  // Timeout defensivo: si Gemini no responde en 45 s, abortamos.
+  // Timeout defensivo por intento: si el modelo no responde en 25 s, abortamos y
+  // dejamos que el fallback pruebe el siguiente (marcado como retryable).
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 45_000);
+  const timeout = setTimeout(() => controller.abort(), 25_000);
 
   let res;
   try {
@@ -99,7 +100,9 @@ async function callGemini(apiKey, model, body) {
     });
   } catch (err) {
     if (err.name === "AbortError") {
-      throw new Error("Gemini no respondió a tiempo (timeout de 45 s).");
+      const e = new Error("Gemini no respondió a tiempo (timeout).");
+      e.retryable = true;
+      throw e;
     }
     throw err;
   } finally {
