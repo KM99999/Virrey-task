@@ -106,21 +106,27 @@ const ui = {
     els.stage.classList.toggle("playing", playing);
   },
   // Muestra la caja de respuesta y resuelve con lo que escriba el alumno.
-  askAnswer(_questionText) {
+  // Si se aborta (botón Detener), resuelve null y limpia sus listeners.
+  askAnswer(_questionText, opts = {}) {
+    const { signal } = opts;
     return new Promise((resolve) => {
+      if (signal?.aborted) return resolve(null);
       els.answerBox.hidden = false;
       els.answerInput.value = "";
       els.answerInput.focus();
-      const done = (val) => {
+      const cleanup = () => {
         els.answerBox.hidden = true;
         els.answerBtn.removeEventListener("click", onClick);
         els.answerInput.removeEventListener("keydown", onKey);
-        resolve(val);
+        signal?.removeEventListener("abort", onAbort);
       };
+      const done = (val) => { cleanup(); resolve(val); };
       const onClick = () => done(els.answerInput.value.trim());
       const onKey = (e) => { if (e.key === "Enter") done(els.answerInput.value.trim()); };
+      const onAbort = () => { cleanup(); resolve(null); };
       els.answerBtn.addEventListener("click", onClick);
       els.answerInput.addEventListener("keydown", onKey);
+      signal?.addEventListener("abort", onAbort, { once: true });
     });
   },
 };
@@ -173,6 +179,11 @@ async function submitQuery() {
 
     renderResult(data);
     addToHistory(data);
+    // Fase 2: llevar la vista al escenario y REPRODUCIR la lección automáticamente,
+    // para que el avatar explique de inmediato sin que el usuario tenga que buscar
+    // el botón "Reproducir" (era la principal confusión reportada).
+    els.stage.scrollIntoView({ behavior: "smooth", block: "start" });
+    pse.play(currentLSG);
   } catch (err) {
     toast(`No se pudo generar la lección: ${err.message}`);
   } finally {

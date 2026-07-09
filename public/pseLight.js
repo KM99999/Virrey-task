@@ -30,14 +30,16 @@ export function flattenLSG(lsg) {
 
 // Intenta deducir la respuesta esperada mirando lo último escrito en la pizarra
 // con forma "algo = valor" ANTES de una directiva "preguntar" dada.
-// Devuelve el lado derecho de la última ecuación, o null si no se puede deducir.
+// Solo acepta un valor NUMÉRICO simple (p.ej. "x = 5" → "5", "y = -3/2" → "-3/2");
+// para contenidos como "d/dx[xⁿ] = n·xⁿ⁻¹" devuelve null y el PSE usa autoevaluación
+// (Sí/No), evitando marcar como incorrecta una respuesta conceptual válida.
 export function extractExpectedAnswer(timeline, questionIndex) {
   let expected = null;
   for (let i = 0; i < questionIndex; i++) {
     const d = timeline[i];
     if (d?.tipo === "pizarra" && typeof d.contenido === "string" && d.contenido.includes("=")) {
       const rhs = d.contenido.split("=").pop().trim();
-      if (rhs) expected = rhs;
+      if (/^[-+]?\d+([.,/]\d+)?$/.test(rhs)) expected = rhs; // solo respuestas numéricas simples
     }
   }
   return expected;
@@ -199,7 +201,7 @@ export class PSELight {
     if (signal.aborted) return;
 
     const expected = extractExpectedAnswer(timeline, index);
-    const answer = await this.ui.askAnswer(d.texto, expected != null);
+    const answer = await this.ui.askAnswer(d.texto, { signal });
     if (signal.aborted || answer == null) return;
 
     let { known, correct } = checkAnswer(answer, expected);
@@ -225,7 +227,7 @@ export class PSELight {
       await sleep(700, signal);
     }
 
-    const retry = await this.ui.askAnswer("Inténtalo otra vez: " + d.texto, expected != null);
+    const retry = await this.ui.askAnswer("Inténtalo otra vez: " + d.texto, { signal });
     if (signal.aborted || retry == null) return;
 
     let r = checkAnswer(retry, expected);
