@@ -46,7 +46,7 @@ app.post("/api/query", async (req, res) => {
     const classification = classifyIntent(query);
 
     // 2) Generar el LSG con la IA (o mock si no hay clave).
-    const { lsg: rawLsg, source } = await generateLSG(query, classification.intent);
+    const { lsg: rawLsg, source, model } = await generateLSG(query, classification.intent);
 
     // 3) PRE Light: validar y normalizar en bloques predecibles.
     const { lsg, pasos, warnings } = processLSG(rawLsg, classification.intent);
@@ -56,6 +56,7 @@ app.post("/api/query", async (req, res) => {
       intencion: classification.intent,
       confianza: classification.confidence,
       fuente_ia: source, // "gemini" | "mock"
+      modelo: model,     // modelo de Gemini realmente usado (diagnóstico/QA)
       lsg,
       pasos,
       advertencias: warnings,

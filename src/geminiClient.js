@@ -18,11 +18,27 @@ const MODEL_CANDIDATES = [...new Set([
   process.env.GEMINI_MODEL,
   "gemini-2.5-flash",       // capaz: genera buenas explicaciones pedagógicas
   "gemini-2.5-flash-lite",  // rápido, reserva si el anterior no está disponible
-  "gemini-flash-latest",
-  "gemini-2.0-flash",
 ].filter(Boolean))];
+// Nota: "gemini-flash-latest" se excluye a propósito (colgaba >30 s).
 
 let workingModel = null; // caché del último modelo que respondió bien
+
+// ¿La lección salió SIN explicaciones (hablar vacío)? La IA a veces genera "hablar"
+// sin texto; una lección con pizarra pero sin ninguna explicación es inaceptable
+// para un tutor. En ese caso probamos otro modelo.
+function isDegenerate(lsg) {
+  let hablar = 0;
+  let pizarra = 0;
+  const scan = (arr) => {
+    for (const d of arr || []) {
+      if (d?.tipo === "hablar" && typeof d.texto === "string" && d.texto.trim()) hablar++;
+      if (d?.tipo === "pizarra") pizarra++;
+    }
+  };
+  if (Array.isArray(lsg?.modulos)) for (const m of lsg.modulos) scan(m?.directivas);
+  else scan(lsg?.directivas);
+  return hablar === 0 && pizarra >= 1;
+}
 
 /**
  * Genera un LSG para una consulta e intención dadas.
@@ -59,6 +75,7 @@ export async function generateLSG(query, intent) {
     : MODEL_CANDIDATES;
 
   let lastErr = null;
+  let firstOk = null; // primera lección válida, por si todas salen "pobres"
   for (const model of candidates) {
     try {
       const text = await callGemini(apiKey, model, body);
@@ -68,7 +85,13 @@ export async function generateLSG(query, intent) {
       } catch (err) {
         throw new Error(`La respuesta de Gemini no es JSON válido: ${err.message}`);
       }
-      workingModel = model; // recordar el modelo que funcionó
+      if (!firstOk) firstOk = { lsg, model };
+      // Lección sin explicaciones → NO cachear este modelo; probar uno mejor.
+      if (isDegenerate(lsg)) {
+        lastErr = new Error(`El modelo ${model} generó una lección sin explicaciones.`);
+        continue;
+      }
+      workingModel = model; // recordar el modelo que dio una buena lección
       return { lsg, source: "gemini", model };
     } catch (err) {
       lastErr = err;
@@ -77,6 +100,8 @@ export async function generateLSG(query, intent) {
       throw err; // cualquier otro error se propaga
     }
   }
+  // Si ninguna fue "buena", usar la primera válida (mejor que fallar la petición).
+  if (firstOk) return { lsg: firstOk.lsg, source: "gemini", model: firstOk.model };
   throw lastErr || new Error("Ningún modelo de Gemini está disponible.");
 }
 
