@@ -146,11 +146,6 @@ export function processLSG(rawLsg, intent) {
     if (lsg.modulos.length === 0) {
       throw new Error("PRE Light: ningún módulo contenía directivas válidas.");
     }
-
-    // Asegurar que el último módulo cierre con una pregunta.
-    ensureClosingQuestion(
-      lsg.modulos[lsg.modulos.length - 1].directivas, counter, pasos, intent
-    );
   } else {
     lsg.directivas = normalizeDirectivas(
       rawLsg.directivas, counter, warnings, pasos, "escena"
@@ -159,9 +154,12 @@ export function processLSG(rawLsg, intent) {
     if (lsg.directivas.length === 0) {
       throw new Error("PRE Light: la escena no contenía directivas válidas.");
     }
-
-    ensureClosingQuestion(lsg.directivas, counter, pasos, intent);
   }
+
+  // Garantizar EXACTAMENTE una pregunta en toda la lección (la IA a veces genera
+  // varias "preguntar" casi idénticas → dos cajas de respuesta). Si no hay ninguna,
+  // se añade una de cierre.
+  enforceSingleQuestion(lsg, pasos, counter, intent);
 
   lsg.duracion_estimada = Number(rawLsg.duracion_estimada) > 0
     ? Number(rawLsg.duracion_estimada)
@@ -251,23 +249,40 @@ function sanitizeDirectiva(raw, warnings, context) {
   return d;
 }
 
-// Añade una pregunta de cierre SOLO si no hay ya ninguna "preguntar". Evita mostrar
-// dos cajas de respuesta cuando la IA ya incluyó una pregunta (aunque no fuera la última).
-function ensureClosingQuestion(directivas, counter, pasos, intent) {
-  if (directivas.some((d) => d.tipo === "preguntar")) return;
+// Conserva SOLO la primera "preguntar" de toda la lección (elimina duplicadas de la
+// IA) y, si no hay ninguna, añade una de cierre. Luego reconstruye `pasos`.
+function enforceSingleQuestion(lsg, pasos, counter, intent) {
+  const arrays = Array.isArray(lsg.modulos)
+    ? lsg.modulos.map((m) => m.directivas)
+    : [lsg.directivas];
 
-  const pregunta = {
-    id: ++counter.n,
-    tipo: "preguntar",
-    texto: intent === "aprender" || intent === "practicar"
-      ? "¿Te gustaría practicar con otro ejemplo?"
-      : "¿Entendiste este paso?",
-    esperar_respuesta: true,
-    si_correcto: intent === "practicar" ? "felicitar" : "continuar",
-    si_incorrecto: "mostrar_otro_ejemplo",
-  };
-  directivas.push(pregunta);
-  pasos.push({ ...pregunta });
+  let seen = false;
+  for (const arr of arrays) {
+    for (let i = 0; i < arr.length; i++) {
+      if (arr[i].tipo === "preguntar") {
+        if (seen) { arr.splice(i, 1); i--; } // quitar preguntas extra
+        else seen = true;                    // conservar la primera
+      }
+    }
+  }
+
+  if (!seen) {
+    const last = arrays[arrays.length - 1];
+    last.push({
+      id: ++counter.n,
+      tipo: "preguntar",
+      texto: intent === "aprender" || intent === "practicar"
+        ? "¿Te gustaría practicar con otro ejemplo?"
+        : "¿Entendiste la explicación?",
+      esperar_respuesta: true,
+      si_correcto: intent === "practicar" ? "felicitar" : "continuar",
+      si_incorrecto: "mostrar_otro_ejemplo",
+    });
+  }
+
+  // Reconstruir `pasos` con las directivas resultantes, en orden.
+  pasos.length = 0;
+  for (const arr of arrays) for (const d of arr) pasos.push({ ...d });
 }
 
 function estimateDuration(pasos) {
