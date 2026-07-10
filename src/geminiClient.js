@@ -151,9 +151,10 @@ async function createPromptCache(apiKey, model) {
 async function callGemini(apiKey, model, body) {
   const url = `${API_BASE}/models/${model}:generateContent?key=${apiKey}`;
 
-  // Timeout por intento: Gemini normal responde en ~5-8 s; pasado el margen, modo demo.
+  // Timeout por intento: temas simples responden en ~5-8 s, pero una lección compleja
+  // (p.ej. trigonometría) tarda más; damos hasta 25 s antes de caer a modo demo.
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12_000);
+  const timeout = setTimeout(() => controller.abort(), 25_000);
 
   let res;
   try {
