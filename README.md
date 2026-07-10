@@ -5,7 +5,8 @@ IA educativa de matemáticas: el alumno consulta por **texto o voz**, el sistema
 lección como **LSG (Learning Scene Graph)** — salida estructurada de directivas —
 y el **PRE Light** la normaliza en bloques predecibles.
 
-> **Estado actual: Fases 1 y 2 construidas.**
+> **Estado: Fases 1 y 2 construidas, verificadas y DESPLEGADAS.**
+> 🔗 **Enlace de prueba:** https://math-ia.onrender.com
 > La **Fase 2** añade el **avatar visual 2D**, la **voz TTS en español**, el
 > **PSE Light** (reproduce el LSG sincronizando voz ↔ pizarra ↔ revelación
 > progresiva) y la **ramificación ligera** (un reintento).
@@ -61,9 +62,14 @@ Ejemplo de `.env`:
 
 ```
 GEMINI_API_KEY=tu_clave_aqui
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MODEL=gemini-2.5-flash-lite
 PORT=3000
 ```
+
+> **Modelos de Gemini:** Google **retira modelos con frecuencia** (durante el proyecto
+> retiró `gemini-2.0-flash` y `gemini-2.5-flash`). El cliente usa `gemini-2.5-flash-lite`
+> por defecto y tiene **fallback automático**: si un modelo devuelve 404, prueba el
+> siguiente y recuerda cuál funciona. No hay que tocar código cuando Google cambia algo.
 
 > **Nota de región (importante):** la API de Gemini (`generativelanguage.googleapis.com`)
 > **no está disponible en todos los países** — devuelve `400 User location is not supported`
@@ -118,6 +124,51 @@ Abre **http://localhost:3000** en el navegador.
 
 ---
 
+## Metodología de enseñanza
+
+El corazón de la app es *cómo* enseña, no solo *qué* responde. El prompt fuerza a la IA a:
+
+- **Explicar el porqué de cada paso** con voz (`hablar`) **antes** de escribirlo en la
+  pizarra — nunca vuelca la solución sin razonarla.
+- Cerrar con **un ejercicio NUEVO de práctica** (números distintos), nunca preguntar por
+  un valor que ya está en la pizarra.
+- Una **sola pregunta** por lección, con su respuesta correcta (el backend la deduce
+  resolviendo la ecuación si la IA no la da), para evaluar bien al alumno.
+
+El backend **verifica la calidad**: si la IA devuelve una lección sin explicaciones,
+la rechaza y reintenta (hasta obtener una con explicaciones).
+
+---
+
+## Control de consumo de la API (importante)
+
+Cada llamada a Gemini consume saldo. El sistema minimiza el gasto:
+
+- **Caché:** la misma consulta no vuelve a llamar a Gemini (se sirve de memoria).
+- **Modelos retirados** se recuerdan → no se gasta una llamada 404 por petición.
+- **Enfriamiento por cuota:** si Gemini responde `429` (saldo agotado), la app deja de
+  llamarlo por 5 min y sirve **modo demo**, en vez de reintentar en bucle.
+- Reintentos internos acotados a 2.
+
+> Si el saldo se agota, la app **no se cae**: degrada a modo demo (píldora "demo/mock").
+> Para reactivar la IA real, recarga créditos en Google AI Studio.
+
+---
+
+## QA — control de calidad antes de entregar
+
+```bash
+npm run qa                     # lógica + lecciones reales en producción → APROBADO/RECHAZADO
+QA_SKIP_LIVE=1 npm run qa       # solo lógica (no consume saldo de Gemini)
+QA_URL=http://localhost:3137 npm run qa   # contra otra URL
+```
+
+`qa/qa.mjs` verifica, para las 4 intenciones, que la lección **explique paso a paso**,
+tenga **una sola pregunta** con **respuesta correcta**, y no contenga LaTeX ni `$`.
+Falla (exit 1) si algo no pasa. **Correr antes de cada entrega.**
+
+---
+
 ## El formato LSG (Learning Scene Graph)
 
 La IA devuelve una escena compuesta por **directivas discretas** (cada acción es un
@@ -137,11 +188,12 @@ Ejemplo — "Resuelve 2x + 5 = 15":
   "intencion": "resolver",
   "duracion_estimada": 60,
   "directivas": [
-    { "id": 1, "tipo": "avatar", "accion": "sonreir" },
-    { "id": 2, "tipo": "hablar", "texto": "Restamos 5 en ambos lados." },
-    { "id": 3, "tipo": "pizarra", "accion": "escribir", "contenido": "2x = 10" },
-    { "id": 4, "tipo": "preguntar", "texto": "¿Entendiste este paso?",
-      "esperar_respuesta": true, "si_correcto": "continuar",
+    { "id": 1, "tipo": "hablar", "texto": "Restamos 5 en ambos lados para despejar el término con x." },
+    { "id": 2, "tipo": "pizarra", "accion": "escribir", "contenido": "2x = 10" },
+    { "id": 3, "tipo": "hablar", "texto": "Ahora dividimos entre 2 para dejar la x sola." },
+    { "id": 4, "tipo": "pizarra", "accion": "escribir", "contenido": "x = 5" },
+    { "id": 5, "tipo": "preguntar", "texto": "Ahora tú: ¿cuánto vale x en x + 3 = 7?",
+      "respuesta": "4", "esperar_respuesta": true, "si_correcto": "felicitar",
       "si_incorrecto": "mostrar_otro_ejemplo" }
   ]
 }
@@ -166,6 +218,9 @@ Ejemplo — "Resuelve 2x + 5 = 15":
 │  ├─ avatar.js           # Fase 2: avatar 2D (SVG) con estados
 │  ├─ tts.js              # Fase 2: voz TTS en español (SpeechSynthesis)
 │  └─ pseLight.js         # Fase 2: PSE Light (sincronización) + ramificación ligera
+├─ qa/
+│  └─ qa.mjs              # Control de calidad (npm run qa): lógica + producción real
+├─ render.yaml            # Blueprint de despliegue (Render, región US)
 ├─ .env.example           # Plantilla de configuración (copiar a .env)
 ├─ .gitignore             # Ignora node_modules y .env
 └─ package.json
@@ -219,9 +274,12 @@ llamada funciona aunque tu ubicación esté bloqueada. El repo incluye
 ## Estado y pendientes
 
 - ✅ **Fase 1** (núcleo funcional) — construida y verificada.
-- ✅ **Fase 2** (capa pedagógica visible) — avatar, voz TTS, PSE Light y ramificación
-  construidos y verificados (tests de lógica + integración DOM + render en navegador).
-- ⏳ **Verificar Gemini real** — la API bloquea la región local; se confirma al desplegar
-  en región US (ver *Despliegue*). En local corre en modo demo (mock).
-- ⏳ **Despliegue** del enlace de prueba en Render (config `render.yaml` incluida).
+- ✅ **Fase 2** (capa pedagógica visible) — avatar, voz TTS, PSE Light y ramificación,
+  verificados (tests de lógica + integración DOM + render en navegador).
+- ✅ **Gemini real verificado** en producción (región US) — genera lecciones con
+  explicaciones, una pregunta y respuesta correcta.
+- ✅ **Desplegado y en vivo:** https://math-ia.onrender.com
+- 🔑 **Requiere saldo de Gemini** para la IA real; sin saldo degrada a modo demo.
+- ℹ️ **Cold-start (plan free):** el servicio "duerme" tras inactividad; la primera
+  carga puede tardar ~30-50 s. Se elimina con un *keep-warm* (ping periódico) o plan de pago.
 ```

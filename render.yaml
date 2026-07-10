@@ -20,6 +20,6 @@ services:
       - key: GEMINI_API_KEY
         sync: false          # secreto: se define en el dashboard, nunca en el repo
       - key: GEMINI_MODEL
-        value: gemini-2.5-flash
+        value: gemini-2.5-flash-lite
       - key: NODE_VERSION
         value: "20"
