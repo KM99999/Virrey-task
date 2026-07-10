@@ -76,12 +76,7 @@ export async function generateLSG(query, intent) {
 
   // Gemini no respondió bien: degradar a modo demo (nunca un error al alumno).
   const quotaHit = !!(lastErr && lastErr.quota);
-  return {
-    lsg: mockLSG(query, intent),
-    source: "mock",
-    model: quotaHit ? "sin-creditos" : "demo",
-    _debug: lastErr ? lastErr.message.slice(0, 300) : "sin error (¿cooldown?)",
-  };
+  return { lsg: mockLSG(query, intent), source: "mock", model: quotaHit ? "sin-creditos" : "demo" };
 }
 
 // Una única llamada a Gemini. Usa el caché del prompt del sistema si está disponible;
