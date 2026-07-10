@@ -21,7 +21,12 @@ const MODEL_CANDIDATES = [...new Set([
 ].filter(Boolean))];
 // Nota: "gemini-flash-latest" se excluye a propósito (colgaba >30 s).
 
-let workingModel = null; // caché del último modelo que respondió bien
+let workingModel = null;          // caché del último modelo que respondió bien
+const knownDead = new Set();       // modelos retirados (404) — PERSISTE entre peticiones
+                                   // para no volver a gastar una llamada en ellos.
+let quotaCooldownUntil = 0;        // si los créditos se agotan (429), no llamamos a
+                                   // Gemini durante un rato (evita el spam de 429).
+const QUOTA_COOLDOWN_MS = 5 * 60 * 1000;
 
 // Cuenta explicaciones (hablar con texto) y pasos de pizarra de una lección.
 function lessonStats(lsg) {
@@ -62,6 +67,12 @@ export async function generateLSG(query, intent) {
     return { lsg: mockLSG(query, intent), source: "mock" };
   }
 
+  // Si hace poco Gemini dijo "créditos agotados", NO volvemos a llamarlo por un rato:
+  // servimos demo directo. Evita gastar una petición 429 por cada consulta.
+  if (Date.now() < quotaCooldownUntil) {
+    return { lsg: mockLSG(query, intent), source: "mock", model: "sin-creditos" };
+  }
+
   const body = {
     systemInstruction: { parts: [{ text: buildSystemInstruction(intent) }] },
     contents: [{ role: "user", parts: [{ text: query }] }],
@@ -75,10 +86,12 @@ export async function generateLSG(query, intent) {
     },
   };
 
-  // Probar primero el modelo que ya sabemos que funciona.
-  const candidates = workingModel
+  // Probar primero el modelo que ya sabemos que funciona; excluir los modelos que ya
+  // sabemos retirados (knownDead) para NO gastar una llamada 404 en cada petición.
+  let candidates = (workingModel
     ? [workingModel, ...MODEL_CANDIDATES.filter((m) => m !== workingModel)]
-    : MODEL_CANDIDATES;
+    : MODEL_CANDIDATES).filter((m) => !knownDead.has(m));
+  if (candidates.length === 0) candidates = MODEL_CANDIDATES; // salvaguarda
 
   // El modelo "lite" genera explicaciones de forma intermitente. Reintentamos hasta
   // MAX_ROUNDS veces para obtener una lección CON explicaciones, quedándonos con la
@@ -86,14 +99,14 @@ export async function generateLSG(query, intent) {
   // 2 rondas como máximo: suficiente para mejorar una lección pobre sin disparar el
   // consumo de créditos (cada llamada cuesta). El modelo "lite" ya suele acertar a la 1ª.
   const MAX_ROUNDS = 2;
-  const dead = new Set(); // modelos que dieron 404/timeout (no reintentar)
+  const dead = new Set(); // timeouts de ESTA petición (los 404 van a knownDead)
   let lastErr = null;
   let best = null; // { lsg, model, stats }
   let quotaHit = false;
 
   for (let round = 0; round < MAX_ROUNDS && !quotaHit; round++) {
     for (const model of candidates) {
-      if (dead.has(model)) continue;
+      if (dead.has(model) || knownDead.has(model)) continue;
       try {
         const text = await callGemini(apiKey, model, body);
         let lsg;
@@ -112,9 +125,13 @@ export async function generateLSG(query, intent) {
         // Lección pobre (sin explicaciones) → reintentar (otra ronda / otro modelo).
       } catch (err) {
         lastErr = err;
-        if (err.quota) { quotaHit = true; break; } // créditos agotados: parar ya
-        // 404 (retirado) o timeout → descartar este modelo el resto de la petición.
-        if (err.notFound || err.retryable) { dead.add(model); continue; }
+        if (err.quota) { // créditos agotados: parar y no llamar a Gemini por un rato
+          quotaHit = true;
+          quotaCooldownUntil = Date.now() + QUOTA_COOLDOWN_MS;
+          break;
+        }
+        if (err.notFound) { knownDead.add(model); continue; } // retirado → nunca más
+        if (err.retryable) { dead.add(model); continue; }     // timeout → solo esta vez
         throw err; // otro error → propagar
       }
     }

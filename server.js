@@ -30,6 +30,12 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
+// Caché de lecciones en memoria: la MISMA consulta no vuelve a llamar a Gemini
+// (el mayor ahorro de créditos — al probar se repiten mucho las mismas consultas).
+const CACHE = new Map(); // clave -> respuesta ya generada
+const CACHE_MAX = 300;
+const cacheKey = (q, intent) => intent + "::" + q.toLowerCase().replace(/\s+/g, " ").trim();
+
 // Endpoint principal: recibe { query } y devuelve el LSG procesado.
 app.post("/api/query", async (req, res) => {
   const query = typeof req.body?.query === "string" ? req.body.query.trim() : "";
@@ -45,13 +51,21 @@ app.post("/api/query", async (req, res) => {
     // 1) Clasificar la intención (una de las 4).
     const classification = classifyIntent(query);
 
+    // 1.5) ¿Ya generamos esta consulta? → servir de caché (0 llamadas a Gemini).
+    const key = cacheKey(query, classification.intent);
+    if (CACHE.has(key)) {
+      const cached = CACHE.get(key);
+      CACHE.delete(key); CACHE.set(key, cached); // refrescar orden (LRU)
+      return res.json({ ...cached, cacheado: true });
+    }
+
     // 2) Generar el LSG con la IA (o mock si no hay clave).
     const { lsg: rawLsg, source, model } = await generateLSG(query, classification.intent);
 
     // 3) PRE Light: validar y normalizar en bloques predecibles.
     const { lsg, pasos, warnings } = processLSG(rawLsg, classification.intent);
 
-    return res.json({
+    const payload = {
       query,
       intencion: classification.intent,
       confianza: classification.confidence,
@@ -60,7 +74,17 @@ app.post("/api/query", async (req, res) => {
       lsg,
       pasos,
       advertencias: warnings,
-    });
+    };
+
+    // Cachear SOLO lecciones reales y con explicaciones (no el mock ni lecciones pobres),
+    // para no servir contenido de baja calidad de forma permanente.
+    const tieneExplicacion = pasos.some((p) => p.tipo === "hablar");
+    if (source === "gemini" && tieneExplicacion) {
+      CACHE.set(key, payload);
+      if (CACHE.size > CACHE_MAX) CACHE.delete(CACHE.keys().next().value); // desalojar el más viejo
+    }
+
+    return res.json(payload);
   } catch (err) {
     console.error("[/api/query] Error:", err.message);
     return res.status(502).json({
