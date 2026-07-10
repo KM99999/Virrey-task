@@ -99,12 +99,13 @@ export async function generateLSG(query, intent) {
   // 2 rondas como máximo: suficiente para mejorar una lección pobre sin disparar el
   // consumo de créditos (cada llamada cuesta). El modelo "lite" ya suele acertar a la 1ª.
   const MAX_ROUNDS = 2;
-  const dead = new Set(); // timeouts de ESTA petición (los 404 van a knownDead)
+  const dead = new Set(); // 404 de esta petición (además de knownDead)
   let lastErr = null;
   let best = null; // { lsg, model, stats }
   let quotaHit = false;
+  let bail = false; // Gemini lento (timeout) o error: dejar de insistir e ir a modo demo
 
-  for (let round = 0; round < MAX_ROUNDS && !quotaHit; round++) {
+  for (let round = 0; round < MAX_ROUNDS && !quotaHit && !bail; round++) {
     for (const model of candidates) {
       if (dead.has(model) || knownDead.has(model)) continue;
       try {
@@ -131,8 +132,9 @@ export async function generateLSG(query, intent) {
           break;
         }
         if (err.notFound) { knownDead.add(model); continue; } // retirado → nunca más
-        if (err.retryable) { dead.add(model); continue; }     // timeout → solo esta vez
-        throw err; // otro error → propagar
+        // Timeout o cualquier otro error → NO insistir (Gemini lento): ir a modo demo.
+        bail = true;
+        break;
       }
     }
     if (dead.size >= candidates.length) break; // todos los modelos caídos
@@ -140,9 +142,14 @@ export async function generateLSG(query, intent) {
 
   // Ninguna fue ideal: devolver la mejor vista (más explicaciones) — mejor que fallar.
   if (best) return { lsg: best.lsg, source: "gemini", model: best.model };
-  // Créditos agotados: degradar con gracia a modo demo (mock) en vez de dar error.
-  if (quotaHit) return { lsg: mockLSG(query, intent), source: "mock", model: "sin-creditos" };
-  throw lastErr || new Error("Ningún modelo de Gemini está disponible.");
+  // Gemini falló (créditos agotados, lento/timeout o error): NUNCA damos error al alumno;
+  // degradamos a modo demo. El mock resuelve ecuaciones lineales al instante, así que
+  // "5x + 9x = 14" igual muestra la solución paso a paso aunque Gemini no responda.
+  return {
+    lsg: mockLSG(query, intent),
+    source: "mock",
+    model: quotaHit ? "sin-creditos" : "demo",
+  };
 }
 
 // Llama a un modelo concreto. Devuelve el texto de la respuesta, o lanza un error
@@ -150,10 +157,10 @@ export async function generateLSG(query, intent) {
 async function callGemini(apiKey, model, body) {
   const url = `${API_BASE}/${model}:generateContent?key=${apiKey}`;
 
-  // Timeout defensivo por intento: si el modelo no responde en 20 s, abortamos y
-  // dejamos que el fallback pruebe el siguiente (marcado como retryable).
+  // Timeout defensivo por intento: si el modelo no responde en 15 s, abortamos y
+  // caemos a modo demo (mejor que hacer esperar al alumno).
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20_000);
+  const timeout = setTimeout(() => controller.abort(), 15_000);
 
   let res;
   try {
