@@ -77,6 +77,71 @@ export function solveLinearFromText(text) {
   return Number.isInteger(x) ? String(x) : String(Math.round(x * 1000) / 1000);
 }
 
+// Genera los PASOS de resolución de una ecuación lineal simple, para el modo demo
+// (sin IA): permite que "2x + x = 12" muestre una solución real paso a paso.
+// Devuelve { original, steps:[{explica, escribe}], answer, varName } o null.
+export function solveLinearSteps(text) {
+  if (typeof text !== "string") return null;
+  const t = text.toLowerCase();
+  const m = t.match(
+    /((?:[+-]\s*)?(?:\d*[a-z]|\d+(?:\.\d+)?)(?:\s*[+-]\s*(?:\d*[a-z]|\d+(?:\.\d+)?))*)\s*=\s*(-?\d+(?:\.\d+)?)/
+  );
+  if (!m) return null;
+  const lhs = m[1];
+  const c = Number(m[2]);
+  if (!Number.isFinite(c)) return null;
+  const letters = new Set((lhs.match(/[a-z]/g) || []));
+  if (letters.size !== 1) return null;
+  const v = [...letters][0];
+
+  let expr = lhs.replace(/\s+/g, "");
+  if (!/^[+-]/.test(expr)) expr = "+" + expr;
+  const terms = expr.match(/[+-](?:\d*[a-z]|\d+(?:\.\d+)?)/g);
+  if (!terms) return null;
+
+  let coef = 0, konst = 0, xTerms = 0;
+  for (const term of terms) {
+    const sign = term[0] === "-" ? -1 : 1;
+    const body = term.slice(1);
+    if (body.includes(v)) {
+      const num = body.replace(v, "");
+      const k = num === "" ? 1 : Number(num);
+      if (!Number.isFinite(k)) return null;
+      coef += sign * k; xTerms++;
+    } else {
+      const k = Number(body);
+      if (!Number.isFinite(k)) return null;
+      konst += sign * k;
+    }
+  }
+  if (coef === 0) return null;
+  const answer = (c - konst) / coef;
+  if (!Number.isFinite(answer)) return null;
+
+  const fmt = (n) => (Number.isInteger(n) ? String(n) : String(Math.round(n * 1000) / 1000));
+  const xc = (k) => (k === 1 ? "" : k === -1 ? "-" : fmt(k)); // coeficiente legible
+  const original = `${lhs.trim().replace(/\s+/g, " ")} = ${fmt(c)}`;
+  const steps = [];
+
+  if (xTerms > 1) {
+    const combined = konst === 0
+      ? `${xc(coef)}${v} = ${fmt(c)}`
+      : `${xc(coef)}${v} ${konst > 0 ? "+ " + fmt(konst) : "- " + fmt(-konst)} = ${fmt(c)}`;
+    steps.push({ explica: `Juntamos los términos que tienen ${v}: en total son ${xc(coef)}${v}.`, escribe: combined });
+  }
+  if (konst !== 0) {
+    const op = konst > 0 ? `restamos ${fmt(konst)}` : `sumamos ${fmt(-konst)}`;
+    steps.push({ explica: `Para despejar, ${op} en ambos lados (operación inversa).`, escribe: `${xc(coef)}${v} = ${fmt(c - konst)}` });
+  }
+  if (coef !== 1) {
+    steps.push({ explica: `Dividimos ambos lados entre ${fmt(coef)} para dejar ${v} sola.`, escribe: `${v} = ${fmt(answer)}` });
+  }
+  if (steps.length === 0 || !steps[steps.length - 1].escribe.startsWith(`${v} =`)) {
+    steps.push({ explica: `Entonces, ${v} vale ${fmt(answer)}.`, escribe: `${v} = ${fmt(answer)}` });
+  }
+  return { original, steps, answer: fmt(answer), varName: v };
+}
+
 // Segundos estimados que "cuesta" cada directiva (para duracion_estimada).
 const COSTO_SEGUNDOS = {
   avatar: 1,

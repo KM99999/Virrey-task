@@ -1,0 +1,18 @@
+# Mantiene "despierto" el servicio de Render (plan free) para eliminar la pantalla
+# de arranque ("Welcome to Render") del cold-start. Hace ping a /api/health cada
+# ~10 minutos (Render duerme tras ~15 min de inactividad). GRATIS en repos públicos
+# y NO consume saldo de Gemini (health no llama a la IA).
+name: keep-warm
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # cada 10 minutos (GitHub puede retrasarlo unos min)
+  workflow_dispatch: {}       # permite ejecutarlo a mano desde la pestaña Actions
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping health endpoint
+        run: |
+          curl -fsS --max-time 60 https://math-ia.onrender.com/api/health || true

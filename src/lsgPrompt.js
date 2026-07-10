@@ -1,6 +1,8 @@
 // Definición del LSG (Learning Scene Graph) y el prompt que fuerza a la IA a
 // devolverlo. El LSG es la salida estructurada que el PRE Light valida y que en
 // la Fase 2 el PSE Light reproducirá sincronizando voz + revelación visual.
+
+import { solveLinearSteps } from "./preLight.js";
 //
 // Dos formas según la intención:
 //   - resolver / explicar → escena SECUENCIAL con `directivas: [...]`
@@ -151,6 +153,32 @@ Estructura general:
 // Se usa cuando no hay GEMINI_API_KEY, para que el prototipo arranque y se pueda
 // probar el flujo completo sin coste. Produce un LSG con la forma correcta.
 export function mockLSG(query, intent) {
+  // Si la consulta tiene una ecuación lineal, el modo demo la RESUELVE de verdad,
+  // paso a paso (así sirve aunque no haya créditos de Gemini).
+  const solved = solveLinearSteps(query);
+  if (solved) {
+    const directivas = [
+      { tipo: "avatar", accion: "sonreir" },
+      { tipo: "hablar", texto: `Vamos a resolver ${solved.original} paso a paso.` },
+      { tipo: "pizarra", accion: "escribir", contenido: solved.original },
+      { tipo: "esperar", segundos: 1 },
+    ];
+    for (const s of solved.steps) {
+      directivas.push({ tipo: "hablar", texto: s.explica });
+      directivas.push({ tipo: "pizarra", accion: "escribir", contenido: s.escribe });
+      directivas.push({ tipo: "esperar", segundos: 1 });
+    }
+    directivas.push({
+      tipo: "preguntar",
+      texto: `Ahora te toca a ti: ¿cuánto vale ${solved.varName} en ${solved.varName} + 2 = 6?`,
+      respuesta: "4",
+      esperar_respuesta: true,
+      si_correcto: "felicitar",
+      si_incorrecto: "mostrar_otro_ejemplo",
+    });
+    return { escena: "demo_resuelto", intencion: intent, duracion_estimada: 60, _mock: true, directivas };
+  }
+
   if (intent === "aprender" || intent === "practicar") {
     return {
       escena: "demo_modular",
