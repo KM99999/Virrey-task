@@ -60,7 +60,7 @@ app.post("/api/query", async (req, res) => {
     }
 
     // 2) Generar el LSG con la IA (o mock si no hay clave).
-    const { lsg: rawLsg, source, model } = await generateLSG(query, classification.intent);
+    const { lsg: rawLsg, source, model, _debug } = await generateLSG(query, classification.intent);
 
     // 3) PRE Light: validar y normalizar en bloques predecibles.
     const { lsg, pasos, warnings } = processLSG(rawLsg, classification.intent);
@@ -74,6 +74,7 @@ app.post("/api/query", async (req, res) => {
       lsg,
       pasos,
       advertencias: warnings,
+      _debug, // diagnóstico temporal del motivo de caída a modo demo
     };
 
     // Cachear lecciones reales con explicaciones, o ecuaciones ya resueltas por el modo
