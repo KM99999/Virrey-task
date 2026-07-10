@@ -30,6 +30,7 @@ const QUOTA_COOLDOWN_MS = 5 * 60 * 1000;
 // ~1 h). Así el prompt del sistema no se re-cobra como tokens de entrada en cada consulta.
 const promptCaches = new Map();      // model -> { name, expireAt }
 const cacheUnsupported = new Set();  // modelos donde el caché explícito no está disponible
+export let lastCacheDebug = "aún no intentado"; // diagnóstico temporal de la creación de caché
 
 /**
  * Genera un LSG para una consulta e intención dadas — en UNA sola llamada a la IA.
@@ -131,13 +132,18 @@ async function createPromptCache(apiKey, model) {
       }),
       signal: controller.signal,
     });
-  } catch {
+  } catch (e) {
+    lastCacheDebug = `excepción: ${e.name} ${e.message}`.slice(0, 200);
     return null; // timeout / red → sin caché explícito (se usa inline)
   } finally {
     clearTimeout(timeout);
   }
-  if (!res.ok) return null; // 400 (prompt corto) / no soportado → sin caché explícito
+  if (!res.ok) {
+    lastCacheDebug = `HTTP ${res.status}: ${(await safeText(res)).slice(0, 220)}`;
+    return null; // 400 (prompt corto) / no soportado → sin caché explícito
+  }
   const data = await res.json().catch(() => null);
+  lastCacheDebug = data?.name ? `OK caché: ${data.name}` : "sin name en respuesta";
   return data?.name || null; // "cachedContents/xxxx"
 }
 
