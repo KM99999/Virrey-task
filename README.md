@@ -142,13 +142,21 @@ la rechaza y reintenta (hasta obtener una con explicaciones).
 
 ## Control de consumo de la API (importante)
 
-Cada llamada a Gemini consume saldo. El sistema minimiza el gasto:
+Cada llamada a Gemini consume saldo. La arquitectura está optimizada para gastar lo mínimo:
 
-- **Caché:** la misma consulta no vuelve a llamar a Gemini (se sirve de memoria).
+- **Single-shot:** **UNA sola llamada** a la IA por consulta (sin llamadas encadenadas ni
+  reintentos por clic). La IA resuelve y estructura el LSG en una única respuesta JSON.
+- **Clasificador local:** la intención (resolver/aprender/explicar/practicar) se decide con
+  **lógica de palabras clave en el código** ([classifier.js](src/classifier.js)) — NO consume IA.
+- **Context Caching (Gemini):** el prompt del sistema (metodología + reglas del PRE Light) es
+  ESTABLE y se **cachea en Gemini** (`cachedContents`), así sus tokens de entrada **no se cobran**
+  en cada consulta (la intención va en el mensaje del usuario). Si el caché no está disponible,
+  se envía inline (los modelos 2.5 aplican caché implícito igualmente).
+- **Caché de respuestas:** la misma consulta no vuelve a llamar a Gemini (se sirve de memoria).
 - **Modelos retirados** se recuerdan → no se gasta una llamada 404 por petición.
-- **Enfriamiento por cuota:** si Gemini responde `429` (saldo agotado), la app deja de
-  llamarlo por 5 min y sirve **modo demo**, en vez de reintentar en bucle.
-- Reintentos internos acotados a 2.
+- **Enfriamiento por cuota:** si Gemini responde `429` (saldo agotado), la app deja de llamarlo
+  por 5 min y sirve **modo demo**, en vez de reintentar en bucle.
+- **thinking desactivado** (`thinkingBudget: 0`): sin tokens de razonamiento extendido.
 
 > Si el saldo se agota, la app **no se cae**: degrada a modo demo (píldora "demo/mock").
 > Para reactivar la IA real, recarga créditos en Google AI Studio.
