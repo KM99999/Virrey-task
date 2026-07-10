@@ -63,9 +63,9 @@ export async function generateLSG(query, intent) {
   for (const model of candidates) {
     if (knownDead.has(model)) continue;
     try {
-      const lsg = await generateOnce(apiKey, model, userMsg);
+      const { lsg, usage, cached } = await generateOnce(apiKey, model, userMsg);
       workingModel = model;
-      return { lsg, source: "gemini", model };
+      return { lsg, source: "gemini", model, usage, cached };
     } catch (err) {
       lastErr = err;
       if (err.quota) { quotaCooldownUntil = Date.now() + QUOTA_COOLDOWN_MS; break; }
@@ -95,8 +95,8 @@ async function generateOnce(apiKey, model, userMsg) {
   if (cacheName) body.cachedContent = cacheName;                          // prompt cacheado
   else body.systemInstruction = { parts: [{ text: SYSTEM_INSTRUCTION }] }; // inline (fallback)
 
-  const text = await callGemini(apiKey, model, body);
-  return JSON.parse(text); // si no es JSON válido → lanza (arriba se trata como error → demo)
+  const { text, usage } = await callGemini(apiKey, model, body);
+  return { lsg: JSON.parse(text), usage, cached: !!cacheName };
 }
 
 // Devuelve el nombre del caché de contexto del prompt del sistema (o null). Lo crea una
@@ -181,7 +181,7 @@ async function callGemini(apiKey, model, body) {
   const data = await res.json();
   const text = extractText(data);
   if (!text) throw new Error("Gemini no devolvió contenido de texto en la respuesta.");
-  return text;
+  return { text, usage: data.usageMetadata || null };
 }
 
 // Extrae el texto del primer candidato de la respuesta de Gemini.

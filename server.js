@@ -60,7 +60,7 @@ app.post("/api/query", async (req, res) => {
     }
 
     // 2) Generar el LSG con la IA (o mock si no hay clave).
-    const { lsg: rawLsg, source, model } = await generateLSG(query, classification.intent);
+    const { lsg: rawLsg, source, model, usage, cached } = await generateLSG(query, classification.intent);
 
     // 3) PRE Light: validar y normalizar en bloques predecibles.
     const { lsg, pasos, warnings } = processLSG(rawLsg, classification.intent);
@@ -74,6 +74,8 @@ app.post("/api/query", async (req, res) => {
       lsg,
       pasos,
       advertencias: warnings,
+      tokens: usage || null, // consumo de tokens de Gemini (entrada/salida/cacheados)
+      cache_activo: !!cached, // ¿se usó el Context Caching del prompt del sistema?
     };
 
     // Cachear lecciones reales con explicaciones, o ecuaciones ya resueltas por el modo
