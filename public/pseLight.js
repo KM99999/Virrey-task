@@ -110,47 +110,129 @@ export class PSELight {
     this.tts = tts;
     this.ui = ui;
     this._abort = null;
+    this.lsg = null;
+    this.timeline = [];
+    this.index = 0;
     this.playing = false;
+    this.paused = false;
   }
 
-  stop() {
+  _notifyControls() {
+    this.ui.setControls?.({
+      playing: this.playing,
+      paused: this.paused,
+      hasLesson: this.timeline.length > 0,
+      index: this.index,
+      total: this.timeline.length,
+    });
+  }
+
+  // Carga una lección nueva (resetea el reproductor al paso 0).
+  load(lsg) {
+    this._hardReset();
+    this.lsg = lsg;
+    this.timeline = flattenLSG(lsg);
+    this.index = 0;
+    this.ui.clearBoard();
+    this.ui.setCaption("");
+    this.ui.onProgress?.(0, this.timeline.length);
+    this._notifyControls();
+  }
+
+  _hardReset() {
     if (this._abort) this._abort.abort();
     this.tts.cancel();
     this.playing = false;
+    this.paused = false;
     this.avatar.setSpeaking(false);
-    this.avatar.setState("neutral");
-    this.ui.onStep(null);
-    this.ui.setPlaying(false);
   }
 
+  stop() {
+    this._hardReset();
+    this.index = 0;
+    this.avatar.setState("neutral");
+    this.ui.onStep(null);
+    this.ui.clearBoard();
+    this.ui.setCaption("");
+    this.ui.onProgress?.(0, this.timeline.length);
+    this._notifyControls();
+  }
+
+  // Pausa sin reiniciar: se puede reanudar desde donde iba.
+  pause() {
+    if (!this.playing || this.paused) return;
+    this.paused = true;
+    if (this._abort) this._abort.abort();
+    this.tts.cancel();
+    this.avatar.setSpeaking(false);
+    this.ui.setCaption("⏸ En pausa — pulsa Reanudar para continuar.");
+    this._notifyControls();
+  }
+
+  // Retroceder/avanzar: salta al paso `i` y reconstruye la pizarra hasta ahí.
+  seek(i) {
+    if (!this.timeline.length) return;
+    const wasActive = this.playing && !this.paused;
+    if (this._abort) this._abort.abort();
+    this.tts.cancel();
+    this.avatar.setSpeaking(false);
+    this.index = Math.max(0, Math.min(Math.round(i), this.timeline.length - 1));
+    this.playing = false;
+    this.paused = true;
+    this._rebuildBoardTo(this.index);
+    this.ui.onProgress?.(this.index, this.timeline.length);
+    this._notifyControls();
+    if (wasActive) this.play(); // si estaba reproduciendo, continúa desde el nuevo punto
+  }
+
+  // Reproduce/reanuda desde el paso actual. Con `lsg`, carga una lección nueva.
   async play(lsg) {
-    this.stop();
+    if (lsg) this.load(lsg);
+    if (!this.timeline.length) return;
+    if (this.index >= this.timeline.length) this.index = 0; // terminó → reiniciar
+    if (this.playing && !this.paused) return;               // ya está reproduciendo
+
     const controller = new AbortController();
     this._abort = controller;
     const signal = controller.signal;
     this.playing = true;
-    this.ui.setPlaying(true);
-    this.ui.clearBoard();
-    this.ui.setCaption("");
+    this.paused = false;
+    this._notifyControls();
 
-    const timeline = flattenLSG(lsg);
+    this._rebuildBoardTo(this.index); // deja la pizarra coherente con el punto actual
 
     try {
-      for (let i = 0; i < timeline.length; i++) {
-        if (signal.aborted) break;
-        await this._runDirective(timeline[i], i, timeline, signal);
+      while (this.index < this.timeline.length && this.playing && !this.paused && !signal.aborted) {
+        await this._runDirective(this.timeline[this.index], this.index, this.timeline, signal);
+        if (signal.aborted || this.paused || !this.playing) break;
+        this.index++;
+        this.ui.onProgress?.(this.index, this.timeline.length);
       }
-      if (!signal.aborted) {
+      if (this.index >= this.timeline.length && !signal.aborted && !this.paused) {
         this.avatar.setState("sonriendo");
         this.ui.setCaption("¡Lección completada! 🎉");
+        this.playing = false;
+        this.ui.onStep(null);
+        this._notifyControls();
       }
     } finally {
       this.avatar.setSpeaking(false);
-      this.ui.onStep(null);
-      this.playing = false;
-      this.ui.setPlaying(false);
-      this._abort = null;
+      if (this._abort === controller) this._abort = null;
     }
+  }
+
+  // Reconstruye la pizarra reproduciendo (instantáneo, sin voz ni pausas) los efectos
+  // visuales de los pasos 0..i-1. Permite retroceder/reanudar sin duplicar contenido.
+  _rebuildBoardTo(i) {
+    this.ui.clearBoard();
+    for (let k = 0; k < i; k++) {
+      const d = this.timeline[k];
+      if (!d) continue;
+      if (d.tipo === "modulo") this.ui.setModule(d.id);
+      else if (d.tipo === "pizarra") this.ui.writeBoard(d.contenido);
+      else if (d.tipo === "puntero") this.ui.highlightBoard(d.objetivo || null);
+    }
+    this.ui.onStep(i < this.timeline.length ? i : null);
   }
 
   async _speak(text, state, signal) {

@@ -101,6 +101,10 @@ El corazón de la app es CÓMO se enseña. Resolver el ejercicio sin explicar es
 - PROHIBIDO preguntar por un valor que YA está escrito en la pizarra (sería trivial).
   MAL: resolviste y quedó "x = 4", y preguntas "¿cuánto vale x?".
   BIEN: enseñaste "2x + x = 12"; preguntas "Ahora te toca a ti: ¿cuánto vale x en x + 5 = 9?".
+- COHERENCIA: justo ANTES de la "preguntar", escribe el ejercicio nuevo en una directiva
+  "pizarra" (y anúncialo con "hablar"), para que la pizarra muestre EXACTAMENTE de lo que
+  pregunta. La función/ecuación del texto de la pregunta debe ser la MISMA que la última
+  escrita en la pizarra. NUNCA preguntes por "f(x) = x" mientras la pizarra muestra "f(x) = x⁵".
 - Incluye SIEMPRE el campo "respuesta" con la respuesta del NUEVO ejercicio, corta (p.ej. "4").
 - Debe terminar con "?". Las opciones/ecuaciones van dentro de su "texto", no como "preguntar" sueltas.
 - "esperar_respuesta": true. "si_correcto"/"si_incorrecto" son ETIQUETAS: EXACTAMENTE

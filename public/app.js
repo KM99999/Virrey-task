@@ -35,7 +35,11 @@ const els = {
   caption: $("#caption"),
   moduleTag: null,
   playBtn: $("#playBtn"),
+  pauseBtn: $("#pauseBtn"),
   stopBtn: $("#stopBtn"),
+  scrubber: $("#scrubber"),
+  seekBar: $("#seekBar"),
+  seekLabel: $("#seekLabel"),
   ttsInfo: $("#ttsInfo"),
   answerBox: $("#answerBox"),
   answerInput: $("#answerInput"),
@@ -45,6 +49,7 @@ const els = {
 
 const history = []; // { query, intencion, fuente, lsg, pasos, ts }
 let currentLSG = null; // último LSG generado, para reproducir en el escenario
+let seeking = false;   // true mientras el usuario arrastra la barra de pasos
 
 // --- Fase 2: avatar, voz y PSE Light ----------------------------------------
 const avatar = new Avatar(els.avatarMount);
@@ -101,10 +106,21 @@ const ui = {
     els.feedback.className = "feedback " + (ok ? "ok" : "warn");
     els.feedback.textContent = msg;
   },
-  setPlaying(playing) {
-    els.playBtn.disabled = playing || !currentLSG;
-    els.stopBtn.disabled = !playing;
-    els.stage.classList.toggle("playing", playing);
+  // Estado de los controles: Reproducir / Pausar-Reanudar / Detener + barra.
+  setControls({ playing, paused, hasLesson, total }) {
+    els.playBtn.disabled = !hasLesson || (playing && !paused);
+    els.playBtn.textContent = paused ? "▶ Reanudar" : "▶ Reproducir";
+    els.pauseBtn.disabled = !playing || paused;
+    els.stopBtn.disabled = !hasLesson || (!playing && !paused);
+    els.scrubber.hidden = !hasLesson;
+    if (total != null) els.seekBar.max = String(Math.max(0, total - 1));
+    els.stage.classList.toggle("playing", !!playing);
+  },
+  // Avance de la barra de pasos durante la reproducción.
+  onProgress(index, total) {
+    els.seekBar.max = String(Math.max(0, (total || 0) - 1));
+    if (!seeking) els.seekBar.value = String(index);
+    els.seekLabel.textContent = `Paso ${Math.min(index + 1, total)} / ${total}`;
   },
   // Muestra la caja de respuesta y resuelve con lo que escriba el alumno.
   // Si se aborta (botón Detener), resuelve null y limpia sus listeners.
@@ -135,9 +151,30 @@ const ui = {
 const pse = new PSELight({ avatar, tts, ui });
 
 els.playBtn.addEventListener("click", () => {
-  if (currentLSG) pse.play(currentLSG);
+  if (!currentLSG) return;
+  // Si la lección ya está cargada (p.ej. tras pausar), reanuda desde el paso actual;
+  // si es una lección nueva, la carga y reproduce desde el principio.
+  if (pse.lsg === currentLSG) pse.play();
+  else pse.play(currentLSG);
 });
+els.pauseBtn.addEventListener("click", () => pse.pause());
 els.stopBtn.addEventListener("click", () => pse.stop());
+
+// Barra de pasos (scrubber): retroceder/avanzar a cualquier punto.
+els.seekBar.addEventListener("input", () => {
+  seeking = true;
+  const total = Number(els.seekBar.max) + 1;
+  els.seekLabel.textContent = `Paso ${Number(els.seekBar.value) + 1} / ${total}`;
+});
+els.seekBar.addEventListener("change", () => {
+  pse.seek(Number(els.seekBar.value));
+  seeking = false;
+});
+// Clic en un paso del transcript también salta ahí (retroceder/avanzar).
+els.steps.addEventListener("click", (e) => {
+  const li = e.target.closest(".step[data-idx]");
+  if (li) pse.seek(Number(li.dataset.idx));
+});
 
 // --- Estado del servicio -----------------------------------------------------
 async function checkHealth() {

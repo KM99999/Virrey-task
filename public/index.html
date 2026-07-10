@@ -27,9 +27,17 @@
       <h2>Escenario · avatar y pizarra</h2>
       <div class="stage-controls">
         <span class="tts-info" id="ttsInfo"></span>
-        <button id="playBtn" class="btn primary small" disabled>▶ Reproducir lección</button>
+        <button id="playBtn" class="btn primary small" disabled>▶ Reproducir</button>
+        <button id="pauseBtn" class="btn ghost small" disabled>⏸ Pausar</button>
         <button id="stopBtn" class="btn ghost small" disabled>■ Detener</button>
       </div>
+    </div>
+
+    <!-- Barra de pasos: retroceder/avanzar a cualquier punto de la lección -->
+    <div class="scrubber" id="scrubber" hidden>
+      <input id="seekBar" type="range" min="0" max="0" value="0" step="1"
+             aria-label="Retroceder o avanzar en la lección" />
+      <span class="seek-label" id="seekLabel">Paso 0 / 0</span>
     </div>
 
     <div class="stage-body">

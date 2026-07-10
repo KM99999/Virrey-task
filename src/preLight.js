@@ -362,9 +362,15 @@ function str(v) {
   return typeof v === "string" ? v.trim() : "";
 }
 
+// Superíndices Unicode para convertir exponentes (x^5 → x⁵, x^{10} → x¹⁰, x^-1 → x⁻¹).
+const SUPER = { "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵",
+  "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹", "-": "⁻", "n": "ⁿ", "i": "ⁱ" };
+const toSuper = (e) => [...e].map((c) => SUPER[c] || c).join("");
+
 // Limpia notación LaTeX / signos de dólar que la IA pueda deslizar, y la convierte
 // a texto plano legible (la pizarra y el TTS no renderizan LaTeX). Ej.:
 //   "$x^2 - 9 = (x-3)(x+3)$"  →  "x² - 9 = (x-3)(x+3)"
+//   "f(x) = x^5"              →  "f(x) = x⁵"
 //   "$a^2 \\implies a = x$"    →  "a² ⇒ a = x"
 function sanitizeMath(s) {
   if (typeof s !== "string") return s;
@@ -380,9 +386,9 @@ function sanitizeMath(s) {
     .replace(/\\sqrt\s*\{([^}]*)\}/g, "√($1)")
     .replace(/\\sqrt/g, "√")
     .replace(/\\frac\s*\{([^}]*)\}\s*\{([^}]*)\}/g, "($1)/($2)")
-    .replace(/\^\{\s*2\s*\}|\^2/g, "²")
-    .replace(/\^\{\s*3\s*\}|\^3/g, "³")
-    .replace(/\^\{\s*n\s*\}|\^n/g, "ⁿ")
+    // Exponente con llaves {…} o pegado: cualquier dígito/n/-  → superíndice.
+    .replace(/\^\{([^}]+)\}/g, (_, e) => toSuper(e.trim()))
+    .replace(/\^(-?[0-9ni]+)/g, (_, e) => toSuper(e))
     .replace(/\\[a-zA-Z]+/g, "")                            // comandos LaTeX restantes
     .replace(/[{}]/g, "")                                   // llaves sueltas
     .replace(/[ \t]{2,}/g, " ")

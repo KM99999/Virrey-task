@@ -26,7 +26,7 @@ app.get("/api/health", (_req, res) => {
   res.json({
     status: "ok",
     modo_ia: process.env.GEMINI_API_KEY ? "gemini" : "mock",
-    modelo: process.env.GEMINI_MODEL || "gemini-flash-latest",
+    modelo: process.env.GEMINI_MODEL || "gemini-2.5-flash-lite",
   });
 });
 
