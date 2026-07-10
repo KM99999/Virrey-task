@@ -83,12 +83,15 @@ export async function generateLSG(query, intent) {
   // El modelo "lite" genera explicaciones de forma intermitente. Reintentamos hasta
   // MAX_ROUNDS veces para obtener una lección CON explicaciones, quedándonos con la
   // mejor (más explicaciones) que hayamos visto por si ninguna es ideal.
-  const MAX_ROUNDS = 3;
-  const dead = new Set(); // modelos que dieron 404 (no reintentar)
+  // 2 rondas como máximo: suficiente para mejorar una lección pobre sin disparar el
+  // consumo de créditos (cada llamada cuesta). El modelo "lite" ya suele acertar a la 1ª.
+  const MAX_ROUNDS = 2;
+  const dead = new Set(); // modelos que dieron 404/timeout (no reintentar)
   let lastErr = null;
   let best = null; // { lsg, model, stats }
+  let quotaHit = false;
 
-  for (let round = 0; round < MAX_ROUNDS; round++) {
+  for (let round = 0; round < MAX_ROUNDS && !quotaHit; round++) {
     for (const model of candidates) {
       if (dead.has(model)) continue;
       try {
@@ -109,8 +112,8 @@ export async function generateLSG(query, intent) {
         // Lección pobre (sin explicaciones) → reintentar (otra ronda / otro modelo).
       } catch (err) {
         lastErr = err;
-        // 404 (retirado) o timeout → descartar este modelo el resto de la petición,
-        // para no perder segundos reintentándolo en las siguientes rondas.
+        if (err.quota) { quotaHit = true; break; } // créditos agotados: parar ya
+        // 404 (retirado) o timeout → descartar este modelo el resto de la petición.
         if (err.notFound || err.retryable) { dead.add(model); continue; }
         throw err; // otro error → propagar
       }
@@ -120,6 +123,8 @@ export async function generateLSG(query, intent) {
 
   // Ninguna fue ideal: devolver la mejor vista (más explicaciones) — mejor que fallar.
   if (best) return { lsg: best.lsg, source: "gemini", model: best.model };
+  // Créditos agotados: degradar con gracia a modo demo (mock) en vez de dar error.
+  if (quotaHit) return { lsg: mockLSG(query, intent), source: "mock", model: "sin-creditos" };
   throw lastErr || new Error("Ningún modelo de Gemini está disponible.");
 }
 
@@ -158,6 +163,10 @@ async function callGemini(apiKey, model, body) {
     // 404 (NOT_FOUND) = modelo retirado → marcar para el fallback.
     if (res.status === 404 || /not_found|no longer available/i.test(detail)) {
       e.notFound = true;
+    }
+    // 429 / créditos agotados → reintentar con otro modelo NO ayuda (mismo billing).
+    if (res.status === 429 || /resource_exhausted|credits|quota/i.test(detail)) {
+      e.quota = true;
     }
     throw e;
   }

@@ -122,7 +122,7 @@ async function liveGate(q, intentEsperada, minHablar) {
 async function liveTests() {
   // Cada consulta se corre varias veces (QA_REPS, por defecto 2) para cazar fallos
   // INTERMITENTES: una lección puede salir bien una vez y sin explicaciones la otra.
-  const REPS = Number(process.env.QA_REPS || 2);
+  const REPS = Number(process.env.QA_REPS || 1); // ojo: cada lección consume créditos de Gemini
   console.log(`\n[2] Producción real — ${BASE}  (x${REPS} cada consulta)`);
   const cases = [
     ["desarrolla 2x + x = 12", "resolver", 3],
