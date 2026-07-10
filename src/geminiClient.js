@@ -157,10 +157,11 @@ export async function generateLSG(query, intent) {
 async function callGemini(apiKey, model, body) {
   const url = `${API_BASE}/${model}:generateContent?key=${apiKey}`;
 
-  // Timeout defensivo por intento: si el modelo no responde en 15 s, abortamos y
-  // caemos a modo demo (mejor que hacer esperar al alumno).
+  // Timeout defensivo por intento: si el modelo no responde en 12 s, abortamos y
+  // caemos a modo demo (mejor que hacer esperar al alumno). Gemini normal responde
+  // en ~5-8 s; pasado ese margen, el demo resuelve la ecuación al instante.
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15_000);
+  const timeout = setTimeout(() => controller.abort(), 12_000);
 
   let res;
   try {

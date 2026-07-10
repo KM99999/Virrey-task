@@ -76,10 +76,11 @@ app.post("/api/query", async (req, res) => {
       advertencias: warnings,
     };
 
-    // Cachear SOLO lecciones reales y con explicaciones (no el mock ni lecciones pobres),
-    // para no servir contenido de baja calidad de forma permanente.
+    // Cachear lecciones reales con explicaciones, o ecuaciones ya resueltas por el modo
+    // demo (contenido correcto), para que repetir la misma consulta sea instantáneo.
     const tieneExplicacion = pasos.some((p) => p.tipo === "hablar");
-    if (source === "gemini" && tieneExplicacion) {
+    const ecuacionResuelta = source === "mock" && lsg.escena === "demo_resuelto";
+    if ((source === "gemini" && tieneExplicacion) || ecuacionResuelta) {
       CACHE.set(key, payload);
       if (CACHE.size > CACHE_MAX) CACHE.delete(CACHE.keys().next().value); // desalojar el más viejo
     }
