@@ -21,6 +21,15 @@ const MODEL_CANDIDATES = [...new Set([
   "gemini-2.5-flash",      // reserva si el anterior está retirado
 ].filter(Boolean))];
 
+// Límite de tokens de SALIDA según la ruta (blindaje de gasto pedido por el cliente):
+//   Ruta A — resolución/explicación de un ejercicio (LSG secuencial): respuesta puntual → 1500.
+//   Ruta B — enseñar un tema o mini-clase (LSG modular): algo más de margen → 2000.
+// Evita que la IA genere respuestas innecesariamente largas y protege el saldo.
+const RUTA_A = new Set(["resolver", "explicar"]);
+const MAX_OUTPUT_RUTA_A = 1500;
+const MAX_OUTPUT_RUTA_B = 2000;
+const maxOutputTokensFor = (intent) => (RUTA_A.has(intent) ? MAX_OUTPUT_RUTA_A : MAX_OUTPUT_RUTA_B);
+
 let workingModel = null;           // último modelo que respondió bien
 const knownDead = new Set();        // modelos retirados (404) — persiste entre peticiones
 let quotaCooldownUntil = 0;         // tras un 429, no llamamos a Gemini por un rato
@@ -30,7 +39,6 @@ const QUOTA_COOLDOWN_MS = 5 * 60 * 1000;
 // ~1 h). Así el prompt del sistema no se re-cobra como tokens de entrada en cada consulta.
 const promptCaches = new Map();      // model -> { name, expireAt }
 const cacheUnsupported = new Set();  // modelos donde el caché explícito no está disponible
-export let lastCacheDebug = "aún no intentado"; // diagnóstico temporal de la creación de caché
 
 /**
  * Genera un LSG para una consulta e intención dadas — en UNA sola llamada a la IA.
@@ -64,7 +72,7 @@ export async function generateLSG(query, intent) {
   for (const model of candidates) {
     if (knownDead.has(model)) continue;
     try {
-      const { lsg, usage, cached } = await generateOnce(apiKey, model, userMsg);
+      const { lsg, usage, cached } = await generateOnce(apiKey, model, userMsg, maxOutputTokensFor(intent));
       workingModel = model;
       return { lsg, source: "gemini", model, usage, cached };
     } catch (err) {
@@ -82,12 +90,13 @@ export async function generateLSG(query, intent) {
 
 // Una única llamada a Gemini. Usa el caché del prompt del sistema si está disponible;
 // si no, envía el prompt inline (los modelos 2.5 igual aplican caché implícito).
-async function generateOnce(apiKey, model, userMsg) {
+async function generateOnce(apiKey, model, userMsg, maxOutputTokens) {
   const cacheName = await getPromptCache(apiKey, model);
   const body = {
     contents: [{ role: "user", parts: [{ text: userMsg }] }],
     generationConfig: {
       temperature: 0.4,
+      maxOutputTokens, // límite de salida dinámico por ruta (control de gasto)
       responseMimeType: "application/json",
       responseSchema: LSG_RESPONSE_SCHEMA,
       thinkingConfig: { thinkingBudget: 0 }, // sin "thinking": más rápido y barato
@@ -132,18 +141,15 @@ async function createPromptCache(apiKey, model) {
       }),
       signal: controller.signal,
     });
-  } catch (e) {
-    lastCacheDebug = `excepción: ${e.name} ${e.message}`.slice(0, 200);
+  } catch {
     return null; // timeout / red → sin caché explícito (se usa inline)
   } finally {
     clearTimeout(timeout);
   }
   if (!res.ok) {
-    lastCacheDebug = `HTTP ${res.status}: ${(await safeText(res)).slice(0, 220)}`;
     return null; // 400 (prompt corto) / no soportado → sin caché explícito
   }
   const data = await res.json().catch(() => null);
-  lastCacheDebug = data?.name ? `OK caché: ${data.name}` : "sin name en respuesta";
   return data?.name || null; // "cachedContents/xxxx"
 }
 
