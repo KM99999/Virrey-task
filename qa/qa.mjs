@@ -137,12 +137,15 @@ async function unitTests() {
   ] });
   check("pizarra CONTIENE la explicación (no solo números)", board.some((l) => l.k === "explica"), `board=${JSON.stringify(board.map((l) => l.k))}`);
 
-  // Seguimiento "no entendí": con contexto del tema anterior, se REEXPLICA ese tema
-  // (no cae al mensaje genérico). Simula la consulta efectiva que arma el servidor.
-  const reexpQuery = "Explícame otra vez, de forma más simple y con otro ejemplo distinto, el tema: enséñame a sumar";
-  const reexpIntent = classifyIntent(reexpQuery).intent;
-  const reexpLsg = processLSG(mockLSG(reexpQuery, reexpIntent), reexpIntent).lsg;
-  check("'no entendí' reexplica el tema anterior (suma, no genérico)", reexpLsg.escena === "demo_suma", reexpLsg.escena);
+  // Seguimiento "no entendí": reexplica el tema de OTRA forma (analogía, MÁS CORTO), NO repite.
+  const normal = processLSG(mockLSG("enséñame a restar", "aprender"), "aprender").lsg;
+  const reexp = processLSG(mockLSG("enséñame a restar", "explicar", { reexplain: true }), "explicar").lsg;
+  const flatN = flattenLSG(normal), flatR = flattenLSG(reexp);
+  check("'no entendí' reexplica el tema (resta, no genérico)", /demo_resta/.test(reexp.escena), reexp.escena);
+  check("'no entendí' NO repite (distinto y más corto que la lección original)",
+    flatR.length < flatN.length && reexp.escena !== normal.escena, `orig=${flatN.length} reexp=${flatR.length}`);
+  const reexpTxt = flatR.map((d) => `${d.texto || ""} ${d.contenido || ""}`).join(" ").toLowerCase();
+  check("'no entendí' enseña con ANALOGÍA / otra forma", /imagina|galleta|pizza|balanza|bolsa|dulce|otra forma/.test(reexpTxt));
 }
 
 // ---------- 2) PRODUCCIÓN (Gemini real) ----------

@@ -51,25 +51,27 @@ app.post("/api/query", async (req, res) => {
   }
 
   try {
-    // Si es un SEGUIMIENTO ("no entendí"), reexplicamos el tema anterior de forma más
-    // simple. La consulta efectiva (para clasificar y generar) apunta a ese tema.
-    const effectiveQuery = contexto
-      ? `Explícame otra vez, de forma más simple y con otro ejemplo distinto, el tema: ${contexto}`
-      : query;
+    // Seguimiento ("no entendí"): reexplicar el tema anterior de OTRA forma (no repetir).
+    const reexplain = !!contexto;
+    const effectiveQuery = reexplain ? contexto : query;
 
-    // 1) Clasificar la intención (una de las 4).
-    const classification = classifyIntent(effectiveQuery);
+    // 1) Intención: en una reexplicación forzamos "explicar" (enseñanza enfocada y breve);
+    //    si no, la decide el clasificador local.
+    const classification = reexplain
+      ? { intent: "explicar", confidence: 0.9, scores: { resolver: 0, aprender: 0, explicar: 1, practicar: 0 } }
+      : classifyIntent(query);
 
-    // 1.5) ¿Ya generamos esta consulta? → servir de caché (0 llamadas a Gemini).
+    // 1.5) Caché: en una reexplicación NO se usa (cada "no entendí" debe poder ser DISTINTO,
+    //      para enseñar de otra forma y no repetir como un loro). En lo normal, sí.
     const key = cacheKey(effectiveQuery, classification.intent);
-    if (CACHE.has(key)) {
+    if (!reexplain && CACHE.has(key)) {
       const cached = CACHE.get(key);
       CACHE.delete(key); CACHE.set(key, cached); // refrescar orden (LRU)
-      return res.json({ ...cached, query, reexplicacion: !!contexto, cacheado: true });
+      return res.json({ ...cached, cacheado: true });
     }
 
-    // 2) Generar el LSG con la IA (o mock si no hay clave).
-    const { lsg: rawLsg, source, model, usage, cached } = await generateLSG(effectiveQuery, classification.intent);
+    // 2) Generar el LSG con la IA (o mock). reexplain → enseñar de otra forma, más simple.
+    const { lsg: rawLsg, source, model, usage, cached } = await generateLSG(effectiveQuery, classification.intent, { reexplain });
 
     // 3) PRE Light: validar y normalizar en bloques predecibles.
     const { lsg, pasos, warnings } = processLSG(rawLsg, classification.intent);
@@ -92,7 +94,8 @@ app.post("/api/query", async (req, res) => {
     // demo (contenido correcto), para que repetir la misma consulta sea instantáneo.
     const tieneExplicacion = pasos.some((p) => p.tipo === "hablar");
     const ecuacionResuelta = source === "mock" && lsg.escena === "demo_resuelto";
-    if ((source === "gemini" && tieneExplicacion) || ecuacionResuelta) {
+    // No cachear las reexplicaciones: cada "no entendí" debe poder salir distinto.
+    if (!reexplain && ((source === "gemini" && tieneExplicacion) || ecuacionResuelta)) {
       CACHE.set(key, payload);
       if (CACHE.size > CACHE_MAX) CACHE.delete(CACHE.keys().next().value); // desalojar el más viejo
     }

@@ -51,17 +51,23 @@ const cacheUnsupported = new Set();  // modelos donde el caché explícito no es
  * @param {string} intent - intención (del clasificador LOCAL).
  * @returns {Promise<{ lsg: object, source: "gemini" | "mock", model?: string }>}
  */
-export async function generateLSG(query, intent) {
+export async function generateLSG(query, intent, opts = {}) {
+  const reexplain = !!opts.reexplain; // "no entendí": enseñar de OTRA forma, no repetir
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return { lsg: mockLSG(query, intent), source: "mock" };
+  if (!apiKey) return { lsg: mockLSG(query, intent, { reexplain }), source: "mock" };
 
   // Si hace poco Gemini dijo "créditos agotados" (429), no lo llamamos por un rato.
   if (Date.now() < quotaCooldownUntil) {
-    return { lsg: mockLSG(query, intent), source: "mock", model: "sin-creditos" };
+    return { lsg: mockLSG(query, intent, { reexplain }), source: "mock", model: "sin-creditos" };
   }
 
   // El prompt del sistema es ESTABLE (cacheado); la intención va en el mensaje del usuario.
-  const userMsg = `Intención: ${intent}\nConsulta del alumno: ${query}`;
+  // Si el alumno no entendió, pedimos una RE-ENSEÑANZA distinta (analogía, más simple, breve),
+  // no una repetición de la misma lección (el objetivo es que APRENDA, no ser un loro).
+  const reteach = reexplain
+    ? "\n\nIMPORTANTE: el alumno dijo que NO ENTENDIÓ la explicación anterior. NO repitas lo mismo ni el mismo ejemplo. Enséñalo de OTRA forma: parte de una ANALOGÍA cotidiana (objetos, comida, dinero), usa pasos más pequeños y lenguaje muy simple, como a un niño. Sé BREVE y ve a lo esencial; no vuelvas a dar la lección completa. Cierra con un ejercicio más fácil."
+    : "";
+  const userMsg = `Intención: ${intent}\nConsulta del alumno: ${query}${reteach}`;
 
   let candidates = (workingModel
     ? [workingModel, ...MODEL_CANDIDATES.filter((m) => m !== workingModel)]
@@ -87,7 +93,7 @@ export async function generateLSG(query, intent) {
 
   // Gemini no respondió bien: degradar a modo demo (nunca un error al alumno).
   const quotaHit = !!(lastErr && lastErr.quota);
-  return { lsg: mockLSG(query, intent), source: "mock", model: quotaHit ? "sin-creditos" : "demo" };
+  return { lsg: mockLSG(query, intent, { reexplain }), source: "mock", model: quotaHit ? "sin-creditos" : "demo" };
 }
 
 // Una única llamada a Gemini. Usa el caché del prompt del sistema si está disponible;

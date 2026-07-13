@@ -192,10 +192,14 @@ function normTema(s) {
 
 // Operaciones aritméticas básicas.
 const ARITMETICA = {
-  suma:           { nombre: "sumar",       simbolo: "+", idea: "juntar dos cantidades en una sola", regla: "se juntan las dos cantidades y se cuenta el total", op: (a, b) => a + b, ej: [7, 5],  practica: [8, 6] },
-  resta:          { nombre: "restar",      simbolo: "−", idea: "quitar una cantidad de otra",       regla: "se quita la segunda cantidad de la primera y se cuenta lo que queda", op: (a, b) => a - b, ej: [13, 5], practica: [15, 7] },
-  multiplicacion: { nombre: "multiplicar", simbolo: "×", idea: "sumar un número varias veces",      regla: "se suma el primer número tantas veces como indica el segundo", op: (a, b) => a * b, ej: [4, 3],  practica: [6, 3] },
-  division:       { nombre: "dividir",     simbolo: "÷", idea: "repartir en partes iguales",        regla: "se reparte la primera cantidad en tantos grupos iguales como indica la segunda", op: (a, b) => a / b, ej: [12, 3], practica: [20, 4] },
+  suma:           { nombre: "sumar",       simbolo: "+", idea: "juntar dos cantidades en una sola", regla: "se juntan las dos cantidades y se cuenta el total", op: (a, b) => a + b, ej: [7, 5],  practica: [8, 6],
+    analogia: "Imagina que tienes 3 dulces y un amigo te da 2 más. Los juntas y los cuentas todos: 3… 4, 5. ¡Tienes 5! Eso es sumar: juntar y contar todo.", ejReexp: [3, 2], practReexp: [4, 3] },
+  resta:          { nombre: "restar",      simbolo: "−", idea: "quitar una cantidad de otra",       regla: "se quita la segunda cantidad de la primera y se cuenta lo que queda", op: (a, b) => a - b, ej: [13, 5], practica: [15, 7],
+    analogia: "Imagina que tienes 8 galletas y te comes 3. Las quitas y cuentas hacia atrás lo que queda: 8… 7, 6, 5. Quedan 5. Restar es quitar y contar lo que sobra.", ejReexp: [8, 3], practReexp: [6, 2] },
+  multiplicacion: { nombre: "multiplicar", simbolo: "×", idea: "sumar un número varias veces",      regla: "se suma el primer número tantas veces como indica el segundo", op: (a, b) => a * b, ej: [4, 3],  practica: [6, 3],
+    analogia: "Piensa en bolsas iguales. 3 × 4 son 3 bolsas con 4 dulces cada una. Sumas las bolsas: 4 + 4 + 4 = 12. Multiplicar es sumar grupos iguales.", ejReexp: [3, 4], practReexp: [2, 5] },
+  division:       { nombre: "dividir",     simbolo: "÷", idea: "repartir en partes iguales",        regla: "se reparte la primera cantidad en tantos grupos iguales como indica la segunda", op: (a, b) => a / b, ej: [12, 3], practica: [20, 4],
+    analogia: "Imagina repartir dulces entre amigos. 12 ÷ 3 es dar 12 dulces a 3 amigos en partes iguales: a cada uno le tocan 4. Dividir es repartir por igual.", ejReexp: [12, 3], practReexp: [10, 2] },
 };
 
 function detectarTema(query) {
@@ -234,11 +238,26 @@ const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const preg = (texto, respuesta) => ({ tipo: "preguntar", texto, respuesta, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" });
 
 // Lección de una operación aritmética (sumar/restar/multiplicar/dividir).
-function mockAritmetica(tema, intent) {
+// reexplain=true → NO repite la lección: la enseña de OTRA forma, con analogía y más corta.
+function mockAritmetica(tema, intent, reexplain) {
   const t = ARITMETICA[tema];
   const [a, b] = t.ej, res = t.op(a, b);
   const [pa, pb] = t.practica, pres = t.op(pa, pb);
   const ejercicio = preg(`¿Cuánto es ${pa} ${t.simbolo} ${pb}? Escribe solo el número.`, fmtNum(pres));
+
+  if (reexplain) {
+    // El alumno no entendió: otra explicación, con ANALOGÍA cotidiana y un ejercicio más simple.
+    const [ra, rb] = t.ejReexp, rres = t.op(ra, rb);
+    const [qa, qb] = t.practReexp, qres = t.op(qa, qb);
+    return { escena: `demo_${tema}_reexplica`, intencion: "explicar", duracion_estimada: 45, _mock: true, directivas: [
+      { tipo: "avatar", accion: "sonreir" },
+      { tipo: "hablar", texto: "Tranquilo, ¡vamos a verlo de otra forma, más fácil y con un ejemplo de la vida real!" },
+      { tipo: "hablar", texto: t.analogia },
+      { tipo: "pizarra", accion: "escribir", contenido: `${ra} ${t.simbolo} ${rb} = ${fmtNum(rres)}` },
+      { tipo: "hablar", texto: "¿Ves? Con algo de todos los días se entiende mejor. Probemos con números pequeños." },
+      preg(`Con calma: ¿cuánto es ${qa} ${t.simbolo} ${qb}? Escribe solo el número.`, fmtNum(qres)),
+    ] };
+  }
   if (intent === "practicar") {
     return { escena: `demo_${tema}`, intencion: intent, duracion_estimada: 50, _mock: true, modulos: [
       { id: "recordatorio", directivas: [
@@ -290,8 +309,18 @@ function mockOperacion({ a, b, r, tema }, intent) {
 }
 
 // Fracciones (mismo denominador).
-function mockFraccion(intent) {
+function mockFraccion(intent, reexplain) {
   const ejercicio = preg("¿Cuánto es 2/6 + 3/6? Escribe la fracción (por ejemplo: 5/6).", "5/6");
+  if (reexplain) {
+    return { escena: "demo_fraccion_reexplica", intencion: "explicar", duracion_estimada: 45, _mock: true, directivas: [
+      { tipo: "avatar", accion: "sonreir" },
+      { tipo: "hablar", texto: "Tranquilo, veámoslo de otra forma: con una pizza." },
+      { tipo: "hablar", texto: "Imagina una pizza cortada en 4 partes iguales; cada parte es 1/4. Si te comes 2 partes, te comiste 2/4." },
+      { tipo: "pizarra", accion: "escribir", contenido: "1/4 + 1/4 = 2/4" },
+      { tipo: "hablar", texto: "Con el mismo denominador solo juntas las partes de arriba (numeradores) y el de abajo se queda igual." },
+      preg("¿Cuánto es 1/5 + 2/5? Escribe la fracción (por ejemplo: 3/5).", "3/5"),
+    ] };
+  }
   if (intent === "practicar") {
     return { escena: "demo_fraccion", intencion: intent, duracion_estimada: 50, _mock: true, modulos: [
       { id: "recordatorio", directivas: [
@@ -335,8 +364,19 @@ function mockDiferenciaCuadrados({ a, b }, intent) {
 }
 
 // Ecuación lineal (tema, sin una ecuación concreta en la consulta).
-function mockEcuacion(intent) {
+function mockEcuacion(intent, reexplain) {
   const ejercicio = preg("¿Cuánto vale x en x + 7 = 12? Escribe solo el número.", "5");
+  if (reexplain) {
+    return { escena: "demo_ecuacion_reexplica", intencion: "explicar", duracion_estimada: 45, _mock: true, directivas: [
+      { tipo: "avatar", accion: "sonreir" },
+      { tipo: "hablar", texto: "Tranquilo, veámoslo de otra forma: como una balanza." },
+      { tipo: "hablar", texto: "Una ecuación es una balanza en equilibrio: un lado pesa igual que el otro, y la x es un peso que no conocemos." },
+      { tipo: "pizarra", accion: "escribir", contenido: "x + 3 = 5" },
+      { tipo: "hablar", texto: "Si a un lado le quitamos 3, al otro también, para no romper el equilibrio. Queda x = 2." },
+      { tipo: "pizarra", accion: "escribir", contenido: "x = 2" },
+      preg("Ahora tú: ¿cuánto vale x en x + 4 = 6? Escribe solo el número.", "2"),
+    ] };
+  }
   if (intent === "practicar") {
     return { escena: "demo_practica", intencion: intent, duracion_estimada: 50, _mock: true, modulos: [
       { id: "recordatorio", directivas: [
@@ -382,7 +422,9 @@ function mockGenerico(query, intent) {
   ] };
 }
 
-export function mockLSG(query, intent) {
+export function mockLSG(query, intent, opts = {}) {
+  const reexplain = !!opts.reexplain; // "no entendí": enseñar de OTRA forma, no repetir
+
   // 1) Ecuación lineal concreta en la consulta → resolver de verdad, paso a paso.
   const solved = solveLinearSteps(query);
   if (solved) {
@@ -410,9 +452,9 @@ export function mockLSG(query, intent) {
 
   // 4) Tema reconocido → lección de ESE tema (no siempre ecuaciones).
   const tema = detectarTema(query);
-  if (tema && ARITMETICA[tema]) return mockAritmetica(tema, intent);
-  if (tema === "fraccion") return mockFraccion(intent);
-  if (tema === "ecuacion") return mockEcuacion(intent);
+  if (tema && ARITMETICA[tema]) return mockAritmetica(tema, intent, reexplain);
+  if (tema === "fraccion") return mockFraccion(intent, reexplain);
+  if (tema === "ecuacion") return mockEcuacion(intent, reexplain);
 
   // 5) Tema no reconocido → honesto (no mostrar contenido de otro tema).
   return mockGenerico(query, intent);
