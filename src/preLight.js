@@ -30,6 +30,14 @@ function normLabel(v, fallback) {
 // campo "respuesta" de forma fiable, así que la calculamos para poder calificar.
 // Devuelve la solución como string, o null si no es una ecuación lineal simple
 // (en cuyo caso el PSE Light tratará la pregunta como de comprensión, sin juzgar).
+// Evita CALIFICAR MAL cuando el "match" recorta un coeficiente que iba pegado antes
+// (p.ej. "1/2 x = 4" o "3 x = 6" con espacio): en esos casos el valor saldría erróneo.
+// Preferimos NO juzgar (modo comprensión) antes que dar un resultado incorrecto.
+function tieneCoeficienteRecortado(text, index) {
+  const before = text.slice(0, index).replace(/\s$/, ""); // quita UN espacio de separación
+  return /[0-9)/.²³^]$/.test(before);
+}
+
 export function solveLinearFromText(text) {
   if (typeof text !== "string") return null;
   const t = text.toLowerCase();
@@ -39,6 +47,7 @@ export function solveLinearFromText(text) {
     /((?:[+-]\s*)?(?:\d*[a-z]|\d+(?:\.\d+)?)(?:\s*[+-]\s*(?:\d*[a-z]|\d+(?:\.\d+)?))*)\s*=\s*(-?\d+(?:\.\d+)?)(?![a-z0-9.])/
   );
   if (!m) return null;
+  if (tieneCoeficienteRecortado(t, m.index)) return null;
   const lhs = m[1];
   const c = Number(m[2]);
   if (!Number.isFinite(c)) return null;
@@ -84,9 +93,10 @@ export function solveLinearSteps(text) {
   if (typeof text !== "string") return null;
   const t = text.toLowerCase();
   const m = t.match(
-    /((?:[+-]\s*)?(?:\d*[a-z]|\d+(?:\.\d+)?)(?:\s*[+-]\s*(?:\d*[a-z]|\d+(?:\.\d+)?))*)\s*=\s*(-?\d+(?:\.\d+)?)/
+    /((?:[+-]\s*)?(?:\d*[a-z]|\d+(?:\.\d+)?)(?:\s*[+-]\s*(?:\d*[a-z]|\d+(?:\.\d+)?))*)\s*=\s*(-?\d+(?:\.\d+)?)(?![a-z0-9.])/
   );
   if (!m) return null;
+  if (tieneCoeficienteRecortado(t, m.index)) return null;
   const lhs = m[1];
   const c = Number(m[2]);
   if (!Number.isFinite(c)) return null;

@@ -56,6 +56,10 @@ function unitTests() {
   check("solver: 2x - 3 = 7 → 5", solveLinearFromText("2x - 3 = 7") === "5");
   check("solver: 3x + x = 20 → 5", solveLinearFromText("3x + x = 20") === "5");
   check("solver: no-lineal → null", solveLinearFromText("2(x+1) = 6") === null);
+  // Nunca dar una respuesta FALSA: si el coeficiente se recorta ("1/2 x", "3 x"),
+  // el solver debe devolver null (modo comprensión), jamás un valor incorrecto.
+  check("solver: '1/2 x = 4' NO da x=4 falso (→ null)", solveLinearFromText("1/2 x = 4") === null);
+  check("solver: '3 x = 6' con espacio → null (no arriesga)", solveLinearFromText("3 x = 6") === null);
 
   check("checkAnswer: 5 == 5", checkAnswer("5", "5").correct === true);
   check("checkAnswer: 9 != 5", checkAnswer("9", "5").correct === false);
