@@ -192,10 +192,10 @@ function normTema(s) {
 
 // Operaciones aritméticas básicas.
 const ARITMETICA = {
-  suma:           { nombre: "sumar",       simbolo: "+", idea: "juntar dos cantidades en una sola", op: (a, b) => a + b, ej: [7, 5],  practica: [8, 6] },
-  resta:          { nombre: "restar",      simbolo: "−", idea: "quitar una cantidad de otra",       op: (a, b) => a - b, ej: [13, 5], practica: [15, 7] },
-  multiplicacion: { nombre: "multiplicar", simbolo: "×", idea: "sumar un número varias veces",      op: (a, b) => a * b, ej: [4, 3],  practica: [6, 3] },
-  division:       { nombre: "dividir",     simbolo: "÷", idea: "repartir en partes iguales",        op: (a, b) => a / b, ej: [12, 3], practica: [20, 4] },
+  suma:           { nombre: "sumar",       simbolo: "+", idea: "juntar dos cantidades en una sola", regla: "se juntan las dos cantidades y se cuenta el total", op: (a, b) => a + b, ej: [7, 5],  practica: [8, 6] },
+  resta:          { nombre: "restar",      simbolo: "−", idea: "quitar una cantidad de otra",       regla: "se quita la segunda cantidad de la primera y se cuenta lo que queda", op: (a, b) => a - b, ej: [13, 5], practica: [15, 7] },
+  multiplicacion: { nombre: "multiplicar", simbolo: "×", idea: "sumar un número varias veces",      regla: "se suma el primer número tantas veces como indica el segundo", op: (a, b) => a * b, ej: [4, 3],  practica: [6, 3] },
+  division:       { nombre: "dividir",     simbolo: "÷", idea: "repartir en partes iguales",        regla: "se reparte la primera cantidad en tantos grupos iguales como indica la segunda", op: (a, b) => a / b, ej: [12, 3], practica: [20, 4] },
 };
 
 function detectarTema(query) {
@@ -252,16 +252,24 @@ function mockAritmetica(tema, intent) {
       ] },
     ] };
   }
-  return { escena: `demo_${tema}`, intencion: intent, duracion_estimada: 80, _mock: true, modulos: [
+  // APRENDER: estructura pedagógica completa — concepto, regla, ejemplo guiado y práctica.
+  return { escena: `demo_${tema}`, intencion: intent, duracion_estimada: 90, _mock: true, modulos: [
     { id: "concepto", directivas: [
       { tipo: "avatar", accion: "sonreir" },
       { tipo: "hablar", texto: `Vamos a aprender a ${t.nombre}. ${cap(t.nombre)} es ${t.idea}.` },
-      { tipo: "hablar", texto: `Veamos un ejemplo: ${a} ${t.simbolo} ${b}.` },
+    ] },
+    { id: "regla", directivas: [
+      { tipo: "hablar", texto: `La regla es sencilla: para ${t.nombre}, ${t.regla}.` },
+    ] },
+    { id: "ejemplo_guiado", directivas: [
+      { tipo: "hablar", texto: `Veamos un ejemplo paso a paso: ${a} ${t.simbolo} ${b}.` },
+      { tipo: "pizarra", accion: "escribir", contenido: `${a} ${t.simbolo} ${b}` },
+      { tipo: "hablar", texto: `Aplicamos la regla: ${t.regla}.` },
       { tipo: "pizarra", accion: "escribir", contenido: `${a} ${t.simbolo} ${b} = ${fmtNum(res)}` },
       { tipo: "hablar", texto: `Entonces, ${a} ${t.simbolo} ${b} es igual a ${fmtNum(res)}.` },
     ] },
     { id: "practica", directivas: [
-      { tipo: "hablar", texto: "Ahora te toca a ti. Resuelve este y escribe el resultado." },
+      { tipo: "hablar", texto: "Ahora te toca a ti. Resuelve este ejercicio y escribe el resultado." },
       { tipo: "pizarra", accion: "escribir", contenido: `${pa} ${t.simbolo} ${pb}` },
       ejercicio,
     ] },

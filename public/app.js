@@ -77,6 +77,16 @@ const ui = {
     els.board.scrollTop = els.board.scrollHeight;
     return line;
   },
+  // Escribe la EXPLICACIÓN en la pizarra (no solo los números): el porqué de cada paso
+  // queda escrito junto a la matemática, como en un cuaderno resuelto.
+  writeBoardExplain(text) {
+    const line = document.createElement("div");
+    line.className = "board-explain reveal";
+    line.textContent = text;
+    els.board.appendChild(line);
+    els.board.scrollTop = els.board.scrollHeight;
+    return line;
+  },
   highlightBoard(objetivo) {
     const lines = els.board.querySelectorAll(".board-line");
     lines.forEach((l) => l.classList.remove("hl"));

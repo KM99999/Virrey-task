@@ -230,6 +230,7 @@ export class PSELight {
       const d = this.timeline[k];
       if (!d) continue;
       if (d.tipo === "modulo") this.ui.setModule(d.id);
+      else if (d.tipo === "hablar") this.ui.writeBoardExplain?.(d.texto);
       else if (d.tipo === "pizarra") this.ui.writeBoard(d.contenido);
       else if (d.tipo === "puntero") this.ui.highlightBoard(d.objetivo || null);
     }
@@ -262,6 +263,9 @@ export class PSELight {
         break;
 
       case "hablar":
+        // La explicación se ESCRIBE en la pizarra (no solo se narra), para que el
+        // tablero muestre el razonamiento del ejercicio, no únicamente los números.
+        this.ui.writeBoardExplain?.(d.texto);
         await this._speak(d.texto, "hablando", signal);
         break;
 

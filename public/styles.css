@@ -302,6 +302,14 @@ textarea:focus { outline: none; border-color: var(--accent); }
 .board-line { padding: 2px 4px; border-radius: 6px; }
 .board-line.reveal { animation: reveal 0.4s ease both; }
 .board-line.hl { background: rgba(240,183,74,0.18); outline: 1px solid rgba(240,183,74,0.5); color: #ffe6ad; }
+/* Explicación escrita en la pizarra (el porqué de cada paso), en prosa legible
+   y diferenciada de las líneas de matemática (monoespaciadas). */
+.board-explain {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 13.5px; color: #aeb8d6; line-height: 1.5;
+  padding: 2px 4px; margin-top: 6px;
+}
+.board-explain.reveal { animation: reveal 0.4s ease both; }
 @keyframes reveal { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
 .caption {

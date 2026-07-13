@@ -11,7 +11,7 @@
 import { classifyIntent } from "../src/classifier.js";
 import { processLSG, solveLinearFromText } from "../src/preLight.js";
 import { mockLSG } from "../src/lsgPrompt.js";
-import { checkAnswer, flattenLSG } from "../public/pseLight.js";
+import { checkAnswer, flattenLSG, PSELight } from "../public/pseLight.js";
 
 const BASE = process.env.QA_URL || "https://math-ia.onrender.com";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -46,7 +46,7 @@ function refSolve(text) {
 }
 
 // ---------- 1) LÓGICA ----------
-function unitTests() {
+async function unitTests() {
   console.log("\n[1] Lógica (sin red)");
   check("clasificador: resolver", classifyIntent("Resuelve 2x + 5 = 15").intent === "resolver");
   check("clasificador: aprender", classifyIntent("Enséñame derivadas").intent === "aprender");
@@ -116,6 +116,26 @@ function unitTests() {
   // Tema no soportado en demo: honesto, sin inventar contenido de ecuaciones.
   const genTxt = textoDe("enséñame integrales por partes", "aprender");
   check("demo tema desconocido: honesto (no finge ecuaciones)", /modo de demostraci|inténtalo de nuevo/.test(genTxt) && !/2x|despejar/.test(genTxt));
+
+  // El demo de "aprender" sigue la estructura pedagógica: concepto, regla, ejemplo guiado, práctica.
+  const mods = processLSG(mockLSG("enséñame a sumar", "aprender"), "aprender").lsg.modulos.map((m) => m.id);
+  check("demo aprender: estructura concepto/regla/ejemplo_guiado/practica",
+    ["concepto", "regla", "ejemplo_guiado", "practica"].every((id) => mods.includes(id)), mods.join(","));
+
+  // La PIZARRA debe recibir la EXPLICACIÓN (hablar), no solo los números (pizarra).
+  const board = [];
+  const uiMock = {
+    setModule() {}, highlightBoard() {}, clearBoard() { board.length = 0; }, setCaption() {},
+    onStep() {}, onProgress() {}, setControls() {}, showFeedback() {}, askAnswer: async () => "4",
+    writeBoard(t) { board.push({ k: "math", t }); }, writeBoardExplain(t) { board.push({ k: "explica", t }); },
+  };
+  const pse = new PSELight({ avatar: { setState() {}, setSpeaking() {} }, tts: { speak: async () => {}, cancel() {} }, ui: uiMock });
+  await pse.play({ escena: "t", intencion: "resolver", directivas: [
+    { tipo: "hablar", texto: "Sumamos los términos semejantes.", id: 1 },
+    { tipo: "pizarra", contenido: "3x = 12", id: 2 },
+    { tipo: "preguntar", texto: "¿Cuánto vale x en x + 2 = 6?", respuesta: "4", id: 3 },
+  ] });
+  check("pizarra CONTIENE la explicación (no solo números)", board.some((l) => l.k === "explica"), `board=${JSON.stringify(board.map((l) => l.k))}`);
 }
 
 // ---------- 2) PRODUCCIÓN (Gemini real) ----------
@@ -180,7 +200,7 @@ async function liveTests() {
 
 // ---------- Ejecutar ----------
 console.log("═══════════ QA · Math IA ═══════════");
-unitTests();
+await unitTests();
 if (process.env.QA_SKIP_LIVE !== "1") await liveTests();
 else console.log("\n[2] Producción — OMITIDA (QA_SKIP_LIVE=1)");
 
