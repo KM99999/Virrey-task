@@ -309,8 +309,8 @@ export class PSELight {
     if (!expected) {
       const negativa = /^(no|nop|nel|para nada|no s[eé])\b/i.test(answer.trim());
       const msg = negativa
-        ? "Sin problema, repasémoslo con calma. ¡Sigamos!"
-        : "¡Bien! Gracias por participar. Sigamos avanzando.";
+        ? "Sin problema. Puedes volver a reproducir la lección para repasarla con calma. 👍"
+        : "¡Muy bien! Gracias por participar. 👏";
       this.ui.showFeedback(true, msg);
       await this._speak(msg, "sonriendo", signal);
       return;

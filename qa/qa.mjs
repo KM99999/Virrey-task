@@ -101,6 +101,21 @@ function unitTests() {
   const practF = flattenLSG(processLSG(mockLSG("dame ejercicios para practicar ecuaciones lineales", "practicar"), "practicar").lsg);
   const pizarrasP = practF.filter((d) => d.tipo === "pizarra").map((d) => (d.contenido || "").replace(/\s+/g, " ").trim());
   check("demo practicar: NO se lo resuelve (sin línea 'x = <n>')", !pizarrasP.some((c) => /^[a-z]\s*=\s*-?\d+$/.test(c)), `pizarras=${JSON.stringify(pizarrasP)}`);
+
+  // TEMA-CONSCIENTE: el demo debe enseñar el tema pedido, NO siempre ecuaciones.
+  const textoDe = (q, intent) => {
+    const { lsg } = processLSG(mockLSG(q, intent), intent);
+    return flattenLSG(lsg).map((d) => `${d.texto || ""} ${d.contenido || ""}`).join(" ").toLowerCase();
+  };
+  const sumaTxt = textoDe("enséñame a sumar dos cantidades", "aprender");
+  check("demo 'sumar' enseña a sumar (no ecuaciones)", /sumar|suma/.test(sumaTxt) && !/ecuaci|despejar|2x/.test(sumaTxt));
+  const restaTxt = textoDe("enséñame a restar", "aprender");
+  check("demo 'restar' enseña a restar (no ecuaciones)", /restar|resta/.test(restaTxt) && !/ecuaci|2x/.test(restaTxt));
+  check("demo '7 × 8' calcula 56", textoDe("cuánto es 7 × 8", "resolver").includes("56"));
+  check("demo 'a^2 - b^2' factoriza (diferencia de cuadrados)", /factoriz|diferencia de cuadrados/.test(textoDe("Resuelve a^2 - b^2", "resolver")));
+  // Tema no soportado en demo: honesto, sin inventar contenido de ecuaciones.
+  const genTxt = textoDe("enséñame integrales por partes", "aprender");
+  check("demo tema desconocido: honesto (no finge ecuaciones)", /modo de demostraci|inténtalo de nuevo/.test(genTxt) && !/2x|despejar/.test(genTxt));
 }
 
 // ---------- 2) PRODUCCIÓN (Gemini real) ----------

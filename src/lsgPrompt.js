@@ -157,6 +157,16 @@ Ejemplo bien hecho:
     "esperar_respuesta": true, "si_correcto": "felicitar", "si_incorrecto": "mostrar_otro_ejemplo" }
 ]
 
+════════ LONGITUD (evita que la lección se corte) ════════
+- Sé CONCISO: explicaciones de 1-2 frases, sin relleno. La lección COMPLETA debe tener a lo
+  sumo ~12-14 directivas en total (contando todas). Es mejor una lección corta y COMPLETA
+  (que cierre con su "preguntar") que una larga que se corte a la mitad.
+
+════════ CUALQUIER TEMA MATEMÁTICO ════════
+- Funciona para CUALQUIER tema básico (sumar, restar, multiplicar, dividir, fracciones,
+  potencias, factorizar, ecuaciones, etc.). Enseña EXACTAMENTE el tema que pide el alumno.
+  Si pide "sumar", enseña a sumar (NO ecuaciones). Adapta el ejemplo y la pregunta al tema.
+
 Estructura general:
 {
   "escena": "<nombre_corto_snake_case>",
@@ -171,11 +181,201 @@ export function buildSystemInstruction() {
 }
 
 // --- Generador simulado (fallback) -----------------------------------------
-// Se usa cuando no hay GEMINI_API_KEY, para que el prototipo arranque y se pueda
-// probar el flujo completo sin coste. Produce un LSG con la forma correcta.
+// Se usa sin GEMINI_API_KEY o cuando Gemini falla, para que el prototipo funcione
+// sin coste. Es TEMA-CONSCIENTE: enseña el tema que pide el alumno (sumar, restar,
+// multiplicar, dividir, fracciones, ecuaciones, factorizar), no siempre ecuaciones.
+
+// Normaliza para detectar el tema (minúsculas, sin tildes).
+function normTema(s) {
+  return String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+
+// Operaciones aritméticas básicas.
+const ARITMETICA = {
+  suma:           { nombre: "sumar",       simbolo: "+", idea: "juntar dos cantidades en una sola", op: (a, b) => a + b, ej: [7, 5],  practica: [8, 6] },
+  resta:          { nombre: "restar",      simbolo: "−", idea: "quitar una cantidad de otra",       op: (a, b) => a - b, ej: [13, 5], practica: [15, 7] },
+  multiplicacion: { nombre: "multiplicar", simbolo: "×", idea: "sumar un número varias veces",      op: (a, b) => a * b, ej: [4, 3],  practica: [6, 3] },
+  division:       { nombre: "dividir",     simbolo: "÷", idea: "repartir en partes iguales",        op: (a, b) => a / b, ej: [12, 3], practica: [20, 4] },
+};
+
+function detectarTema(query) {
+  const n = normTema(query);
+  if (/\b(suma|sumar|sumas|sumando|adicion)\b/.test(n)) return "suma";
+  if (/\b(resta|restar|restas|restando|sustraccion|sustraer)\b/.test(n)) return "resta";
+  if (/\b(multiplica|multiplicar|multiplicacion|producto|tablas? de multiplicar)\b/.test(n)) return "multiplicacion";
+  if (/\b(divide|dividir|division|divisiones|cociente|repartir)\b/.test(n)) return "division";
+  if (/\b(fraccion|fracciones|numerador|denominador)\b/.test(n)) return "fraccion";
+  if (/\b(ecuacion|ecuaciones|despejar|incognita|primer grado|lineal|lineales)\b/.test(n)) return "ecuacion";
+  return null;
+}
+
+// "2 + 3", "cuánto es 7 × 8" → calcula la operación concreta.
+function detectarOperacion(query) {
+  const n = normTema(query).replace(/[x×]/g, "*").replace(/÷/g, "/");
+  const m = n.match(/(-?\d+(?:\.\d+)?)\s*([+\-*/])\s*(-?\d+(?:\.\d+)?)/);
+  if (!m) return null;
+  const a = Number(m[1]), op = m[2], b = Number(m[3]);
+  const apply = { "+": (x, y) => x + y, "-": (x, y) => x - y, "*": (x, y) => x * y, "/": (x, y) => (y === 0 ? NaN : x / y) }[op];
+  const r = apply(a, b);
+  if (!Number.isFinite(r)) return null;
+  const tema = { "+": "suma", "-": "resta", "*": "multiplicacion", "/": "division" }[op];
+  return { a, b, r, tema };
+}
+
+// "a² − b²", "x^2 - y^2" → factorización por diferencia de cuadrados.
+function detectarDiferenciaCuadrados(query) {
+  const n = normTema(query).replace(/\s+/g, "");
+  const m = n.match(/([a-z])(\^2|²|2)-([a-z])(\^2|²|2)/);
+  return m && m[1] !== m[3] ? { a: m[1], b: m[3] } : null;
+}
+
+const fmtNum = (n) => (Number.isInteger(n) ? String(n) : String(Math.round(n * 1000) / 1000));
+const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+const preg = (texto, respuesta) => ({ tipo: "preguntar", texto, respuesta, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" });
+
+// Lección de una operación aritmética (sumar/restar/multiplicar/dividir).
+function mockAritmetica(tema, intent) {
+  const t = ARITMETICA[tema];
+  const [a, b] = t.ej, res = t.op(a, b);
+  const [pa, pb] = t.practica, pres = t.op(pa, pb);
+  const ejercicio = preg(`¿Cuánto es ${pa} ${t.simbolo} ${pb}? Escribe solo el número.`, fmtNum(pres));
+  if (intent === "practicar") {
+    return { escena: `demo_${tema}`, intencion: intent, duracion_estimada: 50, _mock: true, modulos: [
+      { id: "recordatorio", directivas: [
+        { tipo: "avatar", accion: "sonreir" },
+        { tipo: "hablar", texto: `¡Vamos a practicar a ${t.nombre}! Aquí tienes un ejercicio para que lo resuelvas tú.` },
+      ] },
+      { id: "practica", directivas: [
+        { tipo: "pizarra", accion: "escribir", contenido: `${pa} ${t.simbolo} ${pb}` },
+        { tipo: "hablar", texto: "Calcula el resultado y escríbelo." },
+        ejercicio,
+      ] },
+    ] };
+  }
+  return { escena: `demo_${tema}`, intencion: intent, duracion_estimada: 80, _mock: true, modulos: [
+    { id: "concepto", directivas: [
+      { tipo: "avatar", accion: "sonreir" },
+      { tipo: "hablar", texto: `Vamos a aprender a ${t.nombre}. ${cap(t.nombre)} es ${t.idea}.` },
+      { tipo: "hablar", texto: `Veamos un ejemplo: ${a} ${t.simbolo} ${b}.` },
+      { tipo: "pizarra", accion: "escribir", contenido: `${a} ${t.simbolo} ${b} = ${fmtNum(res)}` },
+      { tipo: "hablar", texto: `Entonces, ${a} ${t.simbolo} ${b} es igual a ${fmtNum(res)}.` },
+    ] },
+    { id: "practica", directivas: [
+      { tipo: "hablar", texto: "Ahora te toca a ti. Resuelve este y escribe el resultado." },
+      { tipo: "pizarra", accion: "escribir", contenido: `${pa} ${t.simbolo} ${pb}` },
+      ejercicio,
+    ] },
+  ] };
+}
+
+// Cálculo de una operación concreta ("2 + 3").
+function mockOperacion({ a, b, r, tema }, intent) {
+  const t = ARITMETICA[tema];
+  const [pa, pb] = t.practica, pres = t.op(pa, pb);
+  return { escena: "demo_operacion", intencion: intent, duracion_estimada: 40, _mock: true, directivas: [
+    { tipo: "avatar", accion: "sonreir" },
+    { tipo: "hablar", texto: `Vamos a calcular ${fmtNum(a)} ${t.simbolo} ${fmtNum(b)}.` },
+    { tipo: "pizarra", accion: "escribir", contenido: `${fmtNum(a)} ${t.simbolo} ${fmtNum(b)} = ${fmtNum(r)}` },
+    { tipo: "hablar", texto: `El resultado es ${fmtNum(r)}.` },
+    preg(`Ahora tú: ¿cuánto es ${pa} ${t.simbolo} ${pb}? Escribe solo el número.`, fmtNum(pres)),
+  ] };
+}
+
+// Fracciones (mismo denominador).
+function mockFraccion(intent) {
+  const ejercicio = preg("¿Cuánto es 2/6 + 3/6? Escribe la fracción (por ejemplo: 5/6).", "5/6");
+  if (intent === "practicar") {
+    return { escena: "demo_fraccion", intencion: intent, duracion_estimada: 50, _mock: true, modulos: [
+      { id: "recordatorio", directivas: [
+        { tipo: "avatar", accion: "sonreir" },
+        { tipo: "hablar", texto: "¡Vamos a practicar fracciones! Con el mismo denominador se suman los numeradores. Aquí tienes tu ejercicio." },
+      ] },
+      { id: "practica", directivas: [
+        { tipo: "pizarra", accion: "escribir", contenido: "2/6 + 3/6" },
+        { tipo: "hablar", texto: "Suma los numeradores y escribe la fracción." },
+        ejercicio,
+      ] },
+    ] };
+  }
+  return { escena: "demo_fraccion", intencion: intent, duracion_estimada: 80, _mock: true, modulos: [
+    { id: "concepto", directivas: [
+      { tipo: "avatar", accion: "sonreir" },
+      { tipo: "hablar", texto: "Una fracción representa partes de un todo: arriba el numerador, abajo el denominador." },
+      { tipo: "hablar", texto: "Para sumar fracciones con el mismo denominador, se suman los numeradores y se mantiene el denominador." },
+      { tipo: "pizarra", accion: "escribir", contenido: "1/5 + 3/5 = 4/5" },
+      { tipo: "hablar", texto: "Así, 1/5 + 3/5 = 4/5." },
+    ] },
+    { id: "practica", directivas: [
+      { tipo: "hablar", texto: "Ahora tú. Suma estas fracciones y escribe el resultado." },
+      { tipo: "pizarra", accion: "escribir", contenido: "2/6 + 3/6" },
+      ejercicio,
+    ] },
+  ] };
+}
+
+// Factorización por diferencia de cuadrados (a² − b²).
+function mockDiferenciaCuadrados({ a, b }, intent) {
+  return { escena: "demo_factorizacion", intencion: intent, duracion_estimada: 60, _mock: true, directivas: [
+    { tipo: "avatar", accion: "sonreir" },
+    { tipo: "hablar", texto: `Vamos a factorizar ${a}² − ${b}². Es una "diferencia de cuadrados".` },
+    { tipo: "pizarra", accion: "escribir", contenido: `${a}² − ${b}²` },
+    { tipo: "hablar", texto: "La regla es: a² − b² = (a + b)(a − b)." },
+    { tipo: "pizarra", accion: "escribir", contenido: `${a}² − ${b}² = (${a} + ${b})(${a} − ${b})` },
+    { tipo: "hablar", texto: `Así, ${a}² − ${b}² se factoriza como (${a} + ${b})(${a} − ${b}).` },
+    preg("Ahora tú: factoriza x² − 9. Escribe el resultado (por ejemplo: (x+3)(x−3)).", "(x+3)(x-3)"),
+  ] };
+}
+
+// Ecuación lineal (tema, sin una ecuación concreta en la consulta).
+function mockEcuacion(intent) {
+  const ejercicio = preg("¿Cuánto vale x en x + 7 = 12? Escribe solo el número.", "5");
+  if (intent === "practicar") {
+    return { escena: "demo_practica", intencion: intent, duracion_estimada: 50, _mock: true, modulos: [
+      { id: "recordatorio", directivas: [
+        { tipo: "avatar", accion: "sonreir" },
+        { tipo: "hablar", texto: "¡Vamos a practicar ecuaciones lineales! Recuerda: para hallar la x, se deja sola pasando los números al otro lado con la operación inversa. Aquí tienes tu ejercicio." },
+      ] },
+      { id: "practica", directivas: [
+        { tipo: "pizarra", accion: "escribir", contenido: "x + 7 = 12" },
+        { tipo: "hablar", texto: "Resuélvelo tú y escribe el valor de x." },
+        ejercicio,
+      ] },
+    ] };
+  }
+  const ejemplo = solveLinearSteps("2x + 4 = 10");
+  const guiado = [
+    { tipo: "avatar", accion: "sonreir" },
+    { tipo: "hablar", texto: "Vamos a ver las ecuaciones lineales. La meta es dejar la x sola en un lado del igual. Veamos un ejemplo." },
+    { tipo: "pizarra", accion: "escribir", contenido: ejemplo.original },
+    { tipo: "esperar", segundos: 1 },
+  ];
+  for (const s of ejemplo.steps) {
+    guiado.push({ tipo: "hablar", texto: s.explica });
+    guiado.push({ tipo: "pizarra", accion: "escribir", contenido: s.escribe });
+  }
+  return { escena: "demo_aprender", intencion: intent, duracion_estimada: 100, _mock: true, modulos: [
+    { id: "ejemplo_guiado", directivas: guiado },
+    { id: "practica", directivas: [
+      { tipo: "hablar", texto: "Ahora te toca a ti. Resuelve este ejercicio y escribe el valor de x." },
+      { tipo: "pizarra", accion: "escribir", contenido: "x + 7 = 12" },
+      ejercicio,
+    ] },
+  ] };
+}
+
+// Tema no reconocido en modo demo: honesto (NO inventa contenido de otro tema).
+function mockGenerico(query, intent) {
+  return { escena: "demo_generico", intencion: intent, duracion_estimada: 40, _mock: true, directivas: [
+    { tipo: "avatar", accion: "sonreir" },
+    { tipo: "hablar", texto: `Tomé nota de tu consulta: "${query}".` },
+    { tipo: "pizarra", accion: "escribir", contenido: query },
+    { tipo: "hablar", texto: "Ahora mismo el tutor está en modo de demostración con ejemplos básicos. Para desarrollar este tema completo, inténtalo de nuevo en un momento y el tutor con IA lo explicará paso a paso." },
+    preg("Mientras tanto, ¿quieres practicar un tema básico? Escribe: sumar, restar, multiplicar, dividir o ecuaciones.", null),
+  ] };
+}
+
 export function mockLSG(query, intent) {
-  // Si la consulta tiene una ecuación lineal, el modo demo la RESUELVE de verdad,
-  // paso a paso (así sirve aunque no haya créditos de Gemini).
+  // 1) Ecuación lineal concreta en la consulta → resolver de verdad, paso a paso.
   const solved = solveLinearSteps(query);
   if (solved) {
     const directivas = [
@@ -187,108 +387,25 @@ export function mockLSG(query, intent) {
     for (const s of solved.steps) {
       directivas.push({ tipo: "hablar", texto: s.explica });
       directivas.push({ tipo: "pizarra", accion: "escribir", contenido: s.escribe });
-      directivas.push({ tipo: "esperar", segundos: 1 });
     }
-    directivas.push({
-      tipo: "preguntar",
-      texto: `Ahora te toca a ti: ¿cuánto vale ${solved.varName} en ${solved.varName} + 2 = 6?`,
-      respuesta: "4",
-      esperar_respuesta: true,
-      si_correcto: "felicitar",
-      si_incorrecto: "mostrar_otro_ejemplo",
-    });
+    directivas.push(preg(`Ahora te toca a ti: ¿cuánto vale ${solved.varName} en ${solved.varName} + 2 = 6?`, "4"));
     return { escena: "demo_resuelto", intencion: intent, duracion_estimada: 60, _mock: true, directivas };
   }
 
-  // Ejercicio de práctica concreto con su respuesta (común a aprender y practicar).
-  const ejercicioPractica = {
-    tipo: "preguntar",
-    texto: "¿Cuánto vale x en x + 7 = 12? Escribe solo el número.",
-    respuesta: "5",
-    esperar_respuesta: true,
-    si_correcto: "felicitar",
-    si_incorrecto: "mostrar_otro_ejemplo",
-  };
+  // 2) Diferencia de cuadrados (a² − b²) → factorizar.
+  const dc = detectarDiferenciaCuadrados(query);
+  if (dc) return mockDiferenciaCuadrados(dc, intent);
 
-  if (intent === "practicar") {
-    // PRACTICAR: el alumno quiere EJERCICIOS para resolver ÉL MISMO. No se lo resolvemos:
-    // recordatorio breve del método + el ejercicio en la pizarra para que lo resuelva.
-    return {
-      escena: "demo_practica",
-      intencion: intent,
-      duracion_estimada: 60,
-      _mock: true,
-      modulos: [
-        {
-          id: "recordatorio",
-          directivas: [
-            { tipo: "avatar", accion: "sonreir" },
-            { tipo: "hablar", texto: "¡Vamos a practicar! Recuerda: para hallar la x, se deja sola pasando los números al otro lado con la operación inversa. Aquí tienes tu ejercicio." },
-          ],
-        },
-        {
-          id: "practica",
-          directivas: [
-            { tipo: "pizarra", accion: "escribir", contenido: "x + 7 = 12" },
-            { tipo: "hablar", texto: "Resuélvelo tú y escribe el valor de x." },
-            ejercicioPractica,
-          ],
-        },
-      ],
-    };
-  }
+  // 3) Operación concreta ("2 + 3") → calcular.
+  const oper = detectarOperacion(query);
+  if (oper) return mockOperacion(oper, intent);
 
-  if (intent === "aprender") {
-    // APRENDER: mini-clase con un ejemplo resuelto paso a paso (explicación detallada)
-    // y luego un ejercicio de práctica. Nunca un placeholder "Concepto principal".
-    const ejemplo = solveLinearSteps("2x + 4 = 10"); // resuelto de verdad → x = 3
-    const guiado = [
-      { tipo: "avatar", accion: "sonreir" },
-      { tipo: "hablar", texto: "Vamos a ver las ecuaciones lineales. La meta es dejar la x sola en un lado del igual. Veamos un ejemplo." },
-      { tipo: "pizarra", accion: "escribir", contenido: ejemplo.original },
-      { tipo: "esperar", segundos: 1 },
-    ];
-    for (const s of ejemplo.steps) {
-      guiado.push({ tipo: "hablar", texto: s.explica });
-      guiado.push({ tipo: "pizarra", accion: "escribir", contenido: s.escribe });
-    }
-    return {
-      escena: "demo_aprender",
-      intencion: intent,
-      duracion_estimada: 100,
-      _mock: true,
-      modulos: [
-        { id: "ejemplo_guiado", directivas: guiado },
-        {
-          id: "practica",
-          directivas: [
-            { tipo: "hablar", texto: "Ahora te toca a ti. Resuelve este ejercicio y escribe el valor de x." },
-            { tipo: "pizarra", accion: "escribir", contenido: "x + 7 = 12" },
-            ejercicioPractica,
-          ],
-        },
-      ],
-    };
-  }
+  // 4) Tema reconocido → lección de ESE tema (no siempre ecuaciones).
+  const tema = detectarTema(query);
+  if (tema && ARITMETICA[tema]) return mockAritmetica(tema, intent);
+  if (tema === "fraccion") return mockFraccion(intent);
+  if (tema === "ecuacion") return mockEcuacion(intent);
 
-  return {
-    escena: "demo_secuencial",
-    intencion: intent,
-    duracion_estimada: 60,
-    _mock: true,
-    directivas: [
-      { tipo: "avatar", accion: "sonreir" },
-      { tipo: "hablar", texto: `Trabajemos tu consulta: "${query}".` },
-      { tipo: "pizarra", accion: "escribir", contenido: query },
-      { tipo: "esperar", segundos: 2 },
-      { tipo: "hablar", texto: "Este es el resultado paso a paso (demo sin IA)." },
-      {
-        tipo: "preguntar",
-        texto: "¿Entendiste este paso?",
-        esperar_respuesta: true,
-        si_correcto: "continuar",
-        si_incorrecto: "mostrar_otro_ejemplo",
-      },
-    ],
-  };
+  // 5) Tema no reconocido → honesto (no mostrar contenido de otro tema).
+  return mockGenerico(query, intent);
 }
