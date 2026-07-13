@@ -50,6 +50,14 @@ const els = {
 const history = []; // { query, intencion, fuente, lsg, pasos, ts }
 let currentLSG = null; // último LSG generado, para reproducir en el escenario
 let seeking = false;   // true mientras el usuario arrastra la barra de pasos
+let lastTopicQuery = null; // último TEMA consultado (para reexplicar en un "no entendí")
+
+// ¿La consulta es un SEGUIMIENTO ("no entendí", "explícamelo otra vez", "más simple")?
+// En ese caso reexplicamos el último tema, no la tratamos como un tema nuevo.
+function esSeguimiento(q) {
+  const n = q.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  return /(^|\s)(no lo entiend|no la entiend|no entiendo|no entend|no comprend|no me quedo claro|no capto|no me quedo|otra vez|de nuevo|mas simple|mas facil|mas despacio|mas lento|repit|explicamelo|no lo capto)/.test(n);
+}
 
 // --- Fase 2: avatar, voz y PSE Light ----------------------------------------
 const avatar = new Avatar(els.avatarMount);
@@ -215,18 +223,26 @@ async function submitQuery() {
     return;
   }
 
+  // Seguimiento ("no entendí") → reexplicar el último tema; si no, es un tema nuevo.
+  const seguimiento = esSeguimiento(query);
+  const body = { query };
+  if (seguimiento && lastTopicQuery) body.contexto = lastTopicQuery;
+
   setLoading(true);
   try {
     const res = await fetch("/api/query", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query }),
+      body: JSON.stringify(body),
     });
 
     const data = await res.json();
     if (!res.ok) {
       throw new Error(data.detalle || data.error || `Error ${res.status}`);
     }
+
+    // Recordar el último TEMA real (para reexplicarlo si luego dice "no entendí").
+    if (!seguimiento) lastTopicQuery = query;
 
     renderResult(data);
     addToHistory(data);

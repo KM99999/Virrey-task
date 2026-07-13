@@ -136,6 +136,13 @@ async function unitTests() {
     { tipo: "preguntar", texto: "¿Cuánto vale x en x + 2 = 6?", respuesta: "4", id: 3 },
   ] });
   check("pizarra CONTIENE la explicación (no solo números)", board.some((l) => l.k === "explica"), `board=${JSON.stringify(board.map((l) => l.k))}`);
+
+  // Seguimiento "no entendí": con contexto del tema anterior, se REEXPLICA ese tema
+  // (no cae al mensaje genérico). Simula la consulta efectiva que arma el servidor.
+  const reexpQuery = "Explícame otra vez, de forma más simple y con otro ejemplo distinto, el tema: enséñame a sumar";
+  const reexpIntent = classifyIntent(reexpQuery).intent;
+  const reexpLsg = processLSG(mockLSG(reexpQuery, reexpIntent), reexpIntent).lsg;
+  check("'no entendí' reexplica el tema anterior (suma, no genérico)", reexpLsg.escena === "demo_suma", reexpLsg.escena);
 }
 
 // ---------- 2) PRODUCCIÓN (Gemini real) ----------

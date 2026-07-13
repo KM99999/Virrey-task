@@ -39,6 +39,9 @@ const cacheKey = (q, intent) => intent + "::" + q.toLowerCase().replace(/\s+/g, 
 // Endpoint principal: recibe { query } y devuelve el LSG procesado.
 app.post("/api/query", async (req, res) => {
   const query = typeof req.body?.query === "string" ? req.body.query.trim() : "";
+  // Contexto de conversación: el último tema, para reexplicar cuando el alumno dice
+  // "no entendí". El frontend lo envía solo cuando la consulta es un seguimiento.
+  const contexto = typeof req.body?.contexto === "string" ? req.body.contexto.trim().slice(0, 2000) : "";
 
   if (!query) {
     return res.status(400).json({ error: "Falta la consulta ('query')." });
@@ -48,25 +51,32 @@ app.post("/api/query", async (req, res) => {
   }
 
   try {
+    // Si es un SEGUIMIENTO ("no entendí"), reexplicamos el tema anterior de forma más
+    // simple. La consulta efectiva (para clasificar y generar) apunta a ese tema.
+    const effectiveQuery = contexto
+      ? `Explícame otra vez, de forma más simple y con otro ejemplo distinto, el tema: ${contexto}`
+      : query;
+
     // 1) Clasificar la intención (una de las 4).
-    const classification = classifyIntent(query);
+    const classification = classifyIntent(effectiveQuery);
 
     // 1.5) ¿Ya generamos esta consulta? → servir de caché (0 llamadas a Gemini).
-    const key = cacheKey(query, classification.intent);
+    const key = cacheKey(effectiveQuery, classification.intent);
     if (CACHE.has(key)) {
       const cached = CACHE.get(key);
       CACHE.delete(key); CACHE.set(key, cached); // refrescar orden (LRU)
-      return res.json({ ...cached, cacheado: true });
+      return res.json({ ...cached, query, reexplicacion: !!contexto, cacheado: true });
     }
 
     // 2) Generar el LSG con la IA (o mock si no hay clave).
-    const { lsg: rawLsg, source, model, usage, cached } = await generateLSG(query, classification.intent);
+    const { lsg: rawLsg, source, model, usage, cached } = await generateLSG(effectiveQuery, classification.intent);
 
     // 3) PRE Light: validar y normalizar en bloques predecibles.
     const { lsg, pasos, warnings } = processLSG(rawLsg, classification.intent);
 
     const payload = {
       query,
+      reexplicacion: !!contexto, // true si fue un "no entendí" (reexplicación del tema anterior)
       intencion: classification.intent,
       confianza: classification.confidence,
       fuente_ia: source, // "gemini" | "mock"
