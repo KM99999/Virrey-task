@@ -10,7 +10,8 @@
 
 import { classifyIntent } from "../src/classifier.js";
 import { processLSG, solveLinearFromText } from "../src/preLight.js";
-import { checkAnswer } from "../public/pseLight.js";
+import { mockLSG } from "../src/lsgPrompt.js";
+import { checkAnswer, flattenLSG } from "../public/pseLight.js";
 
 const BASE = process.env.QA_URL || "https://math-ia.onrender.com";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -73,6 +74,18 @@ function unitTests() {
     { tipo: "hablar", texto: "hola" }, { tipo: "preguntar", texto: "3x - 7 = 8" }] }] }, "aprender")
     .lsg.modulos[0].directivas;
   check("ecuación suelta NO abre caja (se narra)", !conv.some((d) => d.tipo === "preguntar" && d.texto === "3x - 7 = 8"));
+
+  // Modo demo: NUNCA debe mostrar el placeholder inútil "Concepto principal" y SIEMPRE
+  // debe dar un ejercicio de práctica REAL con respuesta (regresión reportada por el cliente).
+  for (const intent of ["practicar", "aprender"]) {
+    const raw = mockLSG("practicar ecuaciones lineales", intent);
+    const { lsg } = processLSG(raw, intent);
+    const flat = flattenLSG(lsg);
+    const preg = flat.filter((d) => d.tipo === "preguntar");
+    check(`demo ${intent}: sin placeholder "Concepto principal"`, !JSON.stringify(lsg).includes("Concepto principal"));
+    check(`demo ${intent}: da ejercicio real con respuesta`, preg.length === 1 && !!preg[0].respuesta, `preg=${preg.length}`);
+    check(`demo ${intent}: la práctica es una pregunta (?)`, !!preg[0] && (preg[0].texto || "").includes("?"));
+  }
 }
 
 // ---------- 2) PRODUCCIÓN (Gemini real) ----------

@@ -189,28 +189,35 @@ export function mockLSG(query, intent) {
   }
 
   if (intent === "aprender" || intent === "practicar") {
+    // Mini-clase REAL para el modo demo: un ejemplo resuelto paso a paso (de verdad)
+    // y un EJERCICIO de práctica concreto con su respuesta. Nunca un "Concepto principal".
+    const ejemplo = solveLinearSteps("2x + 4 = 10"); // resuelto de verdad → x = 3
+    const guiado = [
+      { tipo: "avatar", accion: "sonreir" },
+      { tipo: "hablar", texto: "Vamos a practicar ecuaciones lineales. La meta es dejar la x sola en un lado del igual. Empecemos con un ejemplo." },
+      { tipo: "pizarra", accion: "escribir", contenido: ejemplo.original },
+      { tipo: "esperar", segundos: 1 },
+    ];
+    for (const s of ejemplo.steps) {
+      guiado.push({ tipo: "hablar", texto: s.explica });
+      guiado.push({ tipo: "pizarra", accion: "escribir", contenido: s.escribe });
+    }
     return {
-      escena: "demo_modular",
+      escena: "demo_practica",
       intencion: intent,
-      duracion_estimada: 120,
+      duracion_estimada: 100,
       _mock: true,
       modulos: [
-        {
-          id: "concepto",
-          directivas: [
-            { tipo: "avatar", accion: "sonreir" },
-            { tipo: "hablar", texto: `Vamos a ver el tema de tu consulta: "${query}".` },
-            { tipo: "pizarra", accion: "escribir", contenido: "Concepto principal" },
-            { tipo: "esperar", segundos: 2 },
-          ],
-        },
+        { id: "ejemplo_guiado", directivas: guiado },
         {
           id: "practica",
           directivas: [
-            { tipo: "hablar", texto: "Ahora practica tú." },
+            { tipo: "hablar", texto: "Ahora te toca a ti. Resuelve este ejercicio y escribe el valor de x." },
+            { tipo: "pizarra", accion: "escribir", contenido: "x + 7 = 12" },
             {
               tipo: "preguntar",
-              texto: "¿Podrías resolver un ejemplo similar?",
+              texto: "¿Cuánto vale x en x + 7 = 12? Escribe solo el número.",
+              respuesta: "5",
               esperar_respuesta: true,
               si_correcto: "felicitar",
               si_incorrecto: "mostrar_otro_ejemplo",

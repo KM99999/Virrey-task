@@ -115,6 +115,7 @@ export class PSELight {
     this.index = 0;
     this.playing = false;
     this.paused = false;
+    this._speakToken = 0; // evita que una locución vieja apague la animación de una nueva
   }
 
   _notifyControls() {
@@ -236,11 +237,14 @@ export class PSELight {
   }
 
   async _speak(text, state, signal) {
+    const token = ++this._speakToken;
     this.avatar.setState(state);
     this.avatar.setSpeaking(true);
     this.ui.setCaption(text);
     await this.tts.speak(text, { signal });
-    this.avatar.setSpeaking(false);
+    // Solo apagar la animación si NADIE empezó a hablar después (evita cortar la
+    // animación de una locución nueva cuando una vieja termina tarde).
+    if (token === this._speakToken) this.avatar.setSpeaking(false);
   }
 
   async _runDirective(d, index, timeline, signal) {
@@ -321,12 +325,12 @@ export class PSELight {
       return;
     }
 
-    // Incorrecto → un reintento (ramificación ligera).
-    this.ui.showFeedback(false, "Casi. Piénsalo un momento e inténtalo otra vez.");
-    await this._speak("Casi. Piénsalo un momento e inténtalo otra vez.", "hablando", signal);
-    if (signal.aborted) return;
-
-    const retry = await this.ui.askAnswer("Inténtalo otra vez: " + d.texto, { signal });
+    // Incorrecto → un reintento (ramificación ligera). CLAVE: el ejercicio y la caja
+    // de respuesta NO deben desaparecer. Reabrimos la caja y re-mostramos la pregunta
+    // DE INMEDIATO (sin esperar a que termine el audio), y la voz suena en paralelo.
+    this.ui.showFeedback(false, "Casi. Vuelve a mirar el ejercicio en la pizarra e inténtalo otra vez.");
+    this._speak("Casi. Vuelve a mirar el ejercicio en la pizarra e inténtalo otra vez.", "hablando", signal);
+    const retry = await this.ui.askAnswer(d.texto, { signal }); // reabre la caja y re-muestra la pregunta ya
     if (signal.aborted || retry == null) return;
 
     if (checkAnswer(retry, expected).correct) {

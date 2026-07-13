@@ -124,10 +124,13 @@ const ui = {
   },
   // Muestra la caja de respuesta y resuelve con lo que escriba el alumno.
   // Si se aborta (botón Detener), resuelve null y limpia sus listeners.
-  askAnswer(_questionText, opts = {}) {
+  askAnswer(questionText, opts = {}) {
     const { signal } = opts;
     return new Promise((resolve) => {
       if (signal?.aborted) return resolve(null);
+      // Mostrar SIEMPRE la pregunta/ejercicio junto a la caja para que no “desaparezca”
+      // (sobre todo en el reintento, donde antes quedaba solo el mensaje "Casi…").
+      if (questionText) els.caption.textContent = questionText;
       els.answerBox.hidden = false;
       els.answerInput.value = "";
       els.answerInput.focus();
