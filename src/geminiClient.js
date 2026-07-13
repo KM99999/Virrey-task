@@ -33,7 +33,9 @@ const maxOutputTokensFor = (intent) => (RUTA_A.has(intent) ? MAX_OUTPUT_RUTA_A :
 let workingModel = null;           // último modelo que respondió bien
 const knownDead = new Set();        // modelos retirados (404) — persiste entre peticiones
 let quotaCooldownUntil = 0;         // tras un 429, no llamamos a Gemini por un rato
-const QUOTA_COOLDOWN_MS = 5 * 60 * 1000;
+// Los 429 suelen ser límites por-minuto (RPM) transitorios que se despejan en ~1 min.
+// 90 s recupera pronto (y un 429 no cuesta nada); mientras, el demo tema-consciente cubre.
+const QUOTA_COOLDOWN_MS = 90 * 1000;
 
 // Context Caching: nombre del caché del prompt del sistema por modelo (Gemini lo mantiene
 // ~1 h). Así el prompt del sistema no se re-cobra como tokens de entrada en cada consulta.
