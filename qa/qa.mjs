@@ -52,6 +52,11 @@ function unitTests() {
   check("clasificador: aprender", classifyIntent("Enséñame derivadas").intent === "aprender");
   check("clasificador: explicar", classifyIntent("¿Por qué se factoriza?").intent === "explicar");
   check("clasificador: practicar", classifyIntent("Dame un ejercicio de fracciones").intent === "practicar");
+  // "Dame una ecuación PARA RESOLVER" = el alumno la resuelve (practicar), NO se la resuelve la app.
+  check("clasif: 'dame ecuación para resolver' → practicar", classifyIntent("Dame una ecuación lineal para resolver").intent === "practicar");
+  check("clasif: 'dame una ecuación lineal' → practicar", classifyIntent("Dame una ecuación lineal").intent === "practicar");
+  check("clasif: 'dame la solución de 2x=8' → resolver", classifyIntent("Dame la solución de 2x = 8").intent === "resolver");
+  check("clasif: 'quiero aprender a resolver' → aprender", classifyIntent("Quiero aprender a resolver ecuaciones").intent === "aprender");
 
   check("solver: 2x - 3 = 7 → 5", solveLinearFromText("2x - 3 = 7") === "5");
   check("solver: 3x + x = 20 → 5", solveLinearFromText("3x + x = 20") === "5");
@@ -90,6 +95,12 @@ function unitTests() {
     check(`demo ${intent}: da ejercicio real con respuesta`, preg.length === 1 && !!preg[0].respuesta, `preg=${preg.length}`);
     check(`demo ${intent}: la práctica es una pregunta (?)`, !!preg[0] && (preg[0].texto || "").includes("?"));
   }
+
+  // PRACTICAR no debe resolver el ejercicio POR el alumno: la pizarra escribe el enunciado
+  // pero NO una línea de solución dada "x = <número>" (eso sería resolvérselo).
+  const practF = flattenLSG(processLSG(mockLSG("dame ejercicios para practicar ecuaciones lineales", "practicar"), "practicar").lsg);
+  const pizarrasP = practF.filter((d) => d.tipo === "pizarra").map((d) => (d.contenido || "").replace(/\s+/g, " ").trim());
+  check("demo practicar: NO se lo resuelve (sin línea 'x = <n>')", !pizarrasP.some((c) => /^[a-z]\s*=\s*-?\d+$/.test(c)), `pizarras=${JSON.stringify(pizarrasP)}`);
 }
 
 // ---------- 2) PRODUCCIÓN (Gemini real) ----------

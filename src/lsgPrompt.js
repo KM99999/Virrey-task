@@ -118,9 +118,18 @@ El corazón de la app es CÓMO se enseña. Resolver el ejercicio sin explicar es
   · Si la intención es "aprender" o "practicar" → FORMATO MODULAR.
   · Si la intención es "resolver" o "explicar" → FORMATO SECUENCIAL.
 
+DISTINGUE POR INTENCIÓN (muy importante):
+· "aprender" → ENSEÑA el tema en detalle: concepto, regla y un ejemplo_guiado RESUELTO paso a
+  paso (explicando cada paso), y cierra con "practica".
+· "practicar" → el alumno quiere EJERCICIOS para resolver ÉL MISMO. NO se lo resuelvas tú.
+  Da una introducción breve y, a lo sumo, un recordatorio corto del método (SIN resolver otra
+  ecuación por completo), escribe el ejercicio en la pizarra y pídele que lo resuelva. El foco
+  es que el alumno trabaje, no ver la solución hecha.
+
 FORMATO MODULAR:
-Escena con "modulos": array de { "id", "directivas": [...] }. Módulos: "concepto", "regla",
-"ejemplo_guiado", "practica" (este último termina con la "preguntar" del ejercicio nuevo).
+Escena con "modulos": array de { "id", "directivas": [...] }. Para "aprender": módulos "concepto",
+"regla", "ejemplo_guiado", "practica". Para "practicar": módulos "recordatorio" (breve) y "practica"
+(el ejercicio para el alumno). El último módulo termina con la "preguntar" del ejercicio nuevo.
 OBLIGATORIO en CADA módulo: la PRIMERA directiva es un "hablar" con TEXTO REAL, y CADA "pizarra"
 va precedida de un "hablar" que la explica. Un módulo con "pizarra" pero sin "hablar" es un ERROR.
 Ejemplo de módulo bien hecho:
@@ -188,13 +197,51 @@ export function mockLSG(query, intent) {
     return { escena: "demo_resuelto", intencion: intent, duracion_estimada: 60, _mock: true, directivas };
   }
 
-  if (intent === "aprender" || intent === "practicar") {
-    // Mini-clase REAL para el modo demo: un ejemplo resuelto paso a paso (de verdad)
-    // y un EJERCICIO de práctica concreto con su respuesta. Nunca un "Concepto principal".
+  // Ejercicio de práctica concreto con su respuesta (común a aprender y practicar).
+  const ejercicioPractica = {
+    tipo: "preguntar",
+    texto: "¿Cuánto vale x en x + 7 = 12? Escribe solo el número.",
+    respuesta: "5",
+    esperar_respuesta: true,
+    si_correcto: "felicitar",
+    si_incorrecto: "mostrar_otro_ejemplo",
+  };
+
+  if (intent === "practicar") {
+    // PRACTICAR: el alumno quiere EJERCICIOS para resolver ÉL MISMO. No se lo resolvemos:
+    // recordatorio breve del método + el ejercicio en la pizarra para que lo resuelva.
+    return {
+      escena: "demo_practica",
+      intencion: intent,
+      duracion_estimada: 60,
+      _mock: true,
+      modulos: [
+        {
+          id: "recordatorio",
+          directivas: [
+            { tipo: "avatar", accion: "sonreir" },
+            { tipo: "hablar", texto: "¡Vamos a practicar! Recuerda: para hallar la x, se deja sola pasando los números al otro lado con la operación inversa. Aquí tienes tu ejercicio." },
+          ],
+        },
+        {
+          id: "practica",
+          directivas: [
+            { tipo: "pizarra", accion: "escribir", contenido: "x + 7 = 12" },
+            { tipo: "hablar", texto: "Resuélvelo tú y escribe el valor de x." },
+            ejercicioPractica,
+          ],
+        },
+      ],
+    };
+  }
+
+  if (intent === "aprender") {
+    // APRENDER: mini-clase con un ejemplo resuelto paso a paso (explicación detallada)
+    // y luego un ejercicio de práctica. Nunca un placeholder "Concepto principal".
     const ejemplo = solveLinearSteps("2x + 4 = 10"); // resuelto de verdad → x = 3
     const guiado = [
       { tipo: "avatar", accion: "sonreir" },
-      { tipo: "hablar", texto: "Vamos a practicar ecuaciones lineales. La meta es dejar la x sola en un lado del igual. Empecemos con un ejemplo." },
+      { tipo: "hablar", texto: "Vamos a ver las ecuaciones lineales. La meta es dejar la x sola en un lado del igual. Veamos un ejemplo." },
       { tipo: "pizarra", accion: "escribir", contenido: ejemplo.original },
       { tipo: "esperar", segundos: 1 },
     ];
@@ -203,7 +250,7 @@ export function mockLSG(query, intent) {
       guiado.push({ tipo: "pizarra", accion: "escribir", contenido: s.escribe });
     }
     return {
-      escena: "demo_practica",
+      escena: "demo_aprender",
       intencion: intent,
       duracion_estimada: 100,
       _mock: true,
@@ -214,14 +261,7 @@ export function mockLSG(query, intent) {
           directivas: [
             { tipo: "hablar", texto: "Ahora te toca a ti. Resuelve este ejercicio y escribe el valor de x." },
             { tipo: "pizarra", accion: "escribir", contenido: "x + 7 = 12" },
-            {
-              tipo: "preguntar",
-              texto: "¿Cuánto vale x en x + 7 = 12? Escribe solo el número.",
-              respuesta: "5",
-              esperar_respuesta: true,
-              si_correcto: "felicitar",
-              si_incorrecto: "mostrar_otro_ejemplo",
-            },
+            ejercicioPractica,
           ],
         },
       ],

@@ -60,8 +60,32 @@ function countMatches(norm, list) {
 // ¿El texto es una pregunta que pide la RAZÓN de algo? ("¿por qué…?", "para qué…").
 // Señal fuerte de "explicar": desempata frente a palabras que también apuntan a
 // "resolver" (p.ej. "¿por qué se factoriza?" → explicar, no resolver).
+// OJO: excluimos "para que yo/tú … resuelva" (eso es finalidad, no razón → practicar).
 function asksForReason(norm) {
+  if (/\bpara que (yo|tu|el|ella|nosotros)?\s*(lo|la|los|las)?\s*(resuelva|resuelvas|practique|trabaje|intente|haga)/.test(norm)) {
+    return false;
+  }
   return /\bpor que\b|\bpara que\b|\bpor que razon\b|\brazon de\b/.test(norm);
+}
+
+// ¿El alumno pide que le DEN un ejercicio/ecuación para resolverlo ÉL MISMO? → practicar.
+// Es distinto de pedir la SOLUCIÓN de una ecuación concreta (eso es "resolver").
+// Corrige el caso: "dame una ecuación lineal para resolver" NO debe resolvérsela la app,
+// sino entregar el ejercicio para que lo resuelva el alumno.
+function pideQueLeDenEjercicio(norm) {
+  // Pedir el resultado/solución NO es practicar, es resolver.
+  if (/\b(la solucion|el resultado|la respuesta|dame el valor|dame la solucion|resuelveme)\b/.test(norm)) {
+    return false;
+  }
+  // Si es claramente aprendizaje/explicación conceptual, tampoco es "dame ejercicio".
+  if (/\b(aprender|aprende|ensename|ensename|entender|comprender|que es|concepto de)\b/.test(norm)) {
+    return false;
+  }
+  // Verbo de "entrégame/genera" seguido (cerca) de un sustantivo de problema.
+  const daProblema = /\b(dame|damelos?|proponme|propon|ponme|pon|genera|generame|crea|creame|hazme|haz|brindame|plantea|planteame|sugiere|sugiereme|regalame|facilitame)\b[\s\S]{0,30}\b(ejercicio|ejercicios|ecuacion|ecuaciones|problema|problemas)\b/;
+  const paraPracticar = /\bpara (practicar|ejercitar|reforzar)\b/;
+  const paraQueYoResuelva = /\bpara que (yo|tu)?\s*(lo|la|los|las)?\s*(resuelva|resuelvas|practique|trabaje|intente)\b|\bque yo\s*(lo|la|los|las)?\s*resuelva\b/;
+  return daProblema.test(norm) || paraPracticar.test(norm) || paraQueYoResuelva.test(norm);
 }
 
 /**
@@ -71,6 +95,16 @@ function asksForReason(norm) {
  */
 export function classifyIntent(text) {
   const norm = normalize(text);
+
+  // Prioridad ALTA: "dame/proponme una ecuación (para practicar / que yo resuelva)".
+  // El alumno quiere un ejercicio PARA ÉL, no que la app se lo resuelva.
+  if (pideQueLeDenEjercicio(norm)) {
+    return {
+      intent: "practicar",
+      confidence: 0.9,
+      scores: { resolver: 0, aprender: 0, explicar: 0, practicar: 1 },
+    };
+  }
 
   const scores = {
     resolver: countMatches(norm, KEYWORDS.resolver),
