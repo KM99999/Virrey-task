@@ -125,6 +125,9 @@ DISTINGUE POR INTENCIÓN (muy importante):
   Da una introducción breve y, a lo sumo, un recordatorio corto del método (SIN resolver otra
   ecuación por completo), escribe el ejercicio en la pizarra y pídele que lo resuelva. El foco
   es que el alumno trabaje, no ver la solución hecha.
+  PROHIBIDO en "practicar" usar frases como "vamos a resolver", "resolvamos juntos", "te muestro
+  cómo se resuelve" o mostrar la solución: el que resuelve es el ALUMNO. Redacta la introducción
+  INVITÁNDOLO a resolver (p.ej. "Aquí tienes un ejercicio para que lo resuelvas tú").
 
 FORMATO MODULAR:
 Escena con "modulos": array de { "id", "directivas": [...] }. Para "aprender": módulos "concepto",
