@@ -128,10 +128,39 @@ async function generateOnce(apiKey, model, userMsg, maxOutputTokens) {
   try {
     lsg = JSON.parse(text);
   } catch (e) {
-    lastGeminiError = `JSON inválido (¿truncado?): …${text.slice(-70)}`; // diagnóstico
-    throw e;
+    // Respuesta TRUNCADA (lección larga que superó el límite de salida): en vez de perder toda
+    // la lección, rescatamos las directivas COMPLETAS y cerramos el JSON. El PRE Light añade la
+    // pregunta de cierre si falta. Así una lección de tema avanzado siempre llega utilizable.
+    lsg = repararLSGTruncado(text);
+    if (!lsg) { lastGeminiError = `JSON inválido no recuperable: …${text.slice(-70)}`; throw e; }
+    lastGeminiError = "OK (recuperado de respuesta truncada)";
   }
   return { lsg, usage, cached: !!cacheName };
+}
+
+// Repara un LSG JSON truncado: conserva el prefijo con directivas completas y cierra los
+// corchetes/llaves abiertos. Devuelve el objeto LSG o null si no se puede recuperar.
+function repararLSGTruncado(text) {
+  if (typeof text !== "string" || !text.trim()) return null;
+  const cut = Math.max(text.lastIndexOf("}"), text.lastIndexOf("]"));
+  if (cut === -1) return null;
+  let t = text.slice(0, cut + 1);
+  const st = [];
+  let inStr = false, esc = false;
+  for (let i = 0; i < t.length; i++) {
+    const c = t[i];
+    if (inStr) { if (esc) esc = false; else if (c === "\\") esc = true; else if (c === '"') inStr = false; continue; }
+    if (c === '"') { inStr = true; continue; }
+    if (c === "{" || c === "[") st.push(c);
+    else if (c === "}" || c === "]") st.pop();
+  }
+  t = t.replace(/,\s*$/, "");
+  let closers = "";
+  for (let i = st.length - 1; i >= 0; i--) closers += st[i] === "{" ? "}" : "]";
+  try {
+    const obj = JSON.parse(t + closers);
+    return obj && typeof obj === "object" && (Array.isArray(obj.directivas) || Array.isArray(obj.modulos)) ? obj : null;
+  } catch { return null; }
 }
 
 // Devuelve el nombre del caché de contexto del prompt del sistema (o null). Lo crea una
