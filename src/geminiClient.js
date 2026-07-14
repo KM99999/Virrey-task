@@ -23,12 +23,13 @@ const MODEL_CANDIDATES = [...new Set([
 
 // Límite de tokens de SALIDA según la ruta (blindaje de gasto pedido por el cliente):
 //   Ruta A — resolución/explicación de un ejercicio (LSG secuencial): respuesta puntual → 1500.
-//   Ruta B — enseñar un tema o mini-clase (LSG modular): 3000 → margen suficiente para que
-//     temas ricos (derivadas, trigonometría) NO se corten. Con 2000 se truncaban → JSON
-//     inválido → caía a demo. El coste por lección sigue siendo mínimo (~PEN 0.01-0.02).
+//   Ruta B — enseñar un tema o mini-clase (LSG modular): 5000 → margen amplio para que temas
+//     ricos (derivadas, trigonometría) generen la lección COMPLETA sin truncarse. Con 3000 se
+//     cortaban justo antes de la práctica → JSON inválido → caían a demo. Con el context caching
+//     activo, la entrada cuesta ~50 tokens, así que el coste por lección sigue siendo mínimo.
 const RUTA_A = new Set(["resolver", "explicar"]);
 const MAX_OUTPUT_RUTA_A = 1500;
-const MAX_OUTPUT_RUTA_B = 3000;
+const MAX_OUTPUT_RUTA_B = 5000;
 const maxOutputTokensFor = (intent) => (RUTA_A.has(intent) ? MAX_OUTPUT_RUTA_A : MAX_OUTPUT_RUTA_B);
 
 let workingModel = null;           // último modelo que respondió bien
