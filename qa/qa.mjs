@@ -142,6 +142,16 @@ async function unitTests() {
       { tipo: "preguntar", texto: "¿Cuánto es 7 × 3?", respuesta: "12" }] }] }, "aprender");
   check("calc: corrige el error del modelo (7×3 → 21, no 12)",
     mulFix.pasos.find((d) => d.tipo === "preguntar")?.respuesta === "21");
+  // Tipos añadidos: porcentaje, potencia, raíz, promedio, volumen (respuesta garantizada).
+  check("calc: 20% de 50 = 10", computeAnswer("¿Cuánto es el 20% de 50?") === "10");
+  check("calc: 15 por ciento de 200 = 30", computeAnswer("¿Cuánto es el 15 por ciento de 200?") === "30");
+  check("calc: 2 al cubo = 8", computeAnswer("¿Cuánto es 2 al cubo?") === "8");
+  check("calc: 3 elevado a 4 = 81", computeAnswer("¿Cuánto es 3 elevado a 4?") === "81");
+  check("calc: 5² (superíndice) = 25", computeAnswer("¿Cuánto es 5²?") === "25");
+  check("calc: raíz cuadrada de 16 = 4", computeAnswer("¿Raíz cuadrada de 16?") === "4");
+  check("calc: raíz de 2 irracional → null (no adivina)", computeAnswer("¿Raíz cuadrada de 2?") === null);
+  check("calc: promedio de 4, 6 y 8 = 6", computeAnswer("¿Promedio de 4, 6 y 8?") === "6");
+  check("calc: volumen cubo lado 3 = 27", computeAnswer("¿Volumen de un cubo de lado 3?") === "27");
 
   const san = processLSG({ escena: "x", intencion: "resolver", directivas: [
     { tipo: "pizarra", contenido: "$x^2 - 9$" }, { tipo: "preguntar", texto: "¿x?", respuesta: "1" }] }, "resolver");

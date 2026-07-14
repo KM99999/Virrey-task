@@ -167,9 +167,40 @@ export function computeAnswer(text) {
   const m = norm.match(/\(?\s*\d+\.?\d*\s*(?:[-+*/]\s*\(?\s*\d+\.?\d*\s*\)?\s*)+/);
   if (m) { try { const r = evalExpr(m[0].replace(/\s+/g, "")); if (r) return fmtRat(r); } catch { /* sigue */ } }
 
-  // 2) Fórmulas de problemas verbales frecuentes.
   const low = text.toLowerCase();
   const nums = (low.match(/\d+(?:[.,]\d+)?/g) || []).map((x) => Number(x.replace(",", ".")));
+  const numAt = (i) => numTok(String(nums[i]));
+  const entero = (r) => (Number.isInteger(r) ? String(r) : null);
+
+  // 2) Potencias, raíces, porcentajes, promedios (cada uno con su palabra clave distintiva).
+  // Potencia con superíndice: "2³" → 8, "5²" → 25.
+  const SUP = { "⁰": 0, "¹": 1, "²": 2, "³": 3, "⁴": 4, "⁵": 5, "⁶": 6, "⁷": 7, "⁸": 8, "⁹": 9 };
+  const supM = text.match(/(\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)/);
+  if (supM) { const e = [...supM[2]].reduce((a, c) => a * 10 + SUP[c], 0); const r = entero(Math.pow(+supM[1], e)); if (r) return r; }
+  // "X al cuadrado" / "X al cubo" / "X elevado a Y" / "X a la (potencia) Y".
+  let pw;
+  if ((pw = low.match(/(\d+(?:[.,]\d+)?)\s*al\s*cuadrado/))) { const r = entero(Math.pow(Number(pw[1].replace(",", ".")), 2)); if (r) return r; }
+  if ((pw = low.match(/(\d+(?:[.,]\d+)?)\s*al\s*cubo/))) { const r = entero(Math.pow(Number(pw[1].replace(",", ".")), 3)); if (r) return r; }
+  if ((pw = low.match(/(\d+(?:[.,]\d+)?)\s*(?:elevad[oa]\s*a(?:\s*la)?|a\s*la\s*(?:potencia\s*)?)\s*(\d+)/))) {
+    const r = entero(Math.pow(Number(pw[1].replace(",", ".")), Number(pw[2]))); if (r) return r;
+  }
+  // Raíz cuadrada: solo si es EXACTA (cuadrado perfecto); si es irracional, no adivinamos.
+  const rz = low.match(/ra[ií]z\s*(?:cuadrada)?\s*(?:de\s*)?(\d+(?:[.,]\d+)?)/) || text.match(/√\s*(\d+(?:[.,]\d+)?)/);
+  if (rz) { const r = Math.sqrt(Number(rz[1].replace(",", "."))); if (Number.isInteger(r)) return String(r); }
+  // Porcentaje: "X% de Y" o "X por ciento de Y" → Y·X/100 (exacto).
+  const pc = low.match(/(\d+(?:[.,]\d+)?)\s*(?:%|por\s*ciento)\s*de\s*(\d+(?:[.,]\d+)?)/);
+  if (pc) { try { return fmtRat(rdiv(rmul(numTok(pc[1].replace(",", ".")), numTok(pc[2].replace(",", "."))), rat(100))); } catch { /* sigue */ } }
+  // Promedio / media aritmética de una lista de números.
+  if (/promedio|media\s+aritm/.test(low) && nums.length >= 2) {
+    try { let s = numAt(0); for (let i = 1; i < nums.length; i++) s = radd(s, numAt(i)); return fmtRat(rdiv(s, rat(nums.length))); } catch { /* sigue */ }
+  }
+  // Volumen: cubo (lado³) o caja/prisma/ortoedro (largo·ancho·alto).
+  if (/volumen/.test(low)) {
+    if (/cubo/.test(low) && nums.length >= 1) return String(nums[0] * nums[0] * nums[0]);
+    if (/(caja|rectangular|ortoedro|prisma)/.test(low) && nums.length >= 3) return String(nums[0] * nums[1] * nums[2]);
+  }
+
+  // 3) Fórmulas de problemas verbales frecuentes.
   const dist = low.match(/(\d+(?:[.,]\d+)?)\s*(?:kil[oó]metros|km|metros|m)\b/);
   const time = low.match(/(\d+(?:[.,]\d+)?)\s*(?:segundos|seg|s|minutos|min|horas|h)\b/);
   if (/velocidad|rapidez/.test(low) && dist && time) {
