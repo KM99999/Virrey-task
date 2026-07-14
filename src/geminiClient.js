@@ -62,8 +62,10 @@ export async function generateLSG(query, intent, opts = {}) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return { lsg: mockLSG(query, intent, { reexplain }), source: "mock" };
 
-  // Si hace segundos Gemini devolvió 429 (límite temporal por minuto), esperamos un poco.
-  if (Date.now() < quotaCooldownUntil) {
+  // Enfriamiento tras un 429: SOLO en modo automático. Si el usuario eligió MODO IA
+  // explícitamente, SIEMPRE intentamos Gemini (no lo bloqueamos por un enfriamiento previo,
+  // que es un estado compartido y podría venir de otra consulta reciente).
+  if (!opts.forceAI && Date.now() < quotaCooldownUntil) {
     return { lsg: mockLSG(query, intent, { reexplain }), source: "mock", model: "limite-temporal" };
   }
 

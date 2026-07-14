@@ -74,9 +74,11 @@ app.post("/api/query", async (req, res) => {
       return res.json({ ...cached, cacheado: true });
     }
 
-    // 2) Generar el LSG. Modo "demo" → contenido básico sin IA; "ia"/auto → intenta Gemini.
+    // 2) Generar el LSG. Modo "demo" → contenido básico sin IA; "ia" → SIEMPRE intenta Gemini
+    //    (sin bloqueo por enfriamiento); auto (vacío) → intenta IA con enfriamiento tras 429.
     const { lsg: rawLsg, source, model, usage, cached } = await generateLSG(
-      effectiveQuery, classification.intent, { reexplain, forceDemo: modo === "demo" }
+      effectiveQuery, classification.intent,
+      { reexplain, forceDemo: modo === "demo", forceAI: modo === "ia" }
     );
 
     // 3) PRE Light: validar y normalizar en bloques predecibles.
