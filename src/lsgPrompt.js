@@ -108,7 +108,10 @@ El corazón de la app es CÓMO se enseña. Resolver el ejercicio sin explicar es
   "pizarra" (y anúncialo con "hablar"), para que la pizarra muestre EXACTAMENTE de lo que
   pregunta. La función/ecuación del texto de la pregunta debe ser la MISMA que la última
   escrita en la pizarra. NUNCA preguntes por "f(x) = x" mientras la pizarra muestra "f(x) = x⁵".
-- Incluye SIEMPRE el campo "respuesta" con la respuesta del NUEVO ejercicio, corta (p.ej. "4").
+- Incluye SIEMPRE el campo "respuesta" con la respuesta del NUEVO ejercicio, corta (p.ej. "4"
+  o "1/2" para fracciones). Es obligatorio para poder calificar.
+- La pregunta debe ser CORTA y directa: UNA sola frase con el ejercicio (máx. ~15 palabras).
+  NO metas instrucciones largas, opciones, ni ejemplos dentro de la pregunta, ni la repitas.
 - Debe terminar con "?". Las opciones/ecuaciones van dentro de su "texto", no como "preguntar" sueltas.
 - "esperar_respuesta": true. "si_correcto"/"si_incorrecto" son ETIQUETAS: EXACTAMENTE
   "continuar", "felicitar" o "mostrar_otro_ejemplo" (no pongas frases ahí).

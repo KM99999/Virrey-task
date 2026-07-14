@@ -86,6 +86,26 @@ export function solveLinearFromText(text) {
   return Number.isInteger(x) ? String(x) : String(Math.round(x * 1000) / 1000);
 }
 
+const gcd = (a, b) => { a = Math.abs(a); b = Math.abs(b); while (b) { [a, b] = [b, a % b]; } return a || 1; };
+
+// Deriva la respuesta de una SUMA/RESTA de fracciones embebida en el texto:
+// "a/b + c/d" o "a/b - c/d" → resultado simplificado ("1/3 + 1/6" → "1/2").
+// Devuelve la fracción como "n/m" (o entero) o null si no hay una operación así.
+export function solveFractionFromText(text) {
+  if (typeof text !== "string") return null;
+  const m = text.match(/(\d+)\s*\/\s*(\d+)\s*([+\-])\s*(\d+)\s*\/\s*(\d+)/);
+  if (!m) return null;
+  const n1 = +m[1], d1 = +m[2], op = m[3], n2 = +m[4], d2 = +m[5];
+  if (!d1 || !d2) return null;
+  const num = op === "+" ? n1 * d2 + n2 * d1 : n1 * d2 - n2 * d1;
+  const den = d1 * d2;
+  if (den === 0) return null;
+  const g = gcd(num, den);
+  let sn = num / g, sd = den / g;
+  if (sd < 0) { sn = -sn; sd = -sd; }
+  return sd === 1 ? String(sn) : `${sn}/${sd}`;
+}
+
 // Genera los PASOS de resolución de una ecuación lineal simple, para el modo demo
 // (sin IA): permite que "2x + x = 12" muestre una solución real paso a paso.
 // Devuelve { original, steps:[{explica, escribe}], answer, varName } o null.
@@ -307,9 +327,10 @@ function sanitizeDirectiva(raw, warnings, context) {
         warnings.push(`"preguntar" sin forma de pregunta convertida a "hablar" en ${context}.`);
         return { tipo: "hablar", texto };
       }
-      // Si es una pregunta real pero la IA no dio respuesta, intentamos derivarla
-      // resolviendo la ecuación lineal embebida (p.ej. "¿valor de x en 2x-3=7?" → "5").
-      if (!respuesta) respuesta = solveLinearFromText(texto) || "";
+      // Si es una pregunta real pero la IA no dio respuesta, intentamos derivarla:
+      // primero resolviendo la ecuación lineal embebida ("2x-3=7" → "5") y, si no,
+      // una suma/resta de fracciones ("1/3 + 1/6" → "1/2"), para poder calificarla.
+      if (!respuesta) respuesta = solveLinearFromText(texto) || solveFractionFromText(texto) || "";
       d.texto = texto;
       d.esperar_respuesta = raw.esperar_respuesta !== false;
       if (respuesta) d.respuesta = respuesta;

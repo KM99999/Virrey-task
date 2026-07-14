@@ -60,6 +60,14 @@ export function normalizeAnswer(s) {
     .trim();
 }
 
+// Valor numérico de una respuesta, aceptando fracciones ("1/2" → 0.5) y decimales.
+function fracVal(s) {
+  const m = String(s).match(/^(-?\d+)\/(-?\d+)$/);
+  if (m) { const d = Number(m[2]); return d !== 0 ? Number(m[1]) / d : NaN; }
+  const n = Number(s);
+  return Number.isFinite(n) ? n : NaN;
+}
+
 // Evalúa la respuesta del alumno contra la esperada.
 // Devuelve { known:boolean, correct:boolean }. Si no hay respuesta esperada
 // deducible, known=false (el PSE hará autoevaluación Sí/No).
@@ -71,11 +79,11 @@ export function checkAnswer(student, expected) {
   const b = normalizeAnswer(expected);
   if (!a) return { known: true, correct: false };
   if (a === b) return { known: true, correct: true };
-  // Comparación numérica tolerante (p.ej. "5" vs "5.0", "x=5" vs "5").
-  const na = Number(a.replace(/^[a-z]+=/, ""));
-  const nb = Number(b.replace(/^[a-z]+=/, ""));
-  if (Number.isFinite(na) && Number.isFinite(nb)) {
-    return { known: true, correct: Math.abs(na - nb) < 1e-9 };
+  // Comparación por VALOR, aceptando fracciones equivalentes (1/2 == 3/6 == 0.5) y decimales.
+  const va = fracVal(a.replace(/^[a-z]+=/, ""));
+  const vb = fracVal(b.replace(/^[a-z]+=/, ""));
+  if (Number.isFinite(va) && Number.isFinite(vb)) {
+    return { known: true, correct: Math.abs(va - vb) < 1e-9 };
   }
   // Tolerancia de texto para respuestas cortas: una contiene a la otra
   // (p.ej. alumno "sumar 7" vs esperado "sumar 7 a ambos lados").

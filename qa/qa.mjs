@@ -9,7 +9,7 @@
 // contengan LaTeX ni "$". Imprime un veredicto final APROBADO / RECHAZADO.
 
 import { classifyIntent } from "../src/classifier.js";
-import { processLSG, solveLinearFromText } from "../src/preLight.js";
+import { processLSG, solveLinearFromText, solveFractionFromText } from "../src/preLight.js";
 import { mockLSG } from "../src/lsgPrompt.js";
 import { checkAnswer, flattenLSG, PSELight } from "../public/pseLight.js";
 
@@ -69,6 +69,13 @@ async function unitTests() {
   check("checkAnswer: 5 == 5", checkAnswer("5", "5").correct === true);
   check("checkAnswer: 9 != 5", checkAnswer("9", "5").correct === false);
   check("checkAnswer: sin verdad-base → known:false", checkAnswer("lo que sea", "").known === false);
+
+  // Fracciones: derivar respuesta y calificar equivalentes (1/2 == 3/6 == 0.5).
+  check("solver fracciones: '1/3 + 1/6' → 1/2", solveFractionFromText("Calcula 1/3 + 1/6") === "1/2");
+  check("solver fracciones: '2/6 + 3/6' → 5/6", solveFractionFromText("2/6 + 3/6") === "5/6");
+  check("checkAnswer: 3/6 == 1/2 (fracciones equivalentes)", checkAnswer("3/6", "1/2").correct === true);
+  check("checkAnswer: 0.5 == 1/2", checkAnswer("0.5", "1/2").correct === true);
+  check("checkAnswer: 1/3 != 1/2", checkAnswer("1/3", "1/2").correct === false);
 
   const san = processLSG({ escena: "x", intencion: "resolver", directivas: [
     { tipo: "pizarra", contenido: "$x^2 - 9$" }, { tipo: "preguntar", texto: "¿x?", respuesta: "1" }] }, "resolver");
