@@ -32,10 +32,11 @@ const maxOutputTokensFor = (intent) => (RUTA_A.has(intent) ? MAX_OUTPUT_RUTA_A :
 
 let workingModel = null;           // último modelo que respondió bien
 const knownDead = new Set();        // modelos retirados (404) — persiste entre peticiones
-let quotaCooldownUntil = 0;         // tras un 429, no llamamos a Gemini por un rato
-// Los 429 suelen ser límites por-minuto (RPM) transitorios que se despejan en ~1 min.
-// 90 s recupera pronto (y un 429 no cuesta nada); mientras, el demo tema-consciente cubre.
-const QUOTA_COOLDOWN_MS = 90 * 1000;
+let quotaCooldownUntil = 0;         // tras un 429, esperamos un poco antes de reintentar
+// Un 429 casi siempre es un límite POR MINUTO (RPM/TPM) transitorio, NO falta de saldo:
+// se despeja en segundos. Enfriamiento CORTO (20 s) para no bloquear el modo IA cuando sí
+// hay cuota; un 429 no cuesta nada. Mientras, el demo tema-consciente cubre.
+const QUOTA_COOLDOWN_MS = 20 * 1000;
 
 // Context Caching: nombre del caché del prompt del sistema por modelo (Gemini lo mantiene
 // ~1 h). Así el prompt del sistema no se re-cobra como tokens de entrada en cada consulta.
@@ -56,9 +57,9 @@ export async function generateLSG(query, intent, opts = {}) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return { lsg: mockLSG(query, intent, { reexplain }), source: "mock" };
 
-  // Si hace poco Gemini dijo "créditos agotados" (429), no lo llamamos por un rato.
+  // Si hace segundos Gemini devolvió 429 (límite temporal por minuto), esperamos un poco.
   if (Date.now() < quotaCooldownUntil) {
-    return { lsg: mockLSG(query, intent, { reexplain }), source: "mock", model: "sin-creditos" };
+    return { lsg: mockLSG(query, intent, { reexplain }), source: "mock", model: "limite-temporal" };
   }
 
   // El prompt del sistema es ESTABLE (cacheado); la intención va en el mensaje del usuario.
@@ -93,7 +94,7 @@ export async function generateLSG(query, intent, opts = {}) {
 
   // Gemini no respondió bien: degradar a modo demo (nunca un error al alumno).
   const quotaHit = !!(lastErr && lastErr.quota);
-  return { lsg: mockLSG(query, intent, { reexplain }), source: "mock", model: quotaHit ? "sin-creditos" : "demo" };
+  return { lsg: mockLSG(query, intent, { reexplain }), source: "mock", model: quotaHit ? "limite-temporal" : "demo" };
 }
 
 // Una única llamada a Gemini. Usa el caché del prompt del sistema si está disponible;
