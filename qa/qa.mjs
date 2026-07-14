@@ -9,7 +9,7 @@
 // contengan LaTeX ni "$". Imprime un veredicto final APROBADO / RECHAZADO.
 
 import { classifyIntent } from "../src/classifier.js";
-import { processLSG, solveLinearFromText, solveFractionFromText } from "../src/preLight.js";
+import { processLSG, solveLinearFromText, solveFractionFromText, resultadoFromVerificacion } from "../src/preLight.js";
 import { mockLSG } from "../src/lsgPrompt.js";
 import { generateLSG } from "../src/geminiClient.js";
 import { checkAnswer, flattenLSG, PSELight } from "../public/pseLight.js";
@@ -93,6 +93,26 @@ async function unitTests() {
     { tipo: "preguntar", texto: "¿Cuál es su velocidad?", respuesta: "8" }] }] }, "aprender");
   check("velocidad: respuesta calificada = 8 (no 200)",
     velLSG.pasos.find((d) => d.tipo === "preguntar")?.respuesta === "8");
+
+  // Cadena de pensamiento: parser del resultado de "verificacion_respuesta".
+  check("verificacion: 'Resultado: 8 (m/s)' → 8", resultadoFromVerificacion("200/25=8. Resultado: 8 (m/s)") === "8");
+  check("verificacion: sin etiqueta → último número", resultadoFromVerificacion("50 / 5 = 10") === "10");
+  check("verificacion: fracción", resultadoFromVerificacion("Resultado: 1/2") === "1/2");
+
+  // Red de seguridad: sin campo "respuesta", se usa el resultado calculado por la IA;
+  // y la fuga de la respuesta dentro del texto de la pregunta se elimina.
+  const velCoT = processLSG({ verificacion_respuesta: "50/5 = 10. Resultado: 10", escena: "vel2", intencion: "aprender",
+    modulos: [{ id: "practica", directivas: [
+      { tipo: "hablar", texto: "Practica." },
+      { tipo: "pizarra", contenido: "Velocidad = 15 m/s" },
+      { tipo: "preguntar", texto: "¿Cuál es su velocidad si recorre 50 m en 5 s? Respuesta: 10 m/s" }] }] }, "aprender");
+  const qCoT = velCoT.pasos.find((d) => d.tipo === "preguntar");
+  check("CoT: respuesta = 10 desde verificacion (sin campo respuesta)", qCoT?.respuesta === "10");
+  check("CoT: fuga 'Respuesta: 10' eliminada del texto", !/respuesta\s*[:=]/i.test(qCoT?.texto || "x") && qCoT.texto.endsWith("?"));
+  // Comprensión NO recibe número inyectado.
+  const compQ = processLSG({ verificacion_respuesta: "Resultado: 42", escena: "c", intencion: "explicar",
+    directivas: [{ tipo: "hablar", texto: "Ya expliqué." }, { tipo: "preguntar", texto: "¿Entendiste?" }] }, "explicar");
+  check("comprensión: sin respuesta inyectada", !compQ.pasos.find((d) => d.tipo === "preguntar")?.respuesta);
 
   const san = processLSG({ escena: "x", intencion: "resolver", directivas: [
     { tipo: "pizarra", contenido: "$x^2 - 9$" }, { tipo: "preguntar", texto: "¿x?", respuesta: "1" }] }, "resolver");

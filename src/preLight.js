@@ -262,7 +262,9 @@ export function processLSG(rawLsg, intent) {
 
   // Calificación correcta: la respuesta de la pregunta debe ser la del EJERCICIO DE PRÁCTICA
   // escrito en la pizarra (p.ej. "x - 4 = 7" → 11), NO la solución del ejemplo (p.ej. "x = 2").
-  fixPracticeAnswer(lsg, pasos);
+  // Como red de seguridad, si la IA no rellenó "respuesta", usamos el RESULTADO que ella misma
+  // calculó en su borrador "verificacion_respuesta" (funciona para cualquier redacción).
+  fixPracticeAnswer(lsg, pasos, rawLsg.verificacion_respuesta);
 
   lsg.duracion_estimada = Number(rawLsg.duracion_estimada) > 0
     ? Number(rawLsg.duracion_estimada)
@@ -322,7 +324,10 @@ function sanitizeDirectiva(raw, warnings, context) {
       if (str(raw.objetivo)) d.objetivo = str(raw.objetivo);
       break;
     case "preguntar": {
-      const texto = sanitizeMath(str(raw.texto));
+      let texto = sanitizeMath(str(raw.texto));
+      // Anti-filtración: si la IA dejó la respuesta o el cálculo DESPUÉS del "?" (p.ej.
+      // "…¿velocidad? (Recuerda: …). Respuesta: 10 m/s"), lo quitamos para no revelarla.
+      texto = texto.replace(/\?\s*[^?¿]*\b(respuesta|resultado)\s*[:=][^?¿]*$/i, "?").trim();
       if (!texto) {
         warnings.push(`"preguntar" sin texto descartada en ${context}.`);
         return null;
@@ -389,11 +394,30 @@ function enforceSingleQuestion(lsg, pasos, counter, intent) {
   for (const arr of arrays) for (const d of arr) pasos.push({ ...d });
 }
 
-// La respuesta a calificar debe ser la del EJERCICIO de práctica escrito en la pizarra
-// (la ecuación justo antes de la pregunta, p.ej. "x - 4 = 7" → 11), NO la solución del
-// ejemplo (p.ej. "x = 2"). Resuelve ese ejercicio y lo fija como respuesta autoritativa;
-// si no es una ecuación lineal resoluble, no toca nada (queda la respuesta previa/comprensión).
-function fixPracticeAnswer(lsg, pasos) {
+// Extrae el RESULTADO que la IA calculó en su borrador "verificacion_respuesta".
+// Prioriza la línea "Resultado: <valor>" (formato que exige el prompt); si no está, toma
+// el ÚLTIMO número/fracción del texto (el resultado suele ir al final del cálculo).
+// Devuelve un string corto ("8", "1/2", "28") o "" si no hay nada aprovechable.
+export function resultadoFromVerificacion(v) {
+  if (typeof v !== "string" || !v.trim()) return "";
+  const num = /-?\d+\s*\/\s*-?\d+|-?\d+(?:[.,]\d+)?/;
+  const etiqueta = v.match(/result[a-z]*\s*[:=]\s*([^\n]+)/i);
+  if (etiqueta) {
+    const m = etiqueta[1].match(num);
+    if (m) return m[0].replace(/\s+/g, "").replace(",", ".");
+  }
+  const todos = v.match(new RegExp(num.source, "g"));
+  return todos ? todos[todos.length - 1].replace(/\s+/g, "").replace(",", ".") : "";
+}
+
+// La respuesta a calificar debe ser el RESULTADO del EJERCICIO de práctica, sea cual sea su
+// redacción. Prioridad:
+//   1) Si la pizarra anterior es una ecuación lineal LIMPIA ("x - 4 = 7"), su solución (11) es
+//      autoritativa (evita que se copie la del ejemplo, p.ej. "x = 2").
+//   2) Si no, y la IA no dejó "respuesta" para una pregunta de CÁLCULO, usamos el resultado que
+//      ella misma calculó en "verificacion_respuesta" (velocidad, área, fracciones, etc.).
+//   3) En cualquier otro caso, no tocamos nada (respuesta previa o pregunta de comprensión).
+function fixPracticeAnswer(lsg, pasos, verificacion) {
   const flat = [];
   if (Array.isArray(lsg.modulos)) for (const m of lsg.modulos) for (const d of m.directivas) flat.push(d);
   else if (Array.isArray(lsg.directivas)) for (const d of lsg.directivas) flat.push(d);
@@ -401,17 +425,28 @@ function fixPracticeAnswer(lsg, pasos) {
   const qIdx = flat.findIndex((d) => d.tipo === "preguntar");
   if (qIdx === -1) return;
   const q = flat[qIdx];
+  const setResp = (val) => {
+    q.respuesta = val;
+    const p = pasos.find((x) => x.tipo === "preguntar");
+    if (p) p.respuesta = val;
+  };
 
+  // 1) Ecuación lineal limpia en la pizarra inmediatamente anterior → solución determinista.
   for (let i = qIdx - 1; i >= 0; i--) {
     if (flat[i].tipo === "pizarra") {
       const sol = solveLinearFromText(flat[i].contenido);
-      if (sol !== null) {
-        q.respuesta = sol; // respuesta = solución del ejercicio MOSTRADO (evita usar la del ejemplo)
-        const p = pasos.find((x) => x.tipo === "preguntar");
-        if (p) p.respuesta = sol;
-      }
+      if (sol !== null) { setResp(sol); return; }
       break; // solo la pizarra inmediatamente anterior (el ejercicio de práctica)
     }
+  }
+
+  // 2) Sin respuesta y es una pregunta de CÁLCULO → usar el resultado de la IA (verificacion).
+  const yaTiene = q.respuesta && String(q.respuesta).trim();
+  const esCalculo = /\d/.test(q.texto) ||
+    /(cu[aá]nt|cu[aá]l|calcul|resultad|vale|[aá]rea|velocidad|per[ií]metro|suma|resta|divid|multiplic)/i.test(q.texto);
+  if (!yaTiene && esCalculo) {
+    const r = resultadoFromVerificacion(verificacion);
+    if (r) setResp(r);
   }
 }
 
