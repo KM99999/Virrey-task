@@ -11,7 +11,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { classifyIntent } from "./src/classifier.js";
-import { generateLSG, lastGeminiError } from "./src/geminiClient.js";
+import { generateLSG } from "./src/geminiClient.js";
 import { processLSG } from "./src/preLight.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -27,7 +27,6 @@ app.get("/api/health", (_req, res) => {
     status: "ok",
     modo_ia: process.env.GEMINI_API_KEY ? "gemini" : "mock",
     modelo: process.env.GEMINI_MODEL || "gemini-2.5-flash-lite",
-    gemini_error: lastGeminiError, // diagnóstico temporal del último error real de Gemini
   });
 });
 
