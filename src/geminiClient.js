@@ -123,7 +123,14 @@ async function generateOnce(apiKey, model, userMsg, maxOutputTokens) {
   else body.systemInstruction = { parts: [{ text: SYSTEM_INSTRUCTION }] }; // inline (fallback)
 
   const { text, usage } = await callGemini(apiKey, model, body);
-  return { lsg: JSON.parse(text), usage, cached: !!cacheName };
+  let lsg;
+  try {
+    lsg = JSON.parse(text);
+  } catch (e) {
+    lastGeminiError = `JSON inválido (¿truncado?): …${text.slice(-70)}`; // diagnóstico
+    throw e;
+  }
+  return { lsg, usage, cached: !!cacheName };
 }
 
 // Devuelve el nombre del caché de contexto del prompt del sistema (o null). Lo crea una
@@ -175,10 +182,11 @@ async function createPromptCache(apiKey, model) {
 async function callGemini(apiKey, model, body) {
   const url = `${API_BASE}/models/${model}:generateContent?key=${apiKey}`;
 
-  // Timeout por intento: temas simples responden en ~5-8 s, pero una lección compleja
-  // (p.ej. trigonometría) tarda más; damos hasta 25 s antes de caer a modo demo.
+  // Timeout por intento: temas simples responden en ~5-8 s, pero una lección de tema
+  // avanzado (derivadas, trigonometría) puede generar muchas directivas y tarda 30-40 s;
+  // damos hasta 50 s antes de caer a modo demo (con 25 s se cortaban y caían a demo).
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 25_000);
+  const timeout = setTimeout(() => controller.abort(), 50_000);
 
   let res;
   try {
@@ -190,6 +198,7 @@ async function callGemini(apiKey, model, body) {
     });
   } catch (err) {
     if (err.name === "AbortError") {
+      lastGeminiError = "TIMEOUT: Gemini no respondió dentro del límite (lección larga)."; // diagnóstico
       const e = new Error("Gemini no respondió a tiempo (timeout).");
       e.retryable = true;
       throw e;
@@ -210,7 +219,10 @@ async function callGemini(apiKey, model, body) {
 
   const data = await res.json();
   const text = extractText(data);
-  if (!text) throw new Error("Gemini no devolvió contenido de texto en la respuesta.");
+  if (!text) {
+    lastGeminiError = `VACÍO: sin texto. finishReason=${data?.candidates?.[0]?.finishReason || "?"}`; // diagnóstico
+    throw new Error("Gemini no devolvió contenido de texto en la respuesta.");
+  }
   return { text, usage: data.usageMetadata || null };
 }
 
