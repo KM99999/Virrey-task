@@ -325,9 +325,11 @@ function sanitizeDirectiva(raw, warnings, context) {
       break;
     case "preguntar": {
       let texto = sanitizeMath(str(raw.texto));
-      // Anti-filtración: si la IA dejó la respuesta o el cálculo DESPUÉS del "?" (p.ej.
-      // "…¿velocidad? (Recuerda: …). Respuesta: 10 m/s"), lo quitamos para no revelarla.
-      texto = texto.replace(/\?\s*[^?¿]*\b(respuesta|resultado)\s*[:=][^?¿]*$/i, "?").trim();
+      // La pregunta es UNA sola frase: nos quedamos hasta el primer "?" y descartamos lo que
+      // venga después (ejemplos, pistas, "Respuesta: …", saludos). Evita preguntas kilométricas
+      // y, sobre todo, que la IA REVELE la respuesta dentro del enunciado.
+      const finPregunta = texto.indexOf("?");
+      if (finPregunta !== -1) texto = texto.slice(0, finPregunta + 1).trim();
       if (!texto) {
         warnings.push(`"preguntar" sin texto descartada en ${context}.`);
         return null;
@@ -376,13 +378,22 @@ function enforceSingleQuestion(lsg, pasos, counter, intent) {
   }
 
   if (!seen) {
+    // Si la lección terminó con un EJERCICIO resoluble en la pizarra pero sin pregunta, lo
+    // convertimos en la pregunta ("Resuelve: …") para que sea un ejercicio real y calificable,
+    // en vez de un genérico "¿Te gustaría practicar?".
+    let ejercicio = null;
+    for (const arr of arrays) for (const d of arr) {
+      if (d.tipo === "pizarra" && d.contenido && solveLinearFromText(d.contenido) !== null) ejercicio = d.contenido;
+    }
     const last = arrays[arrays.length - 1];
     last.push({
       id: ++counter.n,
       tipo: "preguntar",
-      texto: intent === "aprender" || intent === "practicar"
-        ? "¿Te gustaría practicar con otro ejemplo?"
-        : "¿Entendiste la explicación?",
+      texto: ejercicio
+        ? `Ahora resuélvelo tú: ${ejercicio}. ¿Cuánto vale?`
+        : intent === "aprender" || intent === "practicar"
+          ? "¿Te gustaría practicar con otro ejemplo?"
+          : "¿Entendiste la explicación?",
       esperar_respuesta: true,
       si_correcto: intent === "practicar" ? "felicitar" : "continuar",
       si_incorrecto: "mostrar_otro_ejemplo",
@@ -430,8 +441,21 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
     const p = pasos.find((x) => x.tipo === "preguntar");
     if (p) p.respuesta = val;
   };
+  const delResp = () => {
+    delete q.respuesta;
+    const p = pasos.find((x) => x.tipo === "preguntar");
+    if (p) delete p.respuesta;
+  };
 
-  // 1) Ecuación lineal limpia en la pizarra inmediatamente anterior → solución determinista.
+  // Pregunta GENÉRICA de comprensión ("¿entendiste?", "¿te gustaría practicar?"): no se califica
+  // con un número; borramos cualquier respuesta espuria para no marcar mal un "sí"/"no".
+  if (/¿?\s*(entendiste|comprendiste|te gustar[ií]a|quieres practicar|alguna duda)/i.test(q.texto)) {
+    delResp();
+    return;
+  }
+
+  // 1) Ecuación lineal LIMPIA en la pizarra inmediatamente anterior → solución EXACTA (máxima
+  //    prioridad: es determinista y evita copiar la respuesta del ejemplo, p.ej. "x-4=7" → 11).
   for (let i = qIdx - 1; i >= 0; i--) {
     if (flat[i].tipo === "pizarra") {
       const sol = solveLinearFromText(flat[i].contenido);
@@ -440,13 +464,20 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
     }
   }
 
-  // 2) Sin respuesta y es una pregunta de CÁLCULO → usar el resultado de la IA (verificacion).
-  const yaTiene = q.respuesta && String(q.respuesta).trim();
+  // 2) Es una pregunta de CÁLCULO → la verdad-base es el RESULTADO que la IA calculó paso a paso
+  //    en "verificacion_respuesta" (más fiable que el campo "respuesta", que a veces copia el
+  //    número del ejemplo). Funciona para cualquier redacción: velocidad, área, división, etc.
   const esCalculo = /\d/.test(q.texto) ||
     /(cu[aá]nt|cu[aá]l|calcul|resultad|vale|[aá]rea|velocidad|per[ií]metro|suma|resta|divid|multiplic)/i.test(q.texto);
-  if (!yaTiene && esCalculo) {
-    const r = resultadoFromVerificacion(verificacion);
-    if (r) setResp(r);
+  if (!esCalculo) return;
+
+  const rv = resultadoFromVerificacion(verificacion);
+  if (rv) { setResp(rv); return; }
+
+  // 3) Sin verificación aprovechable: si aún no hay respuesta, intenta una suma/resta de fracciones.
+  if (!(q.respuesta && String(q.respuesta).trim())) {
+    const f = solveFractionFromText(q.texto);
+    if (f) setResp(f);
   }
 }
 

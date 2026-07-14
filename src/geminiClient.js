@@ -113,7 +113,7 @@ async function generateOnce(apiKey, model, userMsg, maxOutputTokens) {
   const body = {
     contents: [{ role: "user", parts: [{ text: userMsg }] }],
     generationConfig: {
-      temperature: 0.4,
+      temperature: 0.2, // bajo: más fiel a las reglas (respuesta correcta, pregunta corta)
       maxOutputTokens, // límite de salida dinámico por ruta (control de gasto)
       responseMimeType: "application/json",
       responseSchema: LSG_RESPONSE_SCHEMA,

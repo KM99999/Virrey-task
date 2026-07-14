@@ -122,9 +122,14 @@ velocidad, área, división, fracciones, lo que sea). Reglas ESTRICTAS:
    (solo el número/fracción, corto, p.ej. "10"). Verifica que coincida con la operación planteada.
    La respuesta es el RESULTADO de la operación, NUNCA un dato del enunciado (distancia, tiempo,
    precio) ni la copiada de un ejemplo. Ej.: "200 m en 25 s, ¿velocidad?" → respuesta 8, JAMÁS 200.
-3) SEPARACIÓN ESTRICTA: la respuesta va SOLO en el campo "respuesta". PROHIBIDO escribir la
-   respuesta, "Respuesta: …", pistas o el cálculo DENTRO del texto de la "preguntar". El texto de
-   la pregunta es SOLO el enunciado del ejercicio, corto (máx. ~15 palabras) y SIN revelar el
+3) MISMOS NÚMEROS: el ejercicio de la pregunta debe usar EXACTAMENTE los mismos números que
+   resolviste en "verificacion_respuesta", y su respuesta es ese Resultado. NO uses los números
+   del ejemplo que enseñaste (el de práctica es DISTINTO). Ej.: si en clase mostraste 5×3=15, la
+   práctica NO puede ser 5×3; propón p.ej. 7×4 y su respuesta es 28, no 15.
+4) SEPARACIÓN ESTRICTA: la respuesta va SOLO en el campo "respuesta". PROHIBIDO escribir la
+   respuesta, "Respuesta: …", pistas, ejemplos o el cálculo DENTRO del texto de la "preguntar".
+   El texto de la pregunta es UNA SOLA FRASE corta (máx. ~15 palabras) que termina en "?", con el
+   enunciado del ejercicio y NADA más: sin "por ejemplo", sin saludos, sin ánimos, sin revelar el
    resultado. Toda tu aritmética va en "verificacion_respuesta", nunca en la pregunta.
 
 ════════ PREGUNTA FINAL (evita preguntas triviales) ════════
