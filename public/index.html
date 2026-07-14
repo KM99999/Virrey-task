@@ -26,6 +26,11 @@
     <div class="stage-head">
       <h2>Escenario · avatar y pizarra</h2>
       <div class="stage-controls">
+        <div class="mode-toggle" id="modeToggle" role="group"
+             title="Elige el modo: Demostración (temas básicos, sin IA) o IA (temas avanzados con Gemini)">
+          <button id="modeDemoBtn" class="mode-btn" data-mode="demo">🎮 Modo demostración</button>
+          <button id="modeIaBtn" class="mode-btn" data-mode="ia">🤖 Modo IA</button>
+        </div>
         <span class="tts-info" id="ttsInfo"></span>
         <button id="playBtn" class="btn primary small" disabled>▶ Reproducir</button>
         <button id="pauseBtn" class="btn ghost small" disabled>⏸ Pausar</button>

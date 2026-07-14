@@ -34,7 +34,7 @@ app.get("/api/health", (_req, res) => {
 // (el mayor ahorro de créditos — al probar se repiten mucho las mismas consultas).
 const CACHE = new Map(); // clave -> respuesta ya generada
 const CACHE_MAX = 300;
-const cacheKey = (q, intent) => intent + "::" + q.toLowerCase().replace(/\s+/g, " ").trim();
+const cacheKey = (q, intent, modo) => (modo || "auto") + "::" + intent + "::" + q.toLowerCase().replace(/\s+/g, " ").trim();
 
 // Endpoint principal: recibe { query } y devuelve el LSG procesado.
 app.post("/api/query", async (req, res) => {
@@ -42,6 +42,9 @@ app.post("/api/query", async (req, res) => {
   // Contexto de conversación: el último tema, para reexplicar cuando el alumno dice
   // "no entendí". El frontend lo envía solo cuando la consulta es un seguimiento.
   const contexto = typeof req.body?.contexto === "string" ? req.body.contexto.trim().slice(0, 2000) : "";
+  // Modo elegido por el usuario en la interfaz: "demo" (contenido básico sin IA),
+  // "ia" (usa Gemini) o vacío (automático: intenta IA y cae a demo si falla).
+  const modo = req.body?.modo === "demo" || req.body?.modo === "ia" ? req.body.modo : "";
 
   if (!query) {
     return res.status(400).json({ error: "Falta la consulta ('query')." });
@@ -63,15 +66,18 @@ app.post("/api/query", async (req, res) => {
 
     // 1.5) Caché: en una reexplicación NO se usa (cada "no entendí" debe poder ser DISTINTO,
     //      para enseñar de otra forma y no repetir como un loro). En lo normal, sí.
-    const key = cacheKey(effectiveQuery, classification.intent);
+    //      La clave incluye el modo: demo e IA se cachean por separado.
+    const key = cacheKey(effectiveQuery, classification.intent, modo);
     if (!reexplain && CACHE.has(key)) {
       const cached = CACHE.get(key);
       CACHE.delete(key); CACHE.set(key, cached); // refrescar orden (LRU)
       return res.json({ ...cached, cacheado: true });
     }
 
-    // 2) Generar el LSG con la IA (o mock). reexplain → enseñar de otra forma, más simple.
-    const { lsg: rawLsg, source, model, usage, cached } = await generateLSG(effectiveQuery, classification.intent, { reexplain });
+    // 2) Generar el LSG. Modo "demo" → contenido básico sin IA; "ia"/auto → intenta Gemini.
+    const { lsg: rawLsg, source, model, usage, cached } = await generateLSG(
+      effectiveQuery, classification.intent, { reexplain, forceDemo: modo === "demo" }
+    );
 
     // 3) PRE Light: validar y normalizar en bloques predecibles.
     const { lsg, pasos, warnings } = processLSG(rawLsg, classification.intent);

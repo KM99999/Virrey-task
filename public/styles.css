@@ -228,8 +228,24 @@ textarea:focus { outline: none; border-color: var(--accent); }
 }
 .stage.playing { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), var(--shadow); }
 .stage-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.stage-controls { display: flex; align-items: center; gap: 10px; }
+.stage-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .tts-info { color: var(--muted); font-size: 12px; }
+
+/* Selector de modo: Demostración (básico, sin IA) / IA (avanzado, Gemini) */
+.mode-toggle {
+  display: inline-flex; border: 1px solid var(--border);
+  border-radius: 999px; overflow: hidden; background: var(--panel-2);
+}
+.mode-btn {
+  border: none; background: transparent; color: var(--muted);
+  padding: 6px 12px; font-size: 12px; cursor: pointer; font-family: inherit;
+  white-space: nowrap; transition: background 0.15s ease, color 0.15s ease;
+}
+.mode-btn:hover { color: var(--text); }
+.mode-btn.active {
+  background: linear-gradient(135deg, var(--accent), #8aa2ff);
+  color: #0b0e18; font-weight: 700;
+}
 
 /* Barra de pasos (retroceder / avanzar) */
 .scrubber {

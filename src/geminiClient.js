@@ -55,6 +55,10 @@ const cacheUnsupported = new Set();  // modelos donde el caché explícito no es
  */
 export async function generateLSG(query, intent, opts = {}) {
   const reexplain = !!opts.reexplain; // "no entendí": enseñar de OTRA forma, no repetir
+  // Modo DEMOSTRACIÓN forzado por el usuario: contenido básico instantáneo, sin llamar a la IA.
+  if (opts.forceDemo) {
+    return { lsg: mockLSG(query, intent, { reexplain }), source: "mock", model: "demo-manual" };
+  }
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return { lsg: mockLSG(query, intent, { reexplain }), source: "mock" };
 

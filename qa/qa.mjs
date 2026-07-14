@@ -11,6 +11,7 @@
 import { classifyIntent } from "../src/classifier.js";
 import { processLSG, solveLinearFromText, solveFractionFromText } from "../src/preLight.js";
 import { mockLSG } from "../src/lsgPrompt.js";
+import { generateLSG } from "../src/geminiClient.js";
 import { checkAnswer, flattenLSG, PSELight } from "../public/pseLight.js";
 
 const BASE = process.env.QA_URL || "https://math-ia.onrender.com";
@@ -158,6 +159,10 @@ async function unitTests() {
   check("'no entendí' NO repite (enfoque distinto al original)", reexp.escena !== normal.escena);
   check("'no entendí' es DETALLADA paso a paso (≥7 explicaciones)", reexpH >= 7, `hablar=${reexpH}`);
   check("'no entendí' enseña con ANALOGÍA de la vida real", /galleta|dulce|bolsa|amig|mano/.test(reexpTxt));
+
+  // Selector de modo: en "modo demostración" NUNCA se usa la IA (contenido básico sin coste).
+  const demoGen = await generateLSG("enséñame derivadas", "aprender", { forceDemo: true });
+  check("modo demostración: no usa IA (source=mock, model=demo-manual)", demoGen.source === "mock" && demoGen.model === "demo-manual", demoGen.model);
 }
 
 // ---------- 2) PRODUCCIÓN (Gemini real) ----------

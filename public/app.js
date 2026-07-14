@@ -30,6 +30,8 @@ const els = {
   statusText: $("#statusText"),
   // Fase 2 — escenario
   stage: $("#stage"),
+  modeDemoBtn: $("#modeDemoBtn"),
+  modeIaBtn: $("#modeIaBtn"),
   avatarMount: $("#avatar"),
   board: $("#board"),
   caption: $("#caption"),
@@ -51,6 +53,22 @@ const history = []; // { query, intencion, fuente, lsg, pasos, ts }
 let currentLSG = null; // último LSG generado, para reproducir en el escenario
 let seeking = false;   // true mientras el usuario arrastra la barra de pasos
 let lastTopicQuery = null; // último TEMA consultado (para reexplicar en un "no entendí")
+let modo = "ia"; // "ia" = temas avanzados con Gemini · "demo" = temas básicos sin IA (instantáneo)
+
+// Selector de modo: Demostración (básico, sin IA) / IA (avanzado, Gemini).
+function setModo(m, announce) {
+  modo = m === "demo" ? "demo" : "ia";
+  els.modeDemoBtn.classList.toggle("active", modo === "demo");
+  els.modeIaBtn.classList.toggle("active", modo === "ia");
+  if (announce) {
+    toast(modo === "demo"
+      ? "Modo demostración: temas básicos (sumar, restar, multiplicar, dividir, fracciones, ecuaciones), sin IA."
+      : "Modo IA: cualquier tema con la inteligencia artificial (derivadas, trigonometría, etc.).");
+  }
+}
+els.modeDemoBtn.addEventListener("click", () => setModo("demo", true));
+els.modeIaBtn.addEventListener("click", () => setModo("ia", true));
+setModo(modo, false); // estado inicial (sin aviso)
 
 // ¿La consulta es un SEGUIMIENTO ("no entendí", "explícamelo otra vez", "más simple")?
 // En ese caso reexplicamos el último tema, no la tratamos como un tema nuevo.
@@ -231,7 +249,7 @@ async function submitQuery() {
 
   // Seguimiento ("no entendí") → reexplicar el último tema; si no, es un tema nuevo.
   const seguimiento = esSeguimiento(query);
-  const body = { query };
+  const body = { query, modo }; // modo: "demo" (básico) o "ia" (avanzado)
   if (seguimiento && lastTopicQuery) body.contexto = lastTopicQuery;
 
   setLoading(true);
