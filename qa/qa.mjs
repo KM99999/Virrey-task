@@ -66,6 +66,10 @@ async function unitTests() {
   // el solver debe devolver null (modo comprensión), jamás un valor incorrecto.
   check("solver: '1/2 x = 4' NO da x=4 falso (→ null)", solveLinearFromText("1/2 x = 4") === null);
   check("solver: '3 x = 6' con espacio → null (no arriesga)", solveLinearFromText("3 x = 6") === null);
+  // Problema VERBAL en la pizarra: la última letra de una palabra NO es una variable.
+  // "Distancia = 200" jamás debe "resolverse" como 200 (bug reportado por el cliente).
+  check("solver: 'Distancia = 200 metros' → null (no 200)", solveLinearFromText("Distancia = 200 metros, Tiempo = 25 segundos") === null);
+  check("solver: 'Tiempo = 25 segundos' → null", solveLinearFromText("Tiempo = 25 segundos") === null);
 
   check("checkAnswer: 5 == 5", checkAnswer("5", "5").correct === true);
   check("checkAnswer: 9 != 5", checkAnswer("9", "5").correct === false);
@@ -77,6 +81,18 @@ async function unitTests() {
   check("checkAnswer: 3/6 == 1/2 (fracciones equivalentes)", checkAnswer("3/6", "1/2").correct === true);
   check("checkAnswer: 0.5 == 1/2", checkAnswer("0.5", "1/2").correct === true);
   check("checkAnswer: 1/3 != 1/2", checkAnswer("1/3", "1/2").correct === false);
+  // Respuestas con unidades: "8" debe valer como "8 metros/segundo" (problemas verbales).
+  check("checkAnswer: 8 == '8 metros/segundo' (unidades)", checkAnswer("8", "8 metros/segundo").correct === true);
+  check("checkAnswer: 200 != '8 metros/segundo'", checkAnswer("200", "8 metros/segundo").correct === false);
+  check("checkAnswer: '7' NO cuela en 'sumar 7 a ambos lados'", checkAnswer("7", "sumar 7 a ambos lados").correct === false);
+
+  // Regresión completa del bug: LSG de velocidad conserva la respuesta de la IA (8), no 200.
+  const velLSG = processLSG({ escena: "vel", intencion: "aprender", modulos: [{ id: "practica", directivas: [
+    { tipo: "hablar", texto: "Practica: 200 metros en 25 segundos." },
+    { tipo: "pizarra", contenido: "Distancia = 200 metros, Tiempo = 25 segundos" },
+    { tipo: "preguntar", texto: "¿Cuál es su velocidad?", respuesta: "8" }] }] }, "aprender");
+  check("velocidad: respuesta calificada = 8 (no 200)",
+    velLSG.pasos.find((d) => d.tipo === "preguntar")?.respuesta === "8");
 
   const san = processLSG({ escena: "x", intencion: "resolver", directivas: [
     { tipo: "pizarra", contenido: "$x^2 - 9$" }, { tipo: "preguntar", texto: "¿x?", respuesta: "1" }] }, "resolver");

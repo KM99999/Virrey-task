@@ -68,6 +68,17 @@ function fracVal(s) {
   return Number.isFinite(n) ? n : NaN;
 }
 
+// Valor numérico incluso si viene con unidades al final: "8metros/segundo" → 8,
+// "1/2litros" → 0.5. Solo extrae el número si está AL INICIO (evita capturar un
+// número suelto dentro de una frase conceptual como "sumar7aambos" → NO).
+function numFrom(s) {
+  const str = String(s).replace(/^[a-z]+=/, "");
+  const direct = fracVal(str);
+  if (Number.isFinite(direct)) return direct;
+  const m = str.match(/^-?\d+\/\d+|^-?\d+(?:\.\d+)?/);
+  return m ? fracVal(m[0]) : NaN;
+}
+
 // Evalúa la respuesta del alumno contra la esperada.
 // Devuelve { known:boolean, correct:boolean }. Si no hay respuesta esperada
 // deducible, known=false (el PSE hará autoevaluación Sí/No).
@@ -79,9 +90,10 @@ export function checkAnswer(student, expected) {
   const b = normalizeAnswer(expected);
   if (!a) return { known: true, correct: false };
   if (a === b) return { known: true, correct: true };
-  // Comparación por VALOR, aceptando fracciones equivalentes (1/2 == 3/6 == 0.5) y decimales.
-  const va = fracVal(a.replace(/^[a-z]+=/, ""));
-  const vb = fracVal(b.replace(/^[a-z]+=/, ""));
+  // Comparación por VALOR, aceptando fracciones equivalentes (1/2 == 3/6 == 0.5),
+  // decimales y respuestas con unidades ("8" == "8 metros/segundo").
+  const va = numFrom(a);
+  const vb = numFrom(b);
   if (Number.isFinite(va) && Number.isFinite(vb)) {
     return { known: true, correct: Math.abs(va - vb) < 1e-9 };
   }

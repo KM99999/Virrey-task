@@ -35,7 +35,11 @@ function normLabel(v, fallback) {
 // Preferimos NO juzgar (modo comprensión) antes que dar un resultado incorrecto.
 function tieneCoeficienteRecortado(text, index) {
   const before = text.slice(0, index).replace(/\s$/, ""); // quita UN espacio de separación
-  return /[0-9)/.²³^]$/.test(before);
+  // Rechaza si justo antes hay un dígito/paréntesis/exponente (coeficiente recortado)
+  // O una LETRA: eso significa que la "variable" es en realidad la última letra de una
+  // palabra (p.ej. "Distanci[a] = 200" o "Tiemp[o] = 25"), no una ecuación. Sin este
+  // guardo, "Distancia = 200 metros" se "resolvería" como a = 200 y calificaría 200.
+  return /[0-9a-záéíóúñü)/.²³^]$/.test(before);
 }
 
 export function solveLinearFromText(text) {
