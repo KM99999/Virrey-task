@@ -82,6 +82,9 @@ practicar) y la consulta. El campo "intencion" del JSON debe ser EXACTAMENTE esa
 
 ════════ METODOLOGÍA DE ENSEÑANZA (lo MÁS importante — ENSEÑA, no solo resuelvas) ════════
 El corazón de la app es CÓMO se enseña. Resolver el ejercicio sin explicar es un ERROR grave.
+- ENSEÑA COMO A ALGUIEN QUE NO SABE NADA: no asumas ningún conocimiento previo. Define cada
+  término que uses, avanza MUY paso a paso, sin saltos, con detalle y con un ejemplo concreto de
+  la vida real. Es mejor sobre-explicar que dejar una sola duda.
 - Explica el RAZONAMIENTO de cada paso. ANTES de escribir cada paso en la pizarra, incluye
   una directiva "hablar" que explique POR QUÉ se hace (la regla o el concepto), con lenguaje
   claro y cercano — no solo qué se escribe, sino por qué.
@@ -236,6 +239,79 @@ function detectarDiferenciaCuadrados(query) {
 const fmtNum = (n) => (Number.isInteger(n) ? String(n) : String(Math.round(n * 1000) / 1000));
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const preg = (texto, respuesta) => ({ tipo: "preguntar", texto, respuesta, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" });
+const countUp = (from, to) => { const r = []; for (let i = from; i <= to; i++) r.push(i); return r; };
+const countDown = (from, to) => { const r = []; for (let i = from; i >= to; i--) r.push(i); return r; };
+const nombreTema = { suma: "la suma", resta: "la resta", multiplicacion: "la multiplicación", division: "la división" };
+
+// RE-ENSEÑANZA PROFUNDA (para "no entendí"): enseña la operación DESDE CERO, paso a paso,
+// como a quien no sabe nada — con analogía cotidiana, contando uno por uno y definiendo el
+// signo. Distinta de la primera lección (otro enfoque), pero MÁS detallada, no más breve.
+function mockAritmeticaReexplica(tema) {
+  const t = ARITMETICA[tema];
+  const [a, b] = t.ejReexp, res = t.op(a, b);
+  const [qa, qb] = t.practReexp, qres = t.op(qa, qb);
+
+  const cabecera = [
+    { tipo: "avatar", accion: "sonreir" },
+    { tipo: "hablar", texto: `Tranquilo, no te preocupes. Vamos a entender ${nombreTema[tema]} desde cero, con mucha calma y con un ejemplo de la vida real.` },
+  ];
+
+  let cuerpo = [];
+  if (tema === "suma") {
+    cuerpo = [
+      { tipo: "hablar", texto: "Sumar significa JUNTAR. Si tienes dos grupos de cosas y los cuentas todos juntos, eso es sumar." },
+      { tipo: "hablar", texto: `Imagina que en una mano tienes ${a} dulces.` },
+      { tipo: "pizarra", accion: "escribir", contenido: `Primera mano: ${a} dulces` },
+      { tipo: "hablar", texto: `Y en la otra mano tienes ${b} dulces más.` },
+      { tipo: "pizarra", accion: "escribir", contenido: `Segunda mano: ${b} dulces` },
+      { tipo: "hablar", texto: "Para sumar, juntamos todos los dulces y los contamos uno por uno, sin saltarnos ninguno." },
+      { tipo: "hablar", texto: `Contamos los de la primera mano: ${countUp(1, a).join(", ")}. Y seguimos con los de la otra: ${countUp(a + 1, a + b).join(", ")}.` },
+      { tipo: "pizarra", accion: "escribir", contenido: `${countUp(1, a + b).join(", ")}  →  en total ${res}` },
+      { tipo: "hablar", texto: `Contamos ${res} dulces en total. El signo + significa "juntar", así que esto se escribe:` },
+      { tipo: "pizarra", accion: "escribir", contenido: `${a} + ${b} = ${res}` },
+    ];
+  } else if (tema === "resta") {
+    cuerpo = [
+      { tipo: "hablar", texto: "Restar significa QUITAR. Si tienes cosas y quitas algunas, al final te quedan MENOS." },
+      { tipo: "hablar", texto: `Imagina que tienes ${a} galletas sobre la mesa.` },
+      { tipo: "pizarra", accion: "escribir", contenido: `Tienes: ${a} galletas` },
+      { tipo: "hablar", texto: `Ahora te comes ${b} galletas. Vamos a quitarlas UNA POR UNA, contando hacia atrás.` },
+      { tipo: "hablar", texto: `Empezamos en ${a} y bajamos ${b} veces: ${countDown(a, a - b).join(", ")}.` },
+      { tipo: "pizarra", accion: "escribir", contenido: `${countDown(a, a - b).join(" → ")}` },
+      { tipo: "hablar", texto: `Nos quedamos en ${res}. El signo − significa "quitar", así que esto se escribe:` },
+      { tipo: "pizarra", accion: "escribir", contenido: `${a} − ${b} = ${res}` },
+    ];
+  } else if (tema === "multiplicacion") {
+    cuerpo = [
+      { tipo: "hablar", texto: "Multiplicar es una forma rápida de SUMAR grupos iguales." },
+      { tipo: "hablar", texto: `${a} × ${b} significa "${a} grupos de ${b}". Imagina ${a} bolsas, y en cada bolsa hay ${b} dulces.` },
+      { tipo: "pizarra", accion: "escribir", contenido: `${a} bolsas · ${b} dulces en cada una` },
+      { tipo: "hablar", texto: `Para saber el total, sumamos ${b} tantas veces como bolsas hay (${a} veces):` },
+      { tipo: "pizarra", accion: "escribir", contenido: `${Array(a).fill(b).join(" + ")} = ${res}` },
+      { tipo: "hablar", texto: `Son ${res} dulces en total. El signo × significa "veces", así que:` },
+      { tipo: "pizarra", accion: "escribir", contenido: `${a} × ${b} = ${res}` },
+    ];
+  } else {
+    cuerpo = [
+      { tipo: "hablar", texto: "Dividir es REPARTIR en partes iguales, para que a todos les toque lo mismo." },
+      { tipo: "hablar", texto: `${a} ÷ ${b} significa "repartir ${a} entre ${b}". Imagina ${a} dulces y ${b} amigos.` },
+      { tipo: "pizarra", accion: "escribir", contenido: `${a} dulces para ${b} amigos` },
+      { tipo: "hablar", texto: "Repartimos de a uno, dando la vuelta a cada amigo, hasta que se acaben los dulces." },
+      { tipo: "hablar", texto: `Al final, a cada amigo le toca la misma cantidad: ${res}.` },
+      { tipo: "pizarra", accion: "escribir", contenido: `A cada uno le tocan ${res}` },
+      { tipo: "hablar", texto: `El signo ÷ significa "repartir por igual", así que:` },
+      { tipo: "pizarra", accion: "escribir", contenido: `${a} ÷ ${b} = ${res}` },
+    ];
+  }
+
+  const cierre = [
+    { tipo: "hablar", texto: "¡Lo estás haciendo muy bien! Ahora inténtalo tú, con toda calma. Puedes contar con los dedos si te ayuda." },
+    { tipo: "pizarra", accion: "escribir", contenido: `${qa} ${t.simbolo} ${qb} = ?` },
+    preg(`Con calma: ¿cuánto es ${qa} ${t.simbolo} ${qb}? Escribe solo el número.`, fmtNum(qres)),
+  ];
+
+  return { escena: `demo_${tema}_reexplica`, intencion: "explicar", duracion_estimada: 90, _mock: true, directivas: [...cabecera, ...cuerpo, ...cierre] };
+}
 
 // Lección de una operación aritmética (sumar/restar/multiplicar/dividir).
 // reexplain=true → NO repite la lección: la enseña de OTRA forma, con analogía y más corta.
@@ -245,19 +321,8 @@ function mockAritmetica(tema, intent, reexplain) {
   const [pa, pb] = t.practica, pres = t.op(pa, pb);
   const ejercicio = preg(`¿Cuánto es ${pa} ${t.simbolo} ${pb}? Escribe solo el número.`, fmtNum(pres));
 
-  if (reexplain) {
-    // El alumno no entendió: otra explicación, con ANALOGÍA cotidiana y un ejercicio más simple.
-    const [ra, rb] = t.ejReexp, rres = t.op(ra, rb);
-    const [qa, qb] = t.practReexp, qres = t.op(qa, qb);
-    return { escena: `demo_${tema}_reexplica`, intencion: "explicar", duracion_estimada: 45, _mock: true, directivas: [
-      { tipo: "avatar", accion: "sonreir" },
-      { tipo: "hablar", texto: "Tranquilo, ¡vamos a verlo de otra forma, más fácil y con un ejemplo de la vida real!" },
-      { tipo: "hablar", texto: t.analogia },
-      { tipo: "pizarra", accion: "escribir", contenido: `${ra} ${t.simbolo} ${rb} = ${fmtNum(rres)}` },
-      { tipo: "hablar", texto: "¿Ves? Con algo de todos los días se entiende mejor. Probemos con números pequeños." },
-      preg(`Con calma: ¿cuánto es ${qa} ${t.simbolo} ${qb}? Escribe solo el número.`, fmtNum(qres)),
-    ] };
-  }
+  // El alumno no entendió → re-enseñanza PROFUNDA, desde cero, paso a paso.
+  if (reexplain) return mockAritmeticaReexplica(tema);
   if (intent === "practicar") {
     return { escena: `demo_${tema}`, intencion: intent, duracion_estimada: 50, _mock: true, modulos: [
       { id: "recordatorio", directivas: [

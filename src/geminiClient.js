@@ -65,7 +65,7 @@ export async function generateLSG(query, intent, opts = {}) {
   // Si el alumno no entendió, pedimos una RE-ENSEÑANZA distinta (analogía, más simple, breve),
   // no una repetición de la misma lección (el objetivo es que APRENDA, no ser un loro).
   const reteach = reexplain
-    ? "\n\nIMPORTANTE: el alumno dijo que NO ENTENDIÓ la explicación anterior. NO repitas lo mismo ni el mismo ejemplo. Enséñalo de OTRA forma: parte de una ANALOGÍA cotidiana (objetos, comida, dinero), usa pasos más pequeños y lenguaje muy simple, como a un niño. Sé BREVE y ve a lo esencial; no vuelvas a dar la lección completa. Cierra con un ejercicio más fácil."
+    ? "\n\nIMPORTANTE: el alumno dijo que NO ENTENDIÓ. NO repitas las mismas palabras ni el mismo ejemplo; explícalo de OTRA forma. Enséñalo COMO A ALGUIEN QUE NO SABE NADA: parte de una ANALOGÍA cotidiana (comida, dinero, objetos), ve MUY paso a paso y con MUCHO detalle, define cada término, no asumas ningún conocimiento previo y no te saltes pasos. Cuenta o desarrolla lo que haga falta hasta que quede clarísimo, y cierra con un ejercicio más fácil. El objetivo es que POR FIN lo entienda."
     : "";
   const userMsg = `Intención: ${intent}\nConsulta del alumno: ${query}${reteach}`;
 

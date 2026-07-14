@@ -54,9 +54,14 @@ let lastTopicQuery = null; // último TEMA consultado (para reexplicar en un "no
 
 // ¿La consulta es un SEGUIMIENTO ("no entendí", "explícamelo otra vez", "más simple")?
 // En ese caso reexplicamos el último tema, no la tratamos como un tema nuevo.
+// TOLERANTE A ERRATAS ("no enetendí", "no entiedo") — los alumnos escriben con errores.
 function esSeguimiento(q) {
-  const n = q.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-  return /(^|\s)(no lo entiend|no la entiend|no entiendo|no entend|no comprend|no me quedo claro|no capto|no me quedo|otra vez|de nuevo|mas simple|mas facil|mas despacio|mas lento|repit|explicamelo|no lo capto)/.test(n);
+  const n = q.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+  const corta = n.split(/\s+/).length <= 5;
+  // Consulta corta con "no" + raíz de entender/comprender (aunque venga con erratas).
+  if (corta && /\bno\b/.test(n) && /(t[ie]nd|tiend|ent[a-z]{0,3}d|entiend|comprend|capt|pill)/.test(n)) return true;
+  // Pedir explícitamente que se lo expliquen otra vez / más simple / más despacio.
+  return /(otra vez|de nuevo|mas simple|mas facil|mas despacio|mas lento|mas claro|no me quedo claro|no lo pill|no lo capt|reexplic|repite|explica(me|lo)?\s*(de nuevo|otra vez|mejor|mas|paso))/.test(n);
 }
 
 // --- Fase 2: avatar, voz y PSE Light ----------------------------------------

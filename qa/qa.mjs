@@ -137,15 +137,16 @@ async function unitTests() {
   ] });
   check("pizarra CONTIENE la explicación (no solo números)", board.some((l) => l.k === "explica"), `board=${JSON.stringify(board.map((l) => l.k))}`);
 
-  // Seguimiento "no entendí": reexplica el tema de OTRA forma (analogía, MÁS CORTO), NO repite.
+  // Seguimiento "no entendí": reexplica de OTRA forma, DESDE CERO y DETALLADO (no repite, no genérico).
   const normal = processLSG(mockLSG("enséñame a restar", "aprender"), "aprender").lsg;
   const reexp = processLSG(mockLSG("enséñame a restar", "explicar", { reexplain: true }), "explicar").lsg;
-  const flatN = flattenLSG(normal), flatR = flattenLSG(reexp);
-  check("'no entendí' reexplica el tema (resta, no genérico)", /demo_resta/.test(reexp.escena), reexp.escena);
-  check("'no entendí' NO repite (distinto y más corto que la lección original)",
-    flatR.length < flatN.length && reexp.escena !== normal.escena, `orig=${flatN.length} reexp=${flatR.length}`);
+  const flatR = flattenLSG(reexp);
+  const reexpH = flatR.filter((d) => d.tipo === "hablar").length;
   const reexpTxt = flatR.map((d) => `${d.texto || ""} ${d.contenido || ""}`).join(" ").toLowerCase();
-  check("'no entendí' enseña con ANALOGÍA / otra forma", /imagina|galleta|pizza|balanza|bolsa|dulce|otra forma/.test(reexpTxt));
+  check("'no entendí' reexplica el tema (resta, no genérico)", /demo_resta/.test(reexp.escena), reexp.escena);
+  check("'no entendí' NO repite (enfoque distinto al original)", reexp.escena !== normal.escena);
+  check("'no entendí' es DETALLADA paso a paso (≥7 explicaciones)", reexpH >= 7, `hablar=${reexpH}`);
+  check("'no entendí' enseña con ANALOGÍA de la vida real", /galleta|dulce|bolsa|amig|mano/.test(reexpTxt));
 }
 
 // ---------- 2) PRODUCCIÓN (Gemini real) ----------
