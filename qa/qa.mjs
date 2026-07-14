@@ -92,6 +92,15 @@ async function unitTests() {
     .lsg.modulos[0].directivas;
   check("ecuación suelta NO abre caja (se narra)", !conv.some((d) => d.tipo === "preguntar" && d.texto === "3x - 7 = 8"));
 
+  // La respuesta de práctica se deriva del EJERCICIO en la pizarra (x-4=7 → 11),
+  // NO de la solución del ejemplo (x=2). (Bug reportado por el cliente.)
+  const prac = processLSG({ escena: "x", intencion: "aprender", modulos: [
+    { id: "ej", directivas: [{ tipo: "pizarra", contenido: "x = 2" }] },
+    { id: "pr", directivas: [{ tipo: "pizarra", contenido: "x - 4 = 7" }, { tipo: "preguntar", texto: "¿Cuánto vale x?", respuesta: "2" }] },
+  ] }, "aprender").lsg;
+  const pracQ = flattenLSG(prac).find((d) => d.tipo === "preguntar");
+  check("califica el EJERCICIO de práctica (x-4=7→11), no el ejemplo (x=2)", pracQ.respuesta === "11", pracQ.respuesta);
+
   // Modo demo: NUNCA debe mostrar el placeholder inútil "Concepto principal" y SIEMPRE
   // debe dar un ejercicio de práctica REAL con respuesta (regresión reportada por el cliente).
   for (const intent of ["practicar", "aprender"]) {

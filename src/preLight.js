@@ -256,6 +256,10 @@ export function processLSG(rawLsg, intent) {
   // se añade una de cierre.
   enforceSingleQuestion(lsg, pasos, counter, intent);
 
+  // Calificación correcta: la respuesta de la pregunta debe ser la del EJERCICIO DE PRÁCTICA
+  // escrito en la pizarra (p.ej. "x - 4 = 7" → 11), NO la solución del ejemplo (p.ej. "x = 2").
+  fixPracticeAnswer(lsg, pasos);
+
   lsg.duracion_estimada = Number(rawLsg.duracion_estimada) > 0
     ? Number(rawLsg.duracion_estimada)
     : estimateDuration(pasos);
@@ -379,6 +383,32 @@ function enforceSingleQuestion(lsg, pasos, counter, intent) {
   // Reconstruir `pasos` con las directivas resultantes, en orden.
   pasos.length = 0;
   for (const arr of arrays) for (const d of arr) pasos.push({ ...d });
+}
+
+// La respuesta a calificar debe ser la del EJERCICIO de práctica escrito en la pizarra
+// (la ecuación justo antes de la pregunta, p.ej. "x - 4 = 7" → 11), NO la solución del
+// ejemplo (p.ej. "x = 2"). Resuelve ese ejercicio y lo fija como respuesta autoritativa;
+// si no es una ecuación lineal resoluble, no toca nada (queda la respuesta previa/comprensión).
+function fixPracticeAnswer(lsg, pasos) {
+  const flat = [];
+  if (Array.isArray(lsg.modulos)) for (const m of lsg.modulos) for (const d of m.directivas) flat.push(d);
+  else if (Array.isArray(lsg.directivas)) for (const d of lsg.directivas) flat.push(d);
+
+  const qIdx = flat.findIndex((d) => d.tipo === "preguntar");
+  if (qIdx === -1) return;
+  const q = flat[qIdx];
+
+  for (let i = qIdx - 1; i >= 0; i--) {
+    if (flat[i].tipo === "pizarra") {
+      const sol = solveLinearFromText(flat[i].contenido);
+      if (sol !== null) {
+        q.respuesta = sol; // respuesta = solución del ejercicio MOSTRADO (evita usar la del ejemplo)
+        const p = pasos.find((x) => x.tipo === "preguntar");
+        if (p) p.respuesta = sol;
+      }
+      break; // solo la pizarra inmediatamente anterior (el ejercicio de práctica)
+    }
+  }
 }
 
 function estimateDuration(pasos) {
