@@ -21,6 +21,11 @@ import { solveLinearSteps } from "./preLight.js";
 export const LSG_RESPONSE_SCHEMA = {
   type: "object",
   properties: {
+    // Campo de RAZONAMIENTO interno (cadena de pensamiento). Va PRIMERO (ver
+    // propertyOrdering) para OBLIGAR a la IA a calcular el resultado del ejercicio de
+    // práctica ANTES de escribir el resto del JSON, y así fijar "respuesta" con ese valor.
+    // El frontend lo ignora (no se muestra ni se habla): es control de calidad interno.
+    verificacion_respuesta: { type: "string" },
     escena: { type: "string" },
     intencion: {
       type: "string",
@@ -43,7 +48,13 @@ export const LSG_RESPONSE_SCHEMA = {
       },
     },
   },
-  required: ["escena", "intencion"],
+  // El orden importa: la IA genera los campos en este orden, así el cálculo
+  // (verificacion_respuesta) ocurre ANTES que la pregunta y su "respuesta".
+  propertyOrdering: [
+    "verificacion_respuesta", "escena", "intencion", "duracion_estimada",
+    "modulos", "directivas",
+  ],
+  required: ["verificacion_respuesta", "escena", "intencion"],
 };
 
 function directivaSchema() {
@@ -98,6 +109,21 @@ El corazón de la app es CÓMO se enseña. Resolver el ejercicio sin explicar es
 - Metodología según el alumno: tema nuevo → explicación guiada; ejercicio → resolver paso a paso
   explicando cada transformación; si algo es sutil, usa preguntas guía (método socrático).
 
+════════ CÁLCULO Y AUTO-VERIFICACIÓN DE LA RESPUESTA (OBLIGATORIO, lo más crítico) ════════
+La respuesta correcta debe ser CORRECTA sea cual sea la redacción del ejercicio (ecuación,
+problema verbal, división, velocidad, geometría, fracciones, lo que sea). Para garantizarlo:
+1. RAZONA PRIMERO (cadena de pensamiento). El PRIMER campo del JSON es "verificacion_respuesta":
+   ahí, ANTES de escribir nada más, RESUELVE TÚ MISMO paso a paso el ejercicio de práctica que vas
+   a proponer y obtén su RESULTADO NUMÉRICO EXACTO. Escribe el ejercicio, el cálculo y el resultado.
+   Ejemplo: "Ejercicio: corredor 200 m en 25 s → velocidad = distancia/tiempo. Cálculo: 200 ÷ 25 = 8.
+   Resultado: 8 (metros/segundo)."
+2. VALIDACIÓN ESTRICTA. Verifica SIEMPRE que el valor del campo "respuesta" de la "preguntar"
+   coincida EXACTAMENTE con el resultado calculado en "verificacion_respuesta" (con la operación
+   matemática planteada en la práctica). Si no coincide, CORRÍGELO antes de terminar.
+   La respuesta es el RESULTADO de la operación, NUNCA un dato del enunciado (una distancia, un
+   tiempo, un precio…) ni la respuesta copiada de un ejemplo anterior. Ej.: si la práctica es
+   "200 m en 25 s, ¿velocidad?", la respuesta es 8, JAMÁS 200 ni 25.
+
 ════════ PREGUNTA FINAL (evita preguntas triviales) ════════
 - Cierra con UNA sola directiva "preguntar" que sea un EJERCICIO NUEVO de práctica: similar al
   que enseñaste pero con NÚMEROS DISTINTOS, para que el alumno lo resuelva por su cuenta.
@@ -109,7 +135,8 @@ El corazón de la app es CÓMO se enseña. Resolver el ejercicio sin explicar es
   pregunta. La función/ecuación del texto de la pregunta debe ser la MISMA que la última
   escrita en la pizarra. NUNCA preguntes por "f(x) = x" mientras la pizarra muestra "f(x) = x⁵".
 - Incluye SIEMPRE el campo "respuesta" con la respuesta del NUEVO ejercicio, corta (p.ej. "4"
-  o "1/2" para fracciones). Es obligatorio para poder calificar.
+  o "1/2" para fracciones). Es obligatorio para poder calificar. DEBE ser EXACTAMENTE el resultado
+  que calculaste en "verificacion_respuesta" (ver sección de AUTO-VERIFICACIÓN).
 - La pregunta debe ser CORTA y directa: UNA sola frase con el ejercicio (máx. ~15 palabras).
   NO metas instrucciones largas, opciones, ni ejemplos dentro de la pregunta, ni la repitas.
 - Debe terminar con "?". Las opciones/ecuaciones van dentro de su "texto", no como "preguntar" sueltas.
