@@ -114,6 +114,18 @@ async function unitTests() {
     directivas: [{ tipo: "hablar", texto: "Ya expliqué." }, { tipo: "preguntar", texto: "¿Entendiste?" }] }, "explicar");
   check("comprensión: sin respuesta inyectada", !compQ.pasos.find((d) => d.tipo === "preguntar")?.respuesta);
 
+  // Recuperación: la IA escribió el EJERCICIO como pizarra (terminando en "?") sin "preguntar".
+  // Debe convertirse en la pregunta y calificarse con el resultado de la IA (área 5×10 = 50).
+  const areaRec = processLSG({ verificacion_respuesta: "5x10=50. Resultado: 50 cm2", escena: "a", intencion: "aprender",
+    modulos: [{ id: "ej", directivas: [
+      { tipo: "hablar", texto: "El área es base por altura." },
+      { tipo: "pizarra", contenido: "¿Cuánto es el área de un rectángulo con Base = 5 y Altura = 10?" }] }] }, "aprender");
+  const areaQ = areaRec.pasos.find((d) => d.tipo === "preguntar");
+  check("recuperación: pregunta desde pizarra (área)", /rect/i.test(areaQ?.texto || ""));
+  check("recuperación: respuesta = 50 (no dato del enunciado)", areaQ?.respuesta === "50");
+  check("recuperación: pizarra-pregunta no duplicada",
+    !areaRec.pasos.some((d) => d.tipo === "pizarra" && /\?\s*$/.test(d.contenido || "")));
+
   const san = processLSG({ escena: "x", intencion: "resolver", directivas: [
     { tipo: "pizarra", contenido: "$x^2 - 9$" }, { tipo: "preguntar", texto: "¿x?", respuesta: "1" }] }, "resolver");
   check("saneo: quita $ y LaTeX", san.lsg.directivas.some((d) => d.contenido === "x² - 9"));

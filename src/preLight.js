@@ -378,22 +378,35 @@ function enforceSingleQuestion(lsg, pasos, counter, intent) {
   }
 
   if (!seen) {
-    // Si la lección terminó con un EJERCICIO resoluble en la pizarra pero sin pregunta, lo
-    // convertimos en la pregunta ("Resuelve: …") para que sea un ejercicio real y calificable,
-    // en vez de un genérico "¿Te gustaría practicar?".
-    let ejercicio = null;
-    for (const arr of arrays) for (const d of arr) {
-      if (d.tipo === "pizarra" && d.contenido && solveLinearFromText(d.contenido) !== null) ejercicio = d.contenido;
+    // La IA a veces escribe el EJERCICIO de práctica como "pizarra" (muchas veces terminando en
+    // "?") en lugar de una directiva "preguntar", y entonces no hay pregunta real. Lo recuperamos:
+    //  - si una pizarra ES una pregunta (termina en "?"), la usamos como enunciado (y la quitamos
+    //    de la pizarra para no duplicarla);
+    //  - si es una ecuación resoluble ("2x - 5 = 7"), la planteamos como "resuélvelo tú".
+    // Tomamos la ÚLTIMA coincidencia (el ejercicio de cierre).
+    let promote = null;
+    for (const arr of arrays) for (let i = 0; i < arr.length; i++) {
+      const d = arr[i];
+      if (d.tipo !== "pizarra" || !d.contenido) continue;
+      if (/\?\s*$/.test(d.contenido)) promote = { arr, i, texto: d.contenido, quitar: true };
+      else if (solveLinearFromText(d.contenido) !== null) {
+        promote = { arr, i, texto: `Ahora resuélvelo tú: ${d.contenido}. ¿Cuánto vale?`, quitar: false };
+      }
+    }
+    let texto;
+    if (promote) {
+      texto = promote.texto;
+      if (promote.quitar) promote.arr.splice(promote.i, 1); // era una pregunta literal: no duplicar
+    } else {
+      texto = intent === "aprender" || intent === "practicar"
+        ? "¿Te gustaría practicar con otro ejemplo?"
+        : "¿Entendiste la explicación?";
     }
     const last = arrays[arrays.length - 1];
     last.push({
       id: ++counter.n,
       tipo: "preguntar",
-      texto: ejercicio
-        ? `Ahora resuélvelo tú: ${ejercicio}. ¿Cuánto vale?`
-        : intent === "aprender" || intent === "practicar"
-          ? "¿Te gustaría practicar con otro ejemplo?"
-          : "¿Entendiste la explicación?",
+      texto,
       esperar_respuesta: true,
       si_correcto: intent === "practicar" ? "felicitar" : "continuar",
       si_incorrecto: "mostrar_otro_ejemplo",
