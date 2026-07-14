@@ -110,6 +110,81 @@ export function solveFractionFromText(text) {
   return sd === 1 ? String(sn) : `${sn}/${sd}`;
 }
 
+// ─── Calculadora determinista de la respuesta ─────────────────────────────────
+// La IA (modelo ligero) a veces se EQUIVOCA en aritmética simple (p.ej. "7×3=12") o
+// confunde el ejemplo con la práctica. Para GARANTIZAR que la respuesta calificada sea
+// correcta sea cual sea la redacción, la calculamos NOSOTROS con aritmética exacta
+// (racional) siempre que el ejercicio sea reconocible. No es un marco rígido: cubre
+// expresiones explícitas (7×3, 20÷5, 2/5+1/10) y las fórmulas más comunes (velocidad,
+// área/perímetro de rectángulo, cuadrado y triángulo). Si no reconoce el ejercicio,
+// devuelve null y se usa el resultado que la IA calculó paso a paso.
+const rgcd = (a, b) => { a = Math.abs(a); b = Math.abs(b); while (b) { [a, b] = [b, a % b]; } return a || 1; };
+function rat(n, d = 1) { if (d < 0) { n = -n; d = -d; } const g = rgcd(n, d); return { n: n / g, d: d / g }; }
+const radd = (a, b) => rat(a.n * b.d + b.n * a.d, a.d * b.d);
+const rsub = (a, b) => rat(a.n * b.d - b.n * a.d, a.d * b.d);
+const rmul = (a, b) => rat(a.n * b.n, a.d * b.d);
+const rdiv = (a, b) => { if (b.n === 0) throw new Error("÷0"); return rat(a.n * b.d, a.d * b.n); };
+function numTok(tok) {
+  const neg = tok.startsWith("-");
+  const t = tok.replace("-", "");
+  const [i, f = ""] = t.split(".");
+  const den = Math.pow(10, f.length);
+  const n = parseInt((i + f) || "0", 10) * (neg ? -1 : 1);
+  return rat(n, den);
+}
+function fmtRat(r) { return r.d === 1 ? String(r.n) : `${r.n}/${r.d}`; }
+
+// Evalúa una expresión aritmética (números, + - * /, paréntesis) con precedencia, exacta.
+function evalExpr(expr) {
+  const toks = expr.match(/\d+\.?\d*|[-+*/()]/g);
+  if (!toks) return null;
+  const out = [], ops = [], prec = { "+": 1, "-": 1, "*": 2, "/": 2 };
+  const apply = () => { const op = ops.pop(); const b = out.pop(), a = out.pop(); if (!a || !b) throw new Error("expr");
+    out.push(op === "+" ? radd(a, b) : op === "-" ? rsub(a, b) : op === "*" ? rmul(a, b) : rdiv(a, b)); };
+  for (const tk of toks) {
+    if (/^\d/.test(tk)) out.push(numTok(tk));
+    else if (tk === "(") ops.push(tk);
+    else if (tk === ")") { while (ops.length && ops[ops.length - 1] !== "(") apply(); ops.pop(); }
+    else { while (ops.length && prec[ops[ops.length - 1]] >= prec[tk]) apply(); ops.push(tk); }
+  }
+  while (ops.length) apply();
+  return out.length === 1 ? out[0] : null;
+}
+
+// Calcula la respuesta EXACTA del ejercicio descrito en el texto, o null si no lo reconoce.
+export function computeAnswer(text) {
+  if (typeof text !== "string" || !text.trim()) return null;
+  // Normaliza símbolos y operadores escritos con palabras ("dividido entre", "por", "más"…).
+  let norm = text.replace(/×|·/g, "*").replace(/÷/g, "/")
+    .replace(/dividido\s+(?:entre|por)/gi, " / ")
+    .replace(/multiplicado\s+por/gi, " * ")
+    .replace(/(\d)\s*por\s*(\d)/gi, "$1 * $2")
+    .replace(/(\d)\s*x\s*(\d)/gi, "$1 * $2")   // "7 x 3" (equis entre dígitos) = multiplicación
+    .replace(/(\d)\s*entre\s*(\d)/gi, "$1 / $2")
+    .replace(/\bmás\b/gi, " + ").replace(/\bmenos\b/gi, " - ");
+
+  // 1) Expresión aritmética explícita (al menos un operador entre números; admite paréntesis).
+  const m = norm.match(/\(?\s*\d+\.?\d*\s*(?:[-+*/]\s*\(?\s*\d+\.?\d*\s*\)?\s*)+/);
+  if (m) { try { const r = evalExpr(m[0].replace(/\s+/g, "")); if (r) return fmtRat(r); } catch { /* sigue */ } }
+
+  // 2) Fórmulas de problemas verbales frecuentes.
+  const low = text.toLowerCase();
+  const nums = (low.match(/\d+(?:[.,]\d+)?/g) || []).map((x) => Number(x.replace(",", ".")));
+  const dist = low.match(/(\d+(?:[.,]\d+)?)\s*(?:kil[oó]metros|km|metros|m)\b/);
+  const time = low.match(/(\d+(?:[.,]\d+)?)\s*(?:segundos|seg|s|minutos|min|horas|h)\b/);
+  if (/velocidad|rapidez/.test(low) && dist && time) {
+    try { return fmtRat(rdiv(numTok(dist[1].replace(",", ".")), numTok(time[1].replace(",", ".")))); } catch { /* sigue */ }
+  }
+  if (/[aá]rea/.test(low)) {
+    if (/rect[aá]ngulo/.test(low) && nums.length >= 2) return String(nums[0] * nums[1]);
+    if (/cuadrado/.test(low) && nums.length >= 1) return String(nums[0] * nums[0]);
+    if (/tri[aá]ngulo/.test(low) && nums.length >= 2) { try { return fmtRat(rdiv(rat(nums[0] * nums[1]), rat(2))); } catch { /* sigue */ } }
+  }
+  if (/per[ií]metro/.test(low) && /rect[aá]ngulo/.test(low) && nums.length >= 2) return String(2 * (nums[0] + nums[1]));
+  if (/per[ií]metro/.test(low) && /cuadrado/.test(low) && nums.length >= 1) return String(4 * nums[0]);
+  return null;
+}
+
 // Genera los PASOS de resolución de una ecuación lineal simple, para el modo demo
 // (sin IA): permite que "2x + x = 12" muestre una solución real paso a paso.
 // Devuelve { original, steps:[{explica, escribe}], answer, varName } o null.
@@ -467,19 +542,23 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
     return;
   }
 
-  // 1) Ecuación lineal LIMPIA en la pizarra inmediatamente anterior → solución EXACTA (máxima
-  //    prioridad: es determinista y evita copiar la respuesta del ejemplo, p.ej. "x-4=7" → 11).
-  for (let i = qIdx - 1; i >= 0; i--) {
-    if (flat[i].tipo === "pizarra") {
-      const sol = solveLinearFromText(flat[i].contenido);
-      if (sol !== null) { setResp(sol); return; }
-      break; // solo la pizarra inmediatamente anterior (el ejercicio de práctica)
-    }
-  }
+  // Pizarra (ejercicio) inmediatamente anterior a la pregunta.
+  let board = null;
+  for (let i = qIdx - 1; i >= 0; i--) { if (flat[i].tipo === "pizarra") { board = flat[i].contenido; break; } }
 
-  // 2) Es una pregunta de CÁLCULO → la verdad-base es el RESULTADO que la IA calculó paso a paso
-  //    en "verificacion_respuesta" (más fiable que el campo "respuesta", que a veces copia el
-  //    número del ejemplo). Funciona para cualquier redacción: velocidad, área, división, etc.
+  // 1) Ecuación lineal LIMPIA (en la pizarra o en el propio texto) → solución EXACTA determinista
+  //    (p.ej. "x-4=7" → 11); evita copiar la respuesta del ejemplo.
+  let eqSol = board != null ? solveLinearFromText(board) : null;
+  if (eqSol === null) eqSol = solveLinearFromText(q.texto);
+  if (eqSol !== null) { setResp(eqSol); return; }
+
+  // 2) CÁLCULO DETERMINISTA de la respuesta (aritmética exacta / fórmulas). Es la verdad-base:
+  //    NO dependemos de que el modelo sepa multiplicar. Cubre 7×3, 20÷5, 2/5+1/10, área, velocidad…
+  const comp = computeAnswer(q.texto) ?? (board ? computeAnswer(board) : null);
+  if (comp != null) { setResp(comp); return; }
+
+  // 3) Si no reconocemos el ejercicio, usamos el RESULTADO que la IA calculó paso a paso
+  //    ("verificacion_respuesta") — último recurso para preguntas de cálculo.
   const esCalculo = /\d/.test(q.texto) ||
     /(cu[aá]nt|cu[aá]l|calcul|resultad|vale|[aá]rea|velocidad|per[ií]metro|suma|resta|divid|multiplic)/i.test(q.texto);
   if (!esCalculo) return;
@@ -487,7 +566,7 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
   const rv = resultadoFromVerificacion(verificacion);
   if (rv) { setResp(rv); return; }
 
-  // 3) Sin verificación aprovechable: si aún no hay respuesta, intenta una suma/resta de fracciones.
+  // 4) Sin nada aprovechable: si aún no hay respuesta, intenta una suma/resta de fracciones.
   if (!(q.respuesta && String(q.respuesta).trim())) {
     const f = solveFractionFromText(q.texto);
     if (f) setResp(f);

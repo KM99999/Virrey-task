@@ -9,7 +9,7 @@
 // contengan LaTeX ni "$". Imprime un veredicto final APROBADO / RECHAZADO.
 
 import { classifyIntent } from "../src/classifier.js";
-import { processLSG, solveLinearFromText, solveFractionFromText, resultadoFromVerificacion } from "../src/preLight.js";
+import { processLSG, solveLinearFromText, solveFractionFromText, resultadoFromVerificacion, computeAnswer } from "../src/preLight.js";
 import { mockLSG } from "../src/lsgPrompt.js";
 import { generateLSG } from "../src/geminiClient.js";
 import { checkAnswer, flattenLSG, PSELight } from "../public/pseLight.js";
@@ -125,6 +125,23 @@ async function unitTests() {
   check("recuperación: respuesta = 50 (no dato del enunciado)", areaQ?.respuesta === "50");
   check("recuperación: pizarra-pregunta no duplicada",
     !areaRec.pasos.some((d) => d.tipo === "pizarra" && /\?\s*$/.test(d.contenido || "")));
+
+  // Calculadora determinista: garantiza la respuesta correcta aunque el modelo se equivoque.
+  check("calc: 7 × 3 = 21", computeAnswer("¿Cuánto es 7 × 3?") === "21");
+  check("calc: 20 ÷ 5 = 4", computeAnswer("¿Cuánto es 20 ÷ 5?") === "4");
+  check("calc: 20 dividido entre 5 = 4", computeAnswer("¿Cuánto es 20 dividido entre 5?") === "4");
+  check("calc: 2/5 + 1/10 = 1/2", computeAnswer("¿Cuánto es 2/5 + 1/10?") === "1/2");
+  check("calc: 2 + 3 × 4 = 14 (precedencia)", computeAnswer("¿Cuánto es 2 + 3 × 4?") === "14");
+  check("calc: área rectángulo 7 y 4 = 28", computeAnswer("¿Área de un rectángulo con b = 7 y h = 4?") === "28");
+  check("calc: velocidad 400 m / 8 s = 50", computeAnswer("Recorre 400 metros en 8 segundos, ¿velocidad?") === "50");
+  check("calc: no inventa en pregunta no-matemática", computeAnswer("¿Entendiste la explicación?") === null);
+  check("calc: NO evalúa una ecuación como aritmética", computeAnswer("¿Cuánto vale x en 2x - 5 = 7?") === null);
+  // El modelo se equivoca (7×3=12) → la calculadora lo corrige a 21.
+  const mulFix = processLSG({ verificacion_respuesta: "Resultado: 12", escena: "m", intencion: "aprender",
+    modulos: [{ id: "ej", directivas: [{ tipo: "hablar", texto: "Multiplicar." },
+      { tipo: "preguntar", texto: "¿Cuánto es 7 × 3?", respuesta: "12" }] }] }, "aprender");
+  check("calc: corrige el error del modelo (7×3 → 21, no 12)",
+    mulFix.pasos.find((d) => d.tipo === "preguntar")?.respuesta === "21");
 
   const san = processLSG({ escena: "x", intencion: "resolver", directivas: [
     { tipo: "pizarra", contenido: "$x^2 - 9$" }, { tipo: "preguntar", texto: "¿x?", respuesta: "1" }] }, "resolver");
