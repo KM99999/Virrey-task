@@ -43,6 +43,7 @@ const QUOTA_COOLDOWN_MS = 20 * 1000;
 // ~1 h). Así el prompt del sistema no se re-cobra como tokens de entrada en cada consulta.
 const promptCaches = new Map();      // model -> { name, expireAt }
 const cacheUnsupported = new Set();  // modelos donde el caché explícito no está disponible
+export let lastGeminiError = "";     // último error real de Gemini (diagnóstico temporal)
 
 /**
  * Genera un LSG para una consulta e intención dadas — en UNA sola llamada a la IA.
@@ -200,6 +201,7 @@ async function callGemini(apiKey, model, body) {
 
   if (!res.ok) {
     const detail = await safeText(res);
+    lastGeminiError = `HTTP ${res.status}: ${detail.replace(/\s+/g, " ").slice(0, 260)}`; // diagnóstico temporal
     const e = new Error(`Gemini API error ${res.status}: ${detail.slice(0, 300)}`);
     if (res.status === 404 || /not_found|no longer available/i.test(detail)) e.notFound = true;
     if (res.status === 429 || /resource_exhausted|credits|quota/i.test(detail)) e.quota = true;
