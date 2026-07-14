@@ -113,11 +113,13 @@ export function classifyIntent(text) {
     practicar: countMatches(norm, KEYWORDS.practicar),
   };
 
-  // Señal estructural: una ecuación/expresión concreta refuerza "resolver".
-  if (looksLikeConcreteExercise(norm)) scores.resolver += 1;
-
-  // Señal estructural: una pregunta por la razón ("¿por qué…?") refuerza "explicar".
-  if (asksForReason(norm)) scores.explicar += 1;
+  const reason = asksForReason(norm);
+  // Señal estructural: una ecuación/expresión concreta refuerza "resolver" — SALVO que sea
+  // una pregunta por la RAZÓN ("¿por qué se factoriza x²-9?"), que es explicar aunque
+  // mencione una expresión.
+  if (looksLikeConcreteExercise(norm) && !reason) scores.resolver += 1;
+  // Pregunta por la razón/finalidad ("¿por qué…?", "¿para qué…?") → señal FUERTE de explicar.
+  if (reason) scores.explicar += 2;
 
   // Elegir la intención con mayor puntaje.
   let best = "resolver"; // fallback razonable para un tutor de matemáticas

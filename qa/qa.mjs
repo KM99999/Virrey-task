@@ -113,6 +113,10 @@ async function unitTests() {
   check("demo 'restar' enseña a restar (no ecuaciones)", /restar|resta/.test(restaTxt) && !/ecuaci|2x/.test(restaTxt));
   check("demo '7 × 8' calcula 56", textoDe("cuánto es 7 × 8", "resolver").includes("56"));
   check("demo 'a^2 - b^2' factoriza (diferencia de cuadrados)", /factoriz|diferencia de cuadrados/.test(textoDe("Resuelve a^2 - b^2", "resolver")));
+  // Chip de la UI: "¿por qué factorizar x²-9?" → explicar + factoriza (no genérico, no lee "2-9").
+  check("clasif: '¿por qué se factoriza x²-9?' → explicar", classifyIntent("¿Por qué se factoriza x² - 9?").intent === "explicar");
+  check("demo 'x²-9' factoriza a (x+3)(x-3)", textoDe("¿Por qué factorizar x² - 9?", "explicar").includes("(x + 3)(x − 3)".toLowerCase()));
+  check("demo 'x^2-9' (caret) NO se lee como '2-9'", !/2\s*[-−]\s*9\s*=\s*-7/.test(textoDe("¿Por qué se factoriza x^2 - 9?", "explicar")));
   // Tema no soportado en demo: honesto, sin inventar contenido de ecuaciones.
   const genTxt = textoDe("enséñame integrales por partes", "aprender");
   check("demo tema desconocido: honesto (no finge ecuaciones)", /modo de demostraci|inténtalo de nuevo/.test(genTxt) && !/2x|despejar/.test(genTxt));

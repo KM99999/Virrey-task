@@ -218,7 +218,11 @@ function detectarTema(query) {
 
 // "2 + 3", "cuánto es 7 × 8" → calcula la operación concreta.
 function detectarOperacion(query) {
-  const n = normTema(query).replace(/[x×]/g, "*").replace(/÷/g, "/");
+  const raw = normTema(query);
+  // Si hay exponentes o potencias (x², x^2, x³) es ÁLGEBRA, no una operación simple:
+  // evita leer "x^2 - 9" como "2 - 9". Eso lo maneja la diferencia de cuadrados.
+  if (/[\^²³]/.test(raw)) return null;
+  const n = raw.replace(/[x×]/g, "*").replace(/÷/g, "/");
   const m = n.match(/(-?\d+(?:\.\d+)?)\s*([+\-*/])\s*(-?\d+(?:\.\d+)?)/);
   if (!m) return null;
   const a = Number(m[1]), op = m[2], b = Number(m[3]);
@@ -229,11 +233,20 @@ function detectarOperacion(query) {
   return { a, b, r, tema };
 }
 
-// "a² − b²", "x^2 - y^2" → factorización por diferencia de cuadrados.
+// Diferencia de cuadrados: "a² − b²" (dos variables) o "x² − 9" (variable² − cuadrado perfecto).
+// Acepta notación ² y ^2. Ej.: x² − 9 = (x+3)(x−3).
 function detectarDiferenciaCuadrados(query) {
-  const n = normTema(query).replace(/\s+/g, "");
-  const m = n.match(/([a-z])(\^2|²|2)-([a-z])(\^2|²|2)/);
-  return m && m[1] !== m[3] ? { a: m[1], b: m[3] } : null;
+  const n = normTema(query).replace(/\s+/g, "").replace(/\^2/g, "²");
+  // caso 1: variable² − variable²  (a² − b²)
+  let m = n.match(/([a-z])²-([a-z])²/);
+  if (m && m[1] !== m[2]) return { tipo: "vars", a: m[1], b: m[2] };
+  // caso 2: variable² − número, si el número es un cuadrado perfecto (x² − 9 → raíz 3)
+  m = n.match(/([a-z])²-(\d+)/);
+  if (m) {
+    const raiz = Math.sqrt(Number(m[2]));
+    if (Number.isInteger(raiz) && raiz > 0) return { tipo: "num", v: m[1], n: Number(m[2]), raiz };
+  }
+  return null;
 }
 
 const fmtNum = (n) => (Number.isInteger(n) ? String(n) : String(Math.round(n * 1000) / 1000));
@@ -415,17 +428,31 @@ function mockFraccion(intent, reexplain) {
   ] };
 }
 
-// Factorización por diferencia de cuadrados (a² − b²).
-function mockDiferenciaCuadrados({ a, b }, intent) {
-  return { escena: "demo_factorizacion", intencion: intent, duracion_estimada: 60, _mock: true, directivas: [
-    { tipo: "avatar", accion: "sonreir" },
-    { tipo: "hablar", texto: `Vamos a factorizar ${a}² − ${b}². Es una "diferencia de cuadrados".` },
-    { tipo: "pizarra", accion: "escribir", contenido: `${a}² − ${b}²` },
-    { tipo: "hablar", texto: "La regla es: a² − b² = (a + b)(a − b)." },
-    { tipo: "pizarra", accion: "escribir", contenido: `${a}² − ${b}² = (${a} + ${b})(${a} − ${b})` },
-    { tipo: "hablar", texto: `Así, ${a}² − ${b}² se factoriza como (${a} + ${b})(${a} − ${b}).` },
-    preg("Ahora tú: factoriza x² − 9. Escribe el resultado (por ejemplo: (x+3)(x−3)).", "(x+3)(x-3)"),
-  ] };
+// Factorización por diferencia de cuadrados: a² − b² (dos variables) o x² − 9 (variable − número).
+function mockDiferenciaCuadrados(d, intent) {
+  const dir = [{ tipo: "avatar", accion: "sonreir" }];
+  if (d.tipo === "vars") {
+    const { a, b } = d;
+    dir.push(
+      { tipo: "hablar", texto: `Vamos a factorizar ${a}² − ${b}². Es una "diferencia de cuadrados": un cuadrado menos otro cuadrado.` },
+      { tipo: "pizarra", accion: "escribir", contenido: `${a}² − ${b}²` },
+      { tipo: "hablar", texto: "La regla es: a² − b² = (a + b)(a − b). Se abre en dos paréntesis: uno con + y otro con −." },
+      { tipo: "pizarra", accion: "escribir", contenido: `${a}² − ${b}² = (${a} + ${b})(${a} − ${b})` },
+      { tipo: "hablar", texto: `Así, ${a}² − ${b}² se factoriza como (${a} + ${b})(${a} − ${b}).` },
+      preg("Ahora tú: factoriza x² − 4. Escribe el resultado (por ejemplo: (x+2)(x−2)).", "(x+2)(x-2)"),
+    );
+  } else {
+    const { v, n, raiz } = d;
+    dir.push(
+      { tipo: "hablar", texto: `Vamos a factorizar ${v}² − ${n}. Es una "diferencia de cuadrados", porque ${n} es ${raiz} al cuadrado (${raiz} × ${raiz} = ${n}).` },
+      { tipo: "pizarra", accion: "escribir", contenido: `${v}² − ${n}   (o sea ${v}² − ${raiz}²)` },
+      { tipo: "hablar", texto: `La regla es: a² − b² = (a + b)(a − b). Aquí "a" es ${v} y "b" es ${raiz}.` },
+      { tipo: "pizarra", accion: "escribir", contenido: `${v}² − ${n} = (${v} + ${raiz})(${v} − ${raiz})` },
+      { tipo: "hablar", texto: `Por eso ${v}² − ${n} se factoriza como (${v} + ${raiz})(${v} − ${raiz}).` },
+      preg(`Ahora tú: factoriza ${v}² − 4. Escribe el resultado (por ejemplo: (${v}+2)(${v}−2)).`, `(${v}+2)(${v}-2)`),
+    );
+  }
+  return { escena: "demo_factorizacion", intencion: intent, duracion_estimada: 70, _mock: true, directivas: dir };
 }
 
 // Ecuación lineal (tema, sin una ecuación concreta en la consulta).
