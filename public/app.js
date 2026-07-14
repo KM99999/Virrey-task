@@ -60,8 +60,9 @@ function esSeguimiento(q) {
   const corta = n.split(/\s+/).length <= 5;
   // Consulta corta con "no" + raíz de entender/comprender (aunque venga con erratas).
   if (corta && /\bno\b/.test(n) && /(t[ie]nd|tiend|ent[a-z]{0,3}d|entiend|comprend|capt|pill)/.test(n)) return true;
-  // Pedir explícitamente que se lo expliquen otra vez / más simple / más despacio.
-  return /(otra vez|de nuevo|mas simple|mas facil|mas despacio|mas lento|mas claro|no me quedo claro|no lo pill|no lo capt|reexplic|repite|explica(me|lo)?\s*(de nuevo|otra vez|mejor|mas|paso))/.test(n);
+  // Pedir que se lo expliquen OTRA VEZ / el paso anterior / de otra forma / más despacio
+  // (peticiones conversacionales que se refieren a la lección anterior, no a un tema nuevo).
+  return /(paso anterior|paso previo|otra vez|de nuevo|nuevamente|mas simple|mas facil|mas despacio|mas lento|mas claro|de otra forma|no me quedo claro|no lo pill|no lo capt|reexplic|repite|repetir|vuelve a explic|regresa al|explica(me|lo)?\s*(de nuevo|otra vez|mejor|mas|el paso|paso))/.test(n);
 }
 
 // --- Fase 2: avatar, voz y PSE Light ----------------------------------------
