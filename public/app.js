@@ -75,12 +75,14 @@ setModo(modo, false); // estado inicial (sin aviso)
 // TOLERANTE A ERRATAS ("no enetendí", "no entiedo") — los alumnos escriben con errores.
 function esSeguimiento(q) {
   const n = q.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+  // "No entendí / no lo entiendo / no comprendo" en CUALQUIER posición (frase clara de no-comprensión).
+  if (/\bno\s+(lo\s+|le\s+|la\s+|me\s+|se\s+lo\s+)?(entend|entiend|comprend|capt|pill)/.test(n)) return true;
   const corta = n.split(/\s+/).length <= 5;
   // Consulta corta con "no" + raíz de entender/comprender (aunque venga con erratas).
   if (corta && /\bno\b/.test(n) && /(t[ie]nd|tiend|ent[a-z]{0,3}d|entiend|comprend|capt|pill)/.test(n)) return true;
-  // Pedir que se lo expliquen OTRA VEZ / el paso anterior / de otra forma / más despacio
+  // Pedir que se lo expliquen OTRA VEZ / el paso anterior / de otra forma / más despacio / "para dummies"
   // (peticiones conversacionales que se refieren a la lección anterior, no a un tema nuevo).
-  return /(paso anterior|paso previo|otra vez|de nuevo|nuevamente|mas simple|mas facil|mas despacio|mas lento|mas claro|de otra forma|no me quedo claro|no lo pill|no lo capt|reexplic|repite|repetir|vuelve a explic|regresa al|explica(me|lo)?\s*(de nuevo|otra vez|mejor|mas|el paso|paso))/.test(n);
+  return /(paso anterior|paso previo|otra vez|de nuevo|nuevamente|mas simple|mas facil|mas despacio|mas lento|mas claro|de otra forma|para dummies|no me quedo claro|no lo pill|no lo capt|reexplic|repite|repetir|vuelve a explic|regresa al|explica(me|lo)?\s*(de nuevo|otra vez|mejor|mas|el paso|paso))/.test(n);
 }
 
 // ¿La consulta pide AJUSTAR EL NIVEL del MISMO tema ("algo más básico", "uno más fácil",
@@ -97,6 +99,28 @@ function ajusteNivel(q) {
   // Consulta CORTA que pide básico/fácil (o difícil) SIN nombrar un tema nuevo.
   if (palabras <= 5 && facil.test(n)) return "mas_facil";
   if (palabras <= 5 && dificil.test(n)) return "mas_dificil";
+  return null;
+}
+
+// ¿La consulta CONTINÚA la conversación sobre el tema activo? (pedir OTRO ejemplo / una ANALOGÍA
+// distinta —"con perritos"—, o una pregunta conceptual que se refiere a lo anterior —"¿eso quiere
+// decir…?", "¿qué relación tienen… con…?"—). En estos casos se mantiene el TEMA activo y se
+// responde el mensaje dentro de ese tema, en vez de tratarlo como un tema nuevo.
+function esContinuacion(q) {
+  const n = q.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+  // Pedir otro ejemplo / otra analogía / enséñame con <algo> / con perritos, manzanas, dinero…
+  if (/(otro|otra|distint[oa]|diferente)\s*(ejemplo|analog|forma|manera)|con\s+(otro|un)\s+ejemplo|ejemplo\s+(distint|diferent|nuev)|que no sea\b|diferente a\b|(ens[enñ]a|expl[ií]ca)\w*\s+con\b|con\s+(perr|gat|manzan|dinero|comida|dulc|pelot|caramel|frut|deporte|futbol|carr)/.test(n)) return true;
+  // Pregunta/afirmación que se refiere a lo ANTERIOR (deixis) o a los ejemplos ya vistos.
+  if (/\beso\b|\besto\b|\besos\b|\bentonces\b|\bo sea\b|quiere decir|\bpor eso\b|los? ejemplos?\b|lo anterior|lo que (dij|mencion|explic|vimo)|qu[eé] relaci[oó]n/.test(n)) return true;
+  return null;
+}
+
+// Clasifica el tipo de SEGUIMIENTO del tema activo (o null si es un tema nuevo).
+function clasificarSeguimiento(q) {
+  const aj = ajusteNivel(q);            // "mas_facil" | "mas_dificil"
+  if (aj) return aj;
+  if (esSeguimiento(q)) return "reexplicar"; // "no entendí", "otra vez", "de otra forma"…
+  if (esContinuacion(q)) return "continuacion"; // otro ejemplo / analogía / pregunta contextual
   return null;
 }
 
@@ -264,14 +288,16 @@ async function submitQuery() {
     return;
   }
 
-  // Seguimiento del tema activo: "no entendí" (reexplicar) o "más básico/difícil" (ajustar nivel).
-  // En ambos casos NO es un tema nuevo: se mantiene el TEMA anterior (lastTopicQuery).
-  const ajuste = ajusteNivel(query);              // "mas_facil" | "mas_dificil" | null
-  const seguimiento = esSeguimiento(query) || !!ajuste;
+  // Seguimiento del tema activo: reexplicar ("no entendí"), ajustar nivel ("más básico/difícil")
+  // o continuar la conversación (otro ejemplo, analogía, pregunta conceptual). En todos estos
+  // casos NO es un tema nuevo: se mantiene el TEMA anterior (lastTopicQuery). Solo se considera
+  // seguimiento si YA hay un tema activo.
+  const tipoSeg = lastTopicQuery ? clasificarSeguimiento(query) : null; // p.ej. "continuacion"
+  const seguimiento = !!tipoSeg;
   const body = { query, modo }; // modo: "demo" (básico) o "ia" (avanzado)
-  if (seguimiento && lastTopicQuery) {
+  if (seguimiento) {
     body.contexto = lastTopicQuery;               // el TEMA activo, para no perderlo
-    if (ajuste) body.ajuste = ajuste;             // pista de nivel (más fácil / más difícil)
+    body.seguimiento = tipoSeg;                    // reexplicar | mas_facil | mas_dificil | continuacion
   }
 
   setLoading(true);

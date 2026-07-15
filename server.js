@@ -42,8 +42,10 @@ app.post("/api/query", async (req, res) => {
   // Contexto de conversación: el último tema, para reexplicar cuando el alumno dice
   // "no entendí". El frontend lo envía solo cuando la consulta es un seguimiento.
   const contexto = typeof req.body?.contexto === "string" ? req.body.contexto.trim().slice(0, 2000) : "";
-  // Ajuste de nivel del MISMO tema: "más fácil/básico" o "más difícil" (opcional).
-  const ajuste = req.body?.ajuste === "mas_facil" || req.body?.ajuste === "mas_dificil" ? req.body.ajuste : "";
+  // Tipo de seguimiento del tema activo (opcional): reexplicar | mas_facil | mas_dificil | continuacion.
+  const SEG_VALIDOS = ["reexplicar", "mas_facil", "mas_dificil", "continuacion"];
+  const seguimiento = SEG_VALIDOS.includes(req.body?.seguimiento) ? req.body.seguimiento
+    : (contexto ? "reexplicar" : ""); // compatibilidad: si hay contexto sin tipo, es un "no entendí"
   // Modo elegido por el usuario en la interfaz: "demo" (contenido básico sin IA),
   // "ia" (usa Gemini) o vacío (automático: intenta IA y cae a demo si falla).
   const modo = req.body?.modo === "demo" || req.body?.modo === "ia" ? req.body.modo : "";
@@ -56,15 +58,21 @@ app.post("/api/query", async (req, res) => {
   }
 
   try {
-    // Seguimiento ("no entendí"): reexplicar el tema anterior de OTRA forma (no repetir).
+    // Seguimiento del tema activo (mantiene el TEMA anterior; no es un tema nuevo).
     const reexplain = !!contexto;
-    const effectiveQuery = reexplain ? contexto : query;
+    const esNivel = seguimiento === "mas_facil" || seguimiento === "mas_dificil";
+    const esContinuacion = seguimiento === "continuacion";
+    // effectiveQuery: reexplicar/nivel re-usan el TEMA; "continuacion" responde el MENSAJE real del
+    // alumno pero ANCLADO al tema (para que Gemini y el demo no lo pierdan).
+    const effectiveQuery = !reexplain ? query
+      : esContinuacion ? `Tema: ${contexto}. Mensaje del alumno (seguimiento del MISMO tema): ${query}`
+      : contexto;
 
-    // 1) Intención: si el alumno pide "más fácil/difícil" del mismo tema → "practicar" (un ejercicio
-    //    del MISMO tema, más fácil o más difícil). En un "no entendí" → "explicar" (re-enseñar de otra
-    //    forma). Si no es seguimiento, la decide el clasificador local.
+    // 1) Intención: "más fácil/difícil" → practicar (ejercicio del mismo tema); "continuación" o
+    //    "no entendí" → explicar (responder/re-enseñar dentro del tema). Si no es seguimiento, la
+    //    decide el clasificador local.
     const classification = reexplain
-      ? ajuste
+      ? esNivel
         ? { intent: "practicar", confidence: 0.9, scores: { resolver: 0, aprender: 0, explicar: 0, practicar: 1 } }
         : { intent: "explicar", confidence: 0.9, scores: { resolver: 0, aprender: 0, explicar: 1, practicar: 0 } }
       : classifyIntent(query);
@@ -83,7 +91,7 @@ app.post("/api/query", async (req, res) => {
     //    (sin bloqueo por enfriamiento); auto (vacío) → intenta IA con enfriamiento tras 429.
     const { lsg: rawLsg, source, model, usage, cached } = await generateLSG(
       effectiveQuery, classification.intent,
-      { reexplain, ajuste, forceDemo: modo === "demo", forceAI: modo === "ia" }
+      { reexplain, seguimiento, forceDemo: modo === "demo", forceAI: modo === "ia" }
     );
 
     // 3) PRE Light: validar y normalizar en bloques predecibles.
