@@ -81,6 +81,8 @@ function esSeguimiento(q) {
   const corta = n.split(/\s+/).length <= 5;
   // Consulta corta con "no" + raíz de entender/comprender (aunque venga con erratas).
   if (corta && /\bno\b/.test(n) && /(t[ie]nd|tiend|ent[a-z]{0,3}d|entiend|comprend|capt|pill)/.test(n)) return true;
+  // Inglés: no-comprensión / pedir re-explicación ("I don't understand", "explain again", "for dummies").
+  if (/\b(i\s+)?(don'?t|do not|didn'?t|did not|can'?t|cannot)\s+(understand|get|follow)\b|\bdidn'?t (understand|get)\b|explain\s+(it\s+|this\s+)?(again|differently|another way)|\bfor dummies\b|\bonce more\b|\bmake it (simpler|clearer)\b/.test(n)) return true;
   // Pedir que se lo expliquen OTRA VEZ / el paso anterior / de otra forma / más despacio / "para dummies"
   // (peticiones conversacionales que se refieren a la lección anterior, no a un tema nuevo).
   return /(paso anterior|paso previo|otra vez|de nuevo|nuevamente|mas simple|mas facil|mas despacio|mas lento|mas claro|de otra forma|para dummies|no me quedo claro|no lo pill|no lo capt|reexplic|repite|repetir|vuelve a explic|regresa al|explica(me|lo)?\s*(de nuevo|otra vez|mejor|mas|el paso|paso))/.test(n);
@@ -100,6 +102,9 @@ function ajusteNivel(q) {
   // Consulta CORTA que pide básico/fácil (o difícil) SIN nombrar un tema nuevo.
   if (palabras <= 5 && facil.test(n)) return "mas_facil";
   if (palabras <= 5 && dificil.test(n)) return "mas_dificil";
+  // Inglés: "more basic/simple/easy", "easier", "simpler" → más fácil; "harder", "more difficult" → más difícil.
+  if (/\b(more|too)\s+(basic|simple|easy|elementary)\b|\beasier\b|\bsimpler\b/.test(n)) return "mas_facil";
+  if (/\b(more|too)\s+(hard|difficult|advanced|complex|challenging)\b|\bharder\b/.test(n)) return "mas_dificil";
   return null;
 }
 
@@ -117,6 +122,11 @@ function esContinuacion(q) {
   if (/(otro|otra|distint[oa]|diferente)\s*(ejemplos?|analog|forma|manera)|con\s+(otro|un)\s+ejemplos?|ejemplos?\s+(distint|diferent|nuev)|que no sea\b|diferente a\b|(ense[nñ]a|expl[ií]ca)\w*\s+con\b|(con|de)\s+(perr|gat|manzan|pera|naranj|platano|banana|dinero|moneda|comida|dulce|pelot|caramel|fruta|deporte|futbol|carro|coche|juguete|animal|galleta|pizza|chocolate|flor|arbol|canica|globo)/.test(n)) return true;
   // Pregunta/afirmación que se refiere a lo ANTERIOR (deixis) o a los ejemplos ya vistos.
   if (/\beso\b|\besto\b|\besos\b|\bentonces\b|\bo sea\b|quiere decir|\bpor eso\b|los? ejemplos?\b|lo anterior|lo que (dij|mencion|explic|vimo)|qu[eé] relaci[oó]n/.test(n)) return true;
+  // Inglés: analogía con un objeto ("with/using apples"), otro ejemplo, o pregunta conceptual (deixis).
+  // "explain addition with examples" NO entra (nombra un tema): solo objetos concretos y "another example".
+  if (/\b(with|using|use)\s+(an?\s+|the\s+)?(apple|orange|banana|pear|dog|puppy|cat|money|coin|ball|candy|fruit|food|car|toy|animal|cookie|pizza|star|flower)s?\b/.test(n)) return true;
+  if (/\b(another|other|a different)\s+(example|analogy|way)\b|\bdifferent example\b/.test(n)) return true;
+  if (/\bdoes that mean\b|\bthat means\b|\bwhat('?s| is) the (relation|relationship)\b|\bhow (is|does) (this|that|it) relate\b/.test(n)) return true;
   return null;
 }
 
