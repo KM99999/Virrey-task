@@ -63,6 +63,12 @@ async function unitTests() {
   check("clasif: 'dame la solución de 2x=8' → resolver", classifyIntent("Dame la solución de 2x = 8").intent === "resolver");
   check("clasif: 'quiero aprender a resolver' → aprender", classifyIntent("Quiero aprender a resolver ecuaciones").intent === "aprender");
 
+  // Intención "pedir práctica": debe distinguirse de "aprender" (bug reportado por el cliente).
+  check("clasif: 'déjame un ejercicio' → practicar", classifyIntent("déjame un ejercicio").intent === "practicar");
+  check("clasif: 'otro ejercicio' → practicar", classifyIntent("otro ejercicio").intent === "practicar");
+  check("clasif: 'un ejercicio' → practicar", classifyIntent("un ejercicio").intent === "practicar");
+  check("clasif: 'resuelve este ejercicio: 2x=4' → resolver (no practicar)", classifyIntent("resuelve este ejercicio: 2x=4").intent === "resolver");
+
   check("solver: 2x - 3 = 7 → 5", solveLinearFromText("2x - 3 = 7") === "5");
   check("solver: 3x + x = 20 → 5", solveLinearFromText("3x + x = 20") === "5");
   check("solver: no-lineal → null", solveLinearFromText("2(x+1) = 6") === null);

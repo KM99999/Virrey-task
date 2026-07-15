@@ -495,7 +495,7 @@ function mockDiferenciaCuadrados(d, intent) {
       { tipo: "hablar", texto: "La regla es: a² − b² = (a + b)(a − b). Se abre en dos paréntesis: uno con + y otro con −." },
       { tipo: "pizarra", accion: "escribir", contenido: `${a}² − ${b}² = (${a} + ${b})(${a} − ${b})` },
       { tipo: "hablar", texto: `Así, ${a}² − ${b}² se factoriza como (${a} + ${b})(${a} − ${b}).` },
-      preg("Ahora tú: factoriza x² − 4. Escribe el resultado (por ejemplo: (x+2)(x−2)).", "(x+2)(x-2)"),
+      preg("Ahora tú: ¿cómo se factoriza x² − 4? (por ejemplo: (x+2)(x−2))", "(x+2)(x-2)"),
     );
   } else {
     const { v, n, raiz } = d;
@@ -505,7 +505,7 @@ function mockDiferenciaCuadrados(d, intent) {
       { tipo: "hablar", texto: `La regla es: a² − b² = (a + b)(a − b). Aquí "a" es ${v} y "b" es ${raiz}.` },
       { tipo: "pizarra", accion: "escribir", contenido: `${v}² − ${n} = (${v} + ${raiz})(${v} − ${raiz})` },
       { tipo: "hablar", texto: `Por eso ${v}² − ${n} se factoriza como (${v} + ${raiz})(${v} − ${raiz}).` },
-      preg(`Ahora tú: factoriza ${v}² − 4. Escribe el resultado (por ejemplo: (${v}+2)(${v}−2)).`, `(${v}+2)(${v}-2)`),
+      preg(`Ahora tú: ¿cómo se factoriza ${v}² − 4? (por ejemplo: (${v}+2)(${v}−2))`, `(${v}+2)(${v}-2)`),
     );
   }
   return { escena: "demo_factorizacion", intencion: intent, duracion_estimada: 70, _mock: true, directivas: dir };

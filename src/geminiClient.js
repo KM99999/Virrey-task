@@ -97,7 +97,7 @@ export async function generateLSG(query, intent, opts = {}) {
   if (opts.currentTopic) ctxLineas.push(`- Tema activo de la conversación: ${opts.currentTopic}`);
   if (histLista.length) ctxLineas.push(`- Últimas consultas del alumno (de la más antigua a la más reciente): ${histLista.map((s) => `"${s}"`).join(" · ")}`);
   const contextoConv = ctxLineas.length
-    ? `\n\nCONTEXTO DE LA CONVERSACIÓN (tenlo en cuenta, no lo repitas en voz alta):\n${ctxLineas.join("\n")}\nSi el mensaje actual es un SEGUIMIENTO (p.ej. "otro ejemplo", "con manzanas", "más fácil", "¿eso quiere decir…?"), MANTENTE en el tema activo y NO bajes a un tema más elemental salvo que el alumno lo pida explícitamente. Si el mensaje introduce un tema NUEVO y claro, cambia a ese tema.`
+    ? `\n\nCONTEXTO DE LA CONVERSACIÓN (tenlo en cuenta, no lo repitas en voz alta):\n${ctxLineas.join("\n")}\nSi el mensaje actual es un SEGUIMIENTO (p.ej. "otro ejemplo", "con manzanas", "más fácil", "¿eso quiere decir…?", o pide un EJERCICIO/práctica SIN nombrar un tema nuevo como "déjame un ejercicio" u "otro ejercicio"), MANTENTE en el tema activo (usa ese tema para el ejercicio) y NO bajes a un tema más elemental salvo que el alumno lo pida explícitamente. Si el mensaje introduce un tema NUEVO y claro, cambia a ese tema.`
     : "";
   const userMsg = `Intención: ${intent}\nConsulta del alumno: ${query}${contextoConv}${reteach}`;
 

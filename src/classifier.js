@@ -17,7 +17,8 @@ const KEYWORDS = {
   practicar: [
     "dame un ejercicio", "ejercicio de practica", "quiero practicar",
     "practicar", "practica", "ponme un ejercicio", "otro ejercicio",
-    "un problema de", "ejercitar",
+    "un problema de", "ejercitar", "ejercicio", "ejercicios",
+    "dejame un ejercicio", "un ejercicio", "mas ejercicios",
   ],
   aprender: [
     "ensename", "aprender", "quiero aprender", "aprendo",
@@ -81,8 +82,8 @@ function pideQueLeDenEjercicio(norm) {
   if (/\b(aprender|aprende|ensename|ensename|entender|comprender|que es|concepto de)\b/.test(norm)) {
     return false;
   }
-  // Verbo de "entrégame/genera" seguido (cerca) de un sustantivo de problema.
-  const daProblema = /\b(dame|damelos?|proponme|propon|ponme|pon|genera|generame|crea|creame|hazme|haz|brindame|plantea|planteame|sugiere|sugiereme|regalame|facilitame)\b[\s\S]{0,30}\b(ejercicio|ejercicios|ecuacion|ecuaciones|problema|problemas)\b/;
+  // Verbo de "entrégame/genera/déjame" seguido (cerca) de un sustantivo de problema.
+  const daProblema = /\b(dame|damelos?|dejame|deja|quiero|necesito|proponme|propon|ponme|pon|genera|generame|crea|creame|hazme|haz|brindame|plantea|planteame|sugiere|sugiereme|regalame|facilitame|pasame|pasa)\b[\s\S]{0,30}\b(ejercicio|ejercicios|ecuacion|ecuaciones|problema|problemas)\b/;
   const paraPracticar = /\bpara (practicar|ejercitar|reforzar)\b/;
   const paraQueYoResuelva = /\bpara que (yo|tu)?\s*(lo|la|los|las)?\s*(resuelva|resuelvas|practique|trabaje|intente)\b|\bque yo\s*(lo|la|los|las)?\s*resuelva\b/;
   return daProblema.test(norm) || paraPracticar.test(norm) || paraQueYoResuelva.test(norm);
