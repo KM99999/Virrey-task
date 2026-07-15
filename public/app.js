@@ -83,6 +83,23 @@ function esSeguimiento(q) {
   return /(paso anterior|paso previo|otra vez|de nuevo|nuevamente|mas simple|mas facil|mas despacio|mas lento|mas claro|de otra forma|no me quedo claro|no lo pill|no lo capt|reexplic|repite|repetir|vuelve a explic|regresa al|explica(me|lo)?\s*(de nuevo|otra vez|mejor|mas|el paso|paso))/.test(n);
 }
 
+// ¿La consulta pide AJUSTAR EL NIVEL del MISMO tema ("algo más básico", "uno más fácil",
+// "más difícil")? Devuelve "mas_facil" | "mas_dificil" | null. Se trata como seguimiento del
+// tema activo (no como un tema nuevo): así "más básico" da una ecuación más fácil, no "sumar".
+function ajusteNivel(q) {
+  const n = q.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+  const palabras = n.split(/\s+/).length;
+  const facil = /(basic|facil|simple|sencill|element)/;
+  const dificil = /(dificil|avanzad|complej|complic|\breto\b|\bdur[oa])/;
+  // "más fácil/básico/simple/…" o "más difícil/avanzado/…" explícito → ajuste de nivel.
+  if (/\bmas\s/.test(n) && facil.test(n)) return "mas_facil";
+  if (/\bmas\s/.test(n) && dificil.test(n)) return "mas_dificil";
+  // Consulta CORTA que pide básico/fácil (o difícil) SIN nombrar un tema nuevo.
+  if (palabras <= 5 && facil.test(n)) return "mas_facil";
+  if (palabras <= 5 && dificil.test(n)) return "mas_dificil";
+  return null;
+}
+
 // --- Fase 2: avatar, voz y PSE Light ----------------------------------------
 const avatar = new Avatar(els.avatarMount);
 const tts = new TTS();
@@ -247,10 +264,15 @@ async function submitQuery() {
     return;
   }
 
-  // Seguimiento ("no entendí") → reexplicar el último tema; si no, es un tema nuevo.
-  const seguimiento = esSeguimiento(query);
+  // Seguimiento del tema activo: "no entendí" (reexplicar) o "más básico/difícil" (ajustar nivel).
+  // En ambos casos NO es un tema nuevo: se mantiene el TEMA anterior (lastTopicQuery).
+  const ajuste = ajusteNivel(query);              // "mas_facil" | "mas_dificil" | null
+  const seguimiento = esSeguimiento(query) || !!ajuste;
   const body = { query, modo }; // modo: "demo" (básico) o "ia" (avanzado)
-  if (seguimiento && lastTopicQuery) body.contexto = lastTopicQuery;
+  if (seguimiento && lastTopicQuery) {
+    body.contexto = lastTopicQuery;               // el TEMA activo, para no perderlo
+    if (ajuste) body.ajuste = ajuste;             // pista de nivel (más fácil / más difícil)
+  }
 
   setLoading(true);
   try {

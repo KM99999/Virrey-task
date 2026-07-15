@@ -72,11 +72,18 @@ export async function generateLSG(query, intent, opts = {}) {
   }
 
   // El prompt del sistema es ESTABLE (cacheado); la intención va en el mensaje del usuario.
-  // Si el alumno no entendió, pedimos una RE-ENSEÑANZA distinta (analogía, más simple, breve),
-  // no una repetición de la misma lección (el objetivo es que APRENDA, no ser un loro).
-  const reteach = reexplain
-    ? "\n\nIMPORTANTE: el alumno dijo que NO ENTENDIÓ. NO repitas las mismas palabras ni el mismo ejemplo; explícalo de OTRA forma. Enséñalo COMO A ALGUIEN QUE NO SABE NADA: parte de una ANALOGÍA cotidiana (comida, dinero, objetos), ve MUY paso a paso y con MUCHO detalle, define cada término, no asumas ningún conocimiento previo y no te saltes pasos. Cuenta o desarrolla lo que haga falta hasta que quede clarísimo, y cierra con un ejercicio más fácil. El objetivo es que POR FIN lo entienda."
-    : "";
+  // Seguimiento del MISMO tema:
+  //  - "más fácil/básico" o "más difícil" → mismo tema, ajustando el nivel (NO cambiar de tema).
+  //  - "no entendí" → RE-ENSEÑANZA distinta (analogía, más simple), no repetir como un loro.
+  const ajuste = opts.ajuste; // "mas_facil" | "mas_dificil" | undefined
+  let reteach = "";
+  if (ajuste === "mas_facil") {
+    reteach = "\n\nIMPORTANTE: el alumno pide algo MÁS BÁSICO del MISMO tema de la consulta. NO cambies de tema bajo ninguna circunstancia (si el tema es ecuaciones, sigue siendo ecuaciones; NO pases a sumar u otro tema). Mantente EXACTAMENTE en ese tema pero baja el nivel: usa números más pequeños y sencillos, ve más despacio y con más detalle, y propón un ejercicio de práctica MÁS FÁCIL del mismo tema.";
+  } else if (ajuste === "mas_dificil") {
+    reteach = "\n\nIMPORTANTE: el alumno pide algo MÁS DIFÍCIL del MISMO tema de la consulta. NO cambies de tema. Mantente EXACTAMENTE en ese tema pero sube el nivel: números o casos algo más complejos y un ejercicio de práctica más retador del mismo tema.";
+  } else if (reexplain) {
+    reteach = "\n\nIMPORTANTE: el alumno dijo que NO ENTENDIÓ. NO repitas las mismas palabras ni el mismo ejemplo; explícalo de OTRA forma. Enséñalo COMO A ALGUIEN QUE NO SABE NADA: parte de una ANALOGÍA cotidiana (comida, dinero, objetos), ve MUY paso a paso y con MUCHO detalle, define cada término, no asumas ningún conocimiento previo y no te saltes pasos. Cuenta o desarrolla lo que haga falta hasta que quede clarísimo, y cierra con un ejercicio más fácil. El objetivo es que POR FIN lo entienda.";
+  }
   const userMsg = `Intención: ${intent}\nConsulta del alumno: ${query}${reteach}`;
 
   let candidates = (workingModel

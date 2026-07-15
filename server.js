@@ -42,6 +42,8 @@ app.post("/api/query", async (req, res) => {
   // Contexto de conversación: el último tema, para reexplicar cuando el alumno dice
   // "no entendí". El frontend lo envía solo cuando la consulta es un seguimiento.
   const contexto = typeof req.body?.contexto === "string" ? req.body.contexto.trim().slice(0, 2000) : "";
+  // Ajuste de nivel del MISMO tema: "más fácil/básico" o "más difícil" (opcional).
+  const ajuste = req.body?.ajuste === "mas_facil" || req.body?.ajuste === "mas_dificil" ? req.body.ajuste : "";
   // Modo elegido por el usuario en la interfaz: "demo" (contenido básico sin IA),
   // "ia" (usa Gemini) o vacío (automático: intenta IA y cae a demo si falla).
   const modo = req.body?.modo === "demo" || req.body?.modo === "ia" ? req.body.modo : "";
@@ -58,10 +60,13 @@ app.post("/api/query", async (req, res) => {
     const reexplain = !!contexto;
     const effectiveQuery = reexplain ? contexto : query;
 
-    // 1) Intención: en una reexplicación forzamos "explicar" (enseñanza enfocada y breve);
-    //    si no, la decide el clasificador local.
+    // 1) Intención: si el alumno pide "más fácil/difícil" del mismo tema → "practicar" (un ejercicio
+    //    del MISMO tema, más fácil o más difícil). En un "no entendí" → "explicar" (re-enseñar de otra
+    //    forma). Si no es seguimiento, la decide el clasificador local.
     const classification = reexplain
-      ? { intent: "explicar", confidence: 0.9, scores: { resolver: 0, aprender: 0, explicar: 1, practicar: 0 } }
+      ? ajuste
+        ? { intent: "practicar", confidence: 0.9, scores: { resolver: 0, aprender: 0, explicar: 0, practicar: 1 } }
+        : { intent: "explicar", confidence: 0.9, scores: { resolver: 0, aprender: 0, explicar: 1, practicar: 0 } }
       : classifyIntent(query);
 
     // 1.5) Caché: en una reexplicación NO se usa (cada "no entendí" debe poder ser DISTINTO,
@@ -78,7 +83,7 @@ app.post("/api/query", async (req, res) => {
     //    (sin bloqueo por enfriamiento); auto (vacío) → intenta IA con enfriamiento tras 429.
     const { lsg: rawLsg, source, model, usage, cached } = await generateLSG(
       effectiveQuery, classification.intent,
-      { reexplain, forceDemo: modo === "demo", forceAI: modo === "ia" }
+      { reexplain, ajuste, forceDemo: modo === "demo", forceAI: modo === "ia" }
     );
 
     // 3) PRE Light: validar y normalizar en bloques predecibles.
