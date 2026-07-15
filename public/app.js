@@ -592,8 +592,13 @@ els.toggleJson.addEventListener("click", () => {
   els.toggleJson.textContent = hidden ? "Ocultar LSG (JSON)" : "Ver LSG (JSON)";
 });
 els.clearHistory.addEventListener("click", () => {
+  // Limpieza COMPLETA de la sesión: borra el historial visible Y el contexto que se envía a Gemini
+  // (tema activo + últimas consultas). Tras esto, la siguiente consulta empieza como sesión NUEVA.
   history.length = 0;
+  lastTopicQuery = null;   // olvida el TEMA activo (no se seguirá enviando como contexto)
+  historial.length = 0;    // olvida el historial de conversación que se manda a la IA
   renderHistory();
+  toast("Sesión reiniciada: se borró el historial, el tema activo y el contexto. La próxima consulta empieza de cero.");
 });
 document.querySelectorAll(".chip").forEach((chip) => {
   chip.addEventListener("click", () => {

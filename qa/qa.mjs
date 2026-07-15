@@ -9,7 +9,7 @@
 // contengan LaTeX ni "$". Imprime un veredicto final APROBADO / RECHAZADO.
 
 import { classifyIntent } from "../src/classifier.js";
-import { processLSG, solveLinearFromText, solveFractionFromText, resultadoFromVerificacion, computeAnswer } from "../src/preLight.js";
+import { processLSG, solveLinearFromText, solveFractionFromText, resultadoFromVerificacion, computeAnswer, corregirIgualdades, otroEjemploResuelto } from "../src/preLight.js";
 import { mockLSG } from "../src/lsgPrompt.js";
 import { generateLSG } from "../src/geminiClient.js";
 import { checkAnswer, flattenLSG, PSELight, buildHint } from "../public/pseLight.js";
@@ -90,6 +90,23 @@ async function unitTests() {
   check("hint: no contiene dígitos (no revela la respuesta)",
     [["¿x?", "2x + 5 = 15"], ["¿2/5+1/5?", "2/5 + 1/5"], ["¿7×3?", "7 × 3"], ["¿velocidad?", "Distancia = 200, Tiempo = 25"]]
       .every(([q, b]) => !/\d/.test(buildHint(q, b, 1)) && !/\d/.test(buildHint(q, b, 2))));
+
+  // Validación matemática INTEGRAL: corrige operaciones erróneas en pizarra/voz (no solo la calificada).
+  check("integral: '200 ÷ 25 = 200' → corrige a 8", corregirIgualdades("velocidad: 200 ÷ 25 = 200").texto.includes("200 ÷ 25 = 8"));
+  check("integral: '2 + 2 = 5' → 4", corregirIgualdades("2 + 2 = 5").texto === "2 + 2 = 4");
+  check("integral: '5² = 20' → 25", corregirIgualdades("5² = 20").texto === "5² = 25");
+  check("integral: NO toca ecuación algebraica '2x + 5 = 15'", corregirIgualdades("2x + 5 = 15").texto === "2x + 5 = 15");
+  check("integral: NO toca operación correcta '20 ÷ 5 = 4'", corregirIgualdades("20 ÷ 5 = 4").texto === "20 ÷ 5 = 4");
+  const lsgFix = processLSG({ escena: "x", intencion: "aprender", modulos: [{ id: "m", directivas: [
+    { tipo: "hablar", texto: "Entonces 200 ÷ 25 = 200, esa es la velocidad." },
+    { tipo: "pizarra", contenido: "x - 4 = 7" },
+    { tipo: "preguntar", texto: "¿Cuánto vale x?", respuesta: "11" }] }] }, "aprender");
+  check("integral: processLSG corrige la voz del avatar", lsgFix.pasos.find((d) => d.tipo === "hablar").texto.includes("200 ÷ 25 = 8"));
+
+  // Ramificación ligera: adjunta un EJEMPLO ALTERNATIVO resuelto a la pregunta.
+  check("ramificación: ejemplo alterno para ecuación", !!otroEjemploResuelto("¿x?", "x - 4 = 7")?.pasos?.length);
+  check("ramificación: ejemplo alterno para multiplicación", /×/.test(otroEjemploResuelto("¿7×3?", "7 × 3")?.pasos?.[0]?.escribe || ""));
+  check("ramificación: processLSG adjunta otro_ejemplo", !!lsgFix.pasos.find((d) => d.tipo === "preguntar")?.otro_ejemplo);
 
   check("checkAnswer: 5 == 5", checkAnswer("5", "5").correct === true);
   check("checkAnswer: 9 != 5", checkAnswer("9", "5").correct === false);

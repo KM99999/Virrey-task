@@ -353,28 +353,49 @@ export class PSELight {
     // respuesta, damos una PISTA (cada vez más concreta) del MÉTODO y permitimos REINTENTAR. La caja
     // de respuesta NO desaparece: se reabre de inmediato y la voz suena en paralelo.
     const boardText = this._exerciseBoard(timeline, index);
-    const nudges = [
-      "Casi. ",
-      "Aún no, pero vas bien. ",
-    ];
-    for (let intento = 0; intento < nudges.length; intento++) {
-      const hint = buildHint(d.texto, boardText, intento + 1);
-      const msg = `${nudges[intento]}${hint} Inténtalo otra vez.`;
-      this.ui.showFeedback(false, msg);
-      this._speak(msg, "hablando", signal); // no bloquea: la caja se reabre ya
-      const retry = await this.ui.askAnswer(d.texto, { signal });
-      if (signal.aborted || retry == null) return;
-      if (checkAnswer(retry, expected).correct) {
-        this.ui.showFeedback(true, "¡Eso es! Ahora sí. 🎉");
-        await this._speak("¡Eso es! Ahora sí lo tienes. ¡Bien hecho!", "sonriendo", signal);
-        return;
-      }
+    const acerto = async (msg) => { this.ui.showFeedback(true, msg); await this._speak(msg, "sonriendo", signal); };
+
+    // 1er error → mostrar OTRO EJEMPLO resuelto (si lo hay) o una pista; luego permitir REINTENTAR.
+    if (d.otro_ejemplo) {
+      this.ui.showFeedback(false, "Casi. Veamos otro ejemplo parecido, resuelto, y lo intentas de nuevo.");
+      await this._showWorkedExample(d.otro_ejemplo, signal);
+      if (signal.aborted) return;
+      if (boardText) this.ui.writeBoard(boardText); // volver a mostrar TU ejercicio para el reintento
+    } else {
+      const hint = buildHint(d.texto, boardText, 1);
+      this.ui.showFeedback(false, `Casi. ${hint} Inténtalo otra vez.`);
+      this._speak(`Casi. ${hint}`, "hablando", signal); // no bloquea: la caja se reabre ya
     }
+    let retry = await this.ui.askAnswer(d.texto, { signal });
+    if (signal.aborted || retry == null) return;
+    if (checkAnswer(retry, expected).correct) { await acerto("¡Eso es! Ahora sí. 🎉"); return; }
+
+    // 2º error → pista más concreta del método + otro reintento.
+    const hint2 = buildHint(d.texto, boardText, 2);
+    this.ui.showFeedback(false, `Aún no, pero vas bien. ${hint2} Prueba una vez más.`);
+    this._speak(`Aún no. ${hint2}`, "hablando", signal);
+    retry = await this.ui.askAnswer(d.texto, { signal });
+    if (signal.aborted || retry == null) return;
+    if (checkAnswer(retry, expected).correct) { await acerto("¡Muy bien, lo lograste! 🎉"); return; }
 
     // Sigue sin acertar: NO revelamos el número. Recordamos el MÉTODO y animamos a repasar/reintentar.
     const cierre = `No te preocupes, así se aprende. ${buildHint(d.texto, boardText, 2)} Puedes volver a reproducir la lección para repasar el método y luego intentarlo de nuevo. ¡Tú puedes!`;
     this.ui.showFeedback(false, cierre);
     await this._speak(cierre, "hablando", signal);
+  }
+
+  // Muestra en la pizarra un EJEMPLO ALTERNATIVO resuelto paso a paso (narrado), para la ramificación.
+  async _showWorkedExample(ej, signal) {
+    if (!ej) return;
+    if (ej.intro) { await this._speak(ej.intro, "hablando", signal); if (signal.aborted) return; }
+    if (ej.original) { this.ui.writeBoard(ej.original); await sleep(700, signal); if (signal.aborted) return; }
+    for (const paso of (ej.pasos || [])) {
+      if (signal.aborted) return;
+      if (paso.explica) { this.ui.writeBoardExplain?.(paso.explica); await this._speak(paso.explica, "hablando", signal); }
+      if (signal.aborted) return;
+      if (paso.escribe) { this.ui.writeBoard(paso.escribe); await sleep(700, signal); }
+    }
+    if (ej.cierre && !signal.aborted) await this._speak(ej.cierre, "sonriendo", signal);
   }
 
   // Devuelve el ejercicio escrito en la pizarra JUSTO antes de la pregunta (para dar pistas).

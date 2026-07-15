@@ -282,6 +282,114 @@ export function solveLinearSteps(text) {
   return { original, steps, answer: fmt(answer), varName: v };
 }
 
+// ─── Validación matemática INTEGRAL de la lección ─────────────────────────────
+// No basta con calificar bien: también hay que verificar las OPERACIONES escritas en la
+// pizarra y dichas por el avatar. Esta función detecta igualdades aritméticas "EXPR = RESULT"
+// (p.ej. "200 ÷ 25 = 200") y CORRIGE el resultado si está mal ("200 ÷ 25 = 8"). Solo toca
+// igualdades cuyo lado izquierdo es una expresión NUMÉRICA pura; las ecuaciones algebraicas
+// ("2x + 5 = 15", "x = 5") se dejan intactas (no son igualdades a verificar).
+function evalAritToRat(expr) {
+  const n = String(expr)
+    .replace(/×|·/g, "*").replace(/÷/g, "/").replace(/,/g, ".")
+    .replace(/(\d+)\s*²/g, "($1*$1)").replace(/(\d+)\s*³/g, "($1*$1*$1)")
+    .replace(/(\d+)\s*⁴/g, "($1*$1*$1*$1)")
+    .replace(/\s+/g, "");
+  if (/[a-zA-Z]/.test(n)) return null; // tiene variables → no es aritmética pura
+  try { return evalExpr(n); } catch { return null; }
+}
+function rhsToRat(rhs) {
+  const s = String(rhs).replace(/,/g, ".").replace(/\s+/g, "");
+  const f = s.match(/^(-?\d+)\/(-?\d+)$/);
+  if (f) { const d = +f[2]; return d ? rat(+f[1], d) : null; }
+  if (/^-?\d+$/.test(s)) return rat(+s, 1);
+  if (/^-?\d+\.\d+$/.test(s)) { const neg = s[0] === "-"; const [i, dec] = s.replace("-", "").split("."); const den = Math.pow(10, dec.length); return rat(parseInt(i + dec, 10) * (neg ? -1 : 1), den); }
+  return null;
+}
+export function corregirIgualdades(texto) {
+  if (typeof texto !== "string" || !texto.includes("=")) return { texto, correcciones: 0 };
+  let correcciones = 0;
+  const nuevo = texto.replace(
+    /([0-9][0-9\s.,+\-*/×÷·()²³⁴⁵⁶⁷⁸⁹]*[0-9)²³⁴⁵⁶⁷⁸⁹])\s*=\s*(-?[0-9]+(?:[.,][0-9]+)?(?:\s*\/\s*[0-9]+)?)/g,
+    (m, lhs, rhs) => {
+      if (!/[+\-*/×÷·²³⁴⁵⁶⁷⁸⁹]/.test(lhs)) return m;   // sin operador → no es una operación
+      const val = evalAritToRat(lhs);
+      if (!val) return m;
+      const rv = rhsToRat(rhs);
+      if (!rv) return m;
+      if (val.n * rv.d === rv.n * val.d) return m;       // ya es correcto
+      correcciones++;
+      const sep = m.slice(lhs.length, m.length - rhs.length); // el " = " exacto entre lhs y rhs
+      return lhs + sep + fmtRat(val);                    // corrige SOLO el resultado (evita tocar el lhs)
+    }
+  );
+  return { texto: nuevo, correcciones };
+}
+
+// ─── Ejemplo alternativo RESUELTO (ramificación ligera) ───────────────────────
+// Ante un error, además de la pista, se muestra OTRO ejemplo PARECIDO resuelto paso a paso.
+// Devuelve { intro, original?, pasos:[{explica,escribe}], cierre } o null si no aplica.
+function altEquationFrom(eqText) {
+  const v = (String(eqText).toLowerCase().match(/[a-z]/) || ["x"])[0];
+  const t = String(eqText).toLowerCase();
+  if (/[2-9]\s*[a-z]|\d\d\s*[a-z]/.test(t)) return `3${v} = 12`;  // coeficiente → v = 4
+  if (t.includes("-")) return `${v} - 2 = 5`;                     // resta → v = 7
+  return `${v} + 4 = 10`;                                         // suma → v = 6
+}
+const OPS_ALT = [
+  { re: /÷|\bdividid|entre\b/, pasos: [{ explica: "Dividir es repartir en partes iguales: 12 entre 4 son 3, porque 3 × 4 = 12.", escribe: "12 ÷ 4 = 3" }] },
+  { re: /×|\bmultiplic|\bpor\b/, pasos: [{ explica: "Multiplicar 4 por 3 es sumar 4 tres veces: 4 + 4 + 4 = 12.", escribe: "4 × 3 = 12" }] },
+  { re: /\d+\s*\/\s*\d+/, pasos: [{ explica: "Con el mismo denominador, sumamos los numeradores y mantenemos el denominador: 1 + 2 = 3.", escribe: "1/4 + 2/4 = 3/4" }] },
+  { re: /-|\bmenos\b|resta/, pasos: [{ explica: "Restar es quitar: a 9 le quitamos 4 y quedan 5.", escribe: "9 - 4 = 5" }] },
+  { re: /\+|\bmas\b|suma/, pasos: [{ explica: "Sumar es juntar: 5 y 3 juntos son 8.", escribe: "5 + 3 = 8" }] },
+];
+export function otroEjemploResuelto(question, board) {
+  // 1) Ecuación lineal → generar una ALTERNA similar y resolverla paso a paso.
+  const eqText = (board && solveLinearFromText(board) !== null) ? board
+    : (solveLinearFromText(question) !== null ? question : null);
+  if (eqText) {
+    const sol = solveLinearSteps(altEquationFrom(eqText));
+    if (sol) {
+      return {
+        intro: "No pasa nada, así se aprende. Veamos OTRO ejemplo parecido, resuelto paso a paso:",
+        original: sol.original,
+        pasos: sol.steps,
+        cierre: "¿Ves el método? Ahora inténtalo tú otra vez con tu ejercicio.",
+      };
+    }
+  }
+  // 2) Aritmética / operación → mostrar una operación similar resuelta.
+  const t = `${question || ""} ${board || ""}`.toLowerCase();
+  for (const op of OPS_ALT) {
+    if (op.re.test(t)) {
+      return {
+        intro: "No pasa nada. Aquí tienes OTRO ejemplo parecido, resuelto:",
+        pasos: op.pasos,
+        cierre: "Con esa idea, inténtalo tú de nuevo.",
+      };
+    }
+  }
+  return null;
+}
+
+// Adjunta a la pregunta de práctica un ejemplo alternativo resuelto (para la ramificación).
+function attachAltExample(lsg, pasos) {
+  const flat = [];
+  if (Array.isArray(lsg.modulos)) for (const m of lsg.modulos) for (const d of m.directivas) flat.push(d);
+  else if (Array.isArray(lsg.directivas)) for (const d of lsg.directivas) flat.push(d);
+  const qIdx = flat.findIndex((d) => d.tipo === "preguntar");
+  if (qIdx === -1) return;
+  const q = flat[qIdx];
+  if (!(q.respuesta && String(q.respuesta).trim())) return; // sin respuesta calificable, no aplica
+  let board = null;
+  for (let i = qIdx - 1; i >= 0; i--) { if (flat[i].tipo === "pizarra") { board = flat[i].contenido; break; } }
+  const ej = otroEjemploResuelto(q.texto, board);
+  if (ej) {
+    q.otro_ejemplo = ej;
+    const p = pasos.find((x) => x.tipo === "preguntar");
+    if (p) p.otro_ejemplo = ej;
+  }
+}
+
 // Segundos estimados que "cuesta" cada directiva (para duracion_estimada).
 const COSTO_SEGUNDOS = {
   avatar: 1,
@@ -372,6 +480,9 @@ export function processLSG(rawLsg, intent) {
   // calculó en su borrador "verificacion_respuesta" (funciona para cualquier redacción).
   fixPracticeAnswer(lsg, pasos, rawLsg.verificacion_respuesta);
 
+  // Ramificación ligera: adjunta un ejemplo alternativo RESUELTO para mostrarlo si el alumno falla.
+  attachAltExample(lsg, pasos);
+
   lsg.duracion_estimada = Number(rawLsg.duracion_estimada) > 0
     ? Number(rawLsg.duracion_estimada)
     : estimateDuration(pasos);
@@ -419,7 +530,10 @@ function sanitizeDirectiva(raw, warnings, context) {
         warnings.push(`"hablar" sin texto descartada en ${context}.`);
         return null;
       }
-      d.texto = sanitizeMath(habla);
+      // Validación matemática integral: corrige operaciones erróneas también en lo que DICE el avatar.
+      const fix = corregirIgualdades(sanitizeMath(habla));
+      if (fix.correcciones) warnings.push(`Corregida(s) ${fix.correcciones} operación(es) errónea(s) en "hablar" (${context}).`);
+      d.texto = fix.texto;
       break;
     }
     case "esperar":
@@ -431,7 +545,10 @@ function sanitizeDirectiva(raw, warnings, context) {
         warnings.push(`"pizarra" sin contenido descartada en ${context}.`);
         return null;
       }
-      d.contenido = sanitizeMath(str(raw.contenido));
+      // Validación matemática integral: corrige operaciones erróneas escritas en la PIZARRA.
+      const fixP = corregirIgualdades(sanitizeMath(str(raw.contenido)));
+      if (fixP.correcciones) warnings.push(`Corregida(s) ${fixP.correcciones} operación(es) errónea(s) en "pizarra" (${context}).`);
+      d.contenido = fixP.texto;
       break;
     case "puntero":
       d.accion = str(raw.accion) || "resaltar";
