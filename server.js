@@ -64,8 +64,10 @@ app.post("/api/query", async (req, res) => {
     const esContinuacion = seguimiento === "continuacion";
     // effectiveQuery: reexplicar/nivel re-usan el TEMA; "continuacion" responde el MENSAJE real del
     // alumno pero ANCLADO al tema (para que Gemini y el demo no lo pierdan).
+    // reexplicar/nivel re-usan el TEMA; "continuacion" usa el MENSAJE real del alumno (natural),
+    // y el tema activo se le pasa a la IA como contexto (opts.tema), no dentro del enunciado.
     const effectiveQuery = !reexplain ? query
-      : esContinuacion ? `Tema: ${contexto}. Mensaje del alumno (seguimiento del MISMO tema): ${query}`
+      : esContinuacion ? query
       : contexto;
 
     // 1) Intención: "más fácil/difícil" → practicar (ejercicio del mismo tema); "continuación" o
@@ -91,7 +93,7 @@ app.post("/api/query", async (req, res) => {
     //    (sin bloqueo por enfriamiento); auto (vacío) → intenta IA con enfriamiento tras 429.
     const { lsg: rawLsg, source, model, usage, cached } = await generateLSG(
       effectiveQuery, classification.intent,
-      { reexplain, seguimiento, forceDemo: modo === "demo", forceAI: modo === "ia" }
+      { reexplain, seguimiento, tema: contexto, forceDemo: modo === "demo", forceAI: modo === "ia" }
     );
 
     // 3) PRE Light: validar y normalizar en bloques predecibles.

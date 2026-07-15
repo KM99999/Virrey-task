@@ -407,13 +407,21 @@ function sanitizeDirectiva(raw, warnings, context) {
     case "avatar":
       d.accion = str(raw.accion) || "neutral";
       break;
-    case "hablar":
-      if (!str(raw.texto)) {
+    case "hablar": {
+      let habla = str(raw.texto);
+      // Defensa: si la IA repite el andamiaje interno del seguimiento ("Tomé nota de tu consulta…",
+      // "Tema: … Mensaje del alumno…"), lo quitamos para que el alumno no lo oiga.
+      habla = habla
+        .replace(/^\s*tom[ée] nota de tu consulta[:.]?\s*["“']?/i, "")
+        .replace(/tema:\s*.*?mensaje del alumno[^:]*:\s*/i, "")
+        .trim();
+      if (!habla) {
         warnings.push(`"hablar" sin texto descartada en ${context}.`);
         return null;
       }
-      d.texto = sanitizeMath(str(raw.texto));
+      d.texto = sanitizeMath(habla);
       break;
+    }
     case "esperar":
       d.segundos = clampNumber(raw.segundos, 1, 10, 2);
       break;
