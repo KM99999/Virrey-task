@@ -87,7 +87,19 @@ export async function generateLSG(query, intent, opts = {}) {
   } else if (reexplain) {
     reteach = "\n\nIMPORTANTE: el alumno dijo que NO ENTENDIÓ. NO repitas las mismas palabras ni el mismo ejemplo; explícalo de OTRA forma. Enséñalo COMO A ALGUIEN QUE NO SABE NADA: parte de una ANALOGÍA cotidiana (comida, dinero, objetos), ve MUY paso a paso y con MUCHO detalle, define cada término, no asumas ningún conocimiento previo y no te saltes pasos. Cuenta o desarrolla lo que haga falta hasta que quede clarísimo, y cierra con un ejercicio más fácil. El objetivo es que POR FIN lo entienda.";
   }
-  const userMsg = `Intención: ${intent}\nConsulta del alumno: ${query}${reteach}`;
+  // Contexto de conversación: el tema activo y las últimas consultas del alumno. Se incluye para que
+  // la IA NUNCA interprete el mensaje de forma AISLADA y no "baje" de tema en un seguimiento (p.ej.
+  // "enséñame con manzanas" estando en "derivadas" debe seguir siendo derivadas, no sumas).
+  const histLista = Array.isArray(opts.historial)
+    ? opts.historial.filter((s) => typeof s === "string" && s.trim() && s.trim() !== query.trim())
+    : [];
+  const ctxLineas = [];
+  if (opts.currentTopic) ctxLineas.push(`- Tema activo de la conversación: ${opts.currentTopic}`);
+  if (histLista.length) ctxLineas.push(`- Últimas consultas del alumno (de la más antigua a la más reciente): ${histLista.map((s) => `"${s}"`).join(" · ")}`);
+  const contextoConv = ctxLineas.length
+    ? `\n\nCONTEXTO DE LA CONVERSACIÓN (tenlo en cuenta, no lo repitas en voz alta):\n${ctxLineas.join("\n")}\nSi el mensaje actual es un SEGUIMIENTO (p.ej. "otro ejemplo", "con manzanas", "más fácil", "¿eso quiere decir…?"), MANTENTE en el tema activo y NO bajes a un tema más elemental salvo que el alumno lo pida explícitamente. Si el mensaje introduce un tema NUEVO y claro, cambia a ese tema.`
+    : "";
+  const userMsg = `Intención: ${intent}\nConsulta del alumno: ${query}${contextoConv}${reteach}`;
 
   let candidates = (workingModel
     ? [workingModel, ...MODEL_CANDIDATES.filter((m) => m !== workingModel)]

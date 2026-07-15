@@ -46,6 +46,12 @@ app.post("/api/query", async (req, res) => {
   const SEG_VALIDOS = ["reexplicar", "mas_facil", "mas_dificil", "continuacion"];
   const seguimiento = SEG_VALIDOS.includes(req.body?.seguimiento) ? req.body.seguimiento
     : (contexto ? "reexplicar" : ""); // compatibilidad: si hay contexto sin tipo, es un "no entendí"
+  // Contexto de conversación: tema activo + últimas consultas del alumno. Se pasa a la IA para que
+  // NUNCA interprete el mensaje de forma aislada (evita "bajar" de tema en un seguimiento).
+  const currentTopic = typeof req.body?.currentTopic === "string" ? req.body.currentTopic.trim().slice(0, 300) : "";
+  const historial = Array.isArray(req.body?.historial)
+    ? req.body.historial.filter((s) => typeof s === "string" && s.trim()).slice(-5).map((s) => s.trim().slice(0, 200))
+    : [];
   // Modo elegido por el usuario en la interfaz: "demo" (contenido básico sin IA),
   // "ia" (usa Gemini) o vacío (automático: intenta IA y cae a demo si falla).
   const modo = req.body?.modo === "demo" || req.body?.modo === "ia" ? req.body.modo : "";
@@ -93,7 +99,8 @@ app.post("/api/query", async (req, res) => {
     //    (sin bloqueo por enfriamiento); auto (vacío) → intenta IA con enfriamiento tras 429.
     const { lsg: rawLsg, source, model, usage, cached } = await generateLSG(
       effectiveQuery, classification.intent,
-      { reexplain, seguimiento, tema: contexto, forceDemo: modo === "demo", forceAI: modo === "ia" }
+      { reexplain, seguimiento, tema: contexto || currentTopic, currentTopic, historial,
+        forceDemo: modo === "demo", forceAI: modo === "ia" }
     );
 
     // 3) PRE Light: validar y normalizar en bloques predecibles.

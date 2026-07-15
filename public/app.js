@@ -53,6 +53,7 @@ const history = []; // { query, intencion, fuente, lsg, pasos, ts }
 let currentLSG = null; // último LSG generado, para reproducir en el escenario
 let seeking = false;   // true mientras el usuario arrastra la barra de pasos
 let lastTopicQuery = null; // último TEMA consultado (para reexplicar en un "no entendí")
+const historial = [];      // consultas recientes del alumno (contexto de conversación para la IA)
 let modo = "ia"; // "ia" = temas avanzados con Gemini · "demo" = temas básicos sin IA (instantáneo)
 
 // Selector de modo: Demostración (básico, sin IA) / IA (avanzado, Gemini).
@@ -299,10 +300,18 @@ async function submitQuery() {
   const tipoSeg = lastTopicQuery ? clasificarSeguimiento(query) : null; // p.ej. "continuacion"
   const seguimiento = !!tipoSeg;
   const body = { query, modo }; // modo: "demo" (básico) o "ia" (avanzado)
+  // Contexto de conversación SIEMPRE (para que la IA nunca reciba la consulta AISLADA):
+  //  - currentTopic: el tema activo · historial: las últimas consultas del alumno.
+  // Así, aunque un seguimiento no se detecte con exactitud, la IA tiene el hilo y no "baja" de tema.
+  if (lastTopicQuery) body.currentTopic = lastTopicQuery;
+  if (historial.length) body.historial = historial.slice(-5);
   if (seguimiento) {
     body.contexto = lastTopicQuery;               // el TEMA activo, para no perderlo
     body.seguimiento = tipoSeg;                    // reexplicar | mas_facil | mas_dificil | continuacion
   }
+  // Registrar la consulta en el historial de la conversación (para el contexto de la IA).
+  historial.push(query);
+  if (historial.length > 12) historial.shift();
 
   setLoading(true);
   try {

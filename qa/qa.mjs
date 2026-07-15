@@ -27,6 +27,10 @@ function check(name, cond, detail = "") {
 // Solver de referencia (independiente) para cruzar la respuesta del sistema.
 function refSolve(text) {
   const t = String(text || "").toLowerCase();
+  // refSolve SOLO juzga ecuaciones LINEALES simples. En temas no lineales (potencias/factorización:
+  // "b² = 9", "x² - 9", "⇒") no es fiable y daría falsos fallos → no juzga (la respuesta del sistema
+  // se valida con la calculadora determinista en las pruebas de lógica).
+  if (/[²³⁰¹⁴⁵⁶⁷⁸⁹]|⇒|=>|factoriz|potencia|cuadrado|\^/.test(t)) return null;
   const m = t.match(/((?:[+-]?\s*(?:\d*[a-z]|\d+))(?:\s*[+-]\s*(?:\d*[a-z]|\d+))*)\s*=\s*(-?\d+(?:\.\d+)?)/);
   if (!m) return null;
   const lhs = m[1], c = Number(m[2]);
