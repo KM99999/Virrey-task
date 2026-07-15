@@ -108,8 +108,12 @@ function ajusteNivel(q) {
 // responde el mensaje dentro de ese tema, en vez de tratarlo como un tema nuevo.
 function esContinuacion(q) {
   const n = q.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
-  // Pedir otro ejemplo / otra analogía / enséñame con <algo> / con perritos, manzanas, dinero…
-  if (/(otro|otra|distint[oa]|diferente)\s*(ejemplo|analog|forma|manera)|con\s+(otro|un)\s+ejemplo|ejemplo\s+(distint|diferent|nuev)|que no sea\b|diferente a\b|(ens[enñ]a|expl[ií]ca)\w*\s+con\b|con\s+(perr|gat|manzan|dinero|comida|dulc|pelot|caramel|frut|deporte|futbol|carr)/.test(n)) return true;
+  // Pedir otro ejemplo / otra analogía / "enséñame con …" / "con/de manzanas, perritos, dinero…".
+  // Nota: "enséñame con ejemplos de manzanas" entra por "(enseña|explica)…con"; "enséñame DERIVADAS
+  // con ejemplos" NO (nombra un tema) → se trata como tema nuevo. "de <objeto>" cubre "ejemplos de
+  // manzanas"; los temas matemáticos ("de fracciones") NO están en la lista de objetos, así que no
+  // se confunden con analogías.
+  if (/(otro|otra|distint[oa]|diferente)\s*(ejemplos?|analog|forma|manera)|con\s+(otro|un)\s+ejemplos?|ejemplos?\s+(distint|diferent|nuev)|que no sea\b|diferente a\b|(ense[nñ]a|expl[ií]ca)\w*\s+con\b|(con|de)\s+(perr|gat|manzan|pera|naranj|platano|banana|dinero|moneda|comida|dulce|pelot|caramel|fruta|deporte|futbol|carro|coche|juguete|animal|galleta|pizza|chocolate|flor|arbol|canica|globo)/.test(n)) return true;
   // Pregunta/afirmación que se refiere a lo ANTERIOR (deixis) o a los ejemplos ya vistos.
   if (/\beso\b|\besto\b|\besos\b|\bentonces\b|\bo sea\b|quiere decir|\bpor eso\b|los? ejemplos?\b|lo anterior|lo que (dij|mencion|explic|vimo)|qu[eé] relaci[oó]n/.test(n)) return true;
   return null;
