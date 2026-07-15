@@ -19,6 +19,7 @@ const els = {
   pillIntent: $("#pillIntent"),
   pillSource: $("#pillSource"),
   pillDuration: $("#pillDuration"),
+  demoNotice: $("#demoNotice"),
   empty: $("#empty"),
   steps: $("#steps"),
   jsonView: $("#jsonView"),
@@ -363,8 +364,27 @@ function renderResult(data) {
   els.empty.hidden = true;
   els.pipeline.hidden = false;
   els.pillIntent.textContent = `Intención: ${data.intencion} (${Math.round(data.confianza * 100)}%)`;
-  els.pillSource.textContent = `IA: ${data.fuente_ia === "gemini" ? "Gemini" : "demo/mock"}`;
+  const esGemini = data.fuente_ia === "gemini";
+  els.pillSource.textContent = `IA: ${esGemini ? "Gemini" : "Modo demostración"}`;
+  els.pillSource.classList.toggle("demo", !esGemini);
   els.pillDuration.textContent = `Duración: ~${data.lsg.duracion_estimada}s`;
+
+  // MANEJO TRANSPARENTE DE ERRORES: si la lección NO vino de Gemini, avisamos con claridad
+  // que es contenido de MODO DEMOSTRACIÓN, sin presentarlo como una respuesta normal de la IA.
+  // Distinguimos si el alumno eligió el modo demostración o si Gemini falló (cuota/conexión).
+  if (!esGemini) {
+    const porFallo = modo !== "demo"; // el usuario quería IA pero Gemini no respondió
+    const motivo = data.modelo === "limite-temporal"
+      ? "Gemini alcanzó su límite de uso por el momento (cuota/uso por minuto)."
+      : "Gemini no está disponible ahora (conexión o respuesta no válida).";
+    els.demoNotice.innerHTML = porFallo
+      ? `⚠️ <strong>Modo demostración.</strong> ${motivo} Esta lección es contenido de respaldo (temas básicos), <strong>no</strong> una respuesta generada por la IA. Vuelve a intentarlo en unos momentos para usar Gemini.`
+      : `🎮 <strong>Modo demostración</strong> (elegido por ti): contenido local de temas básicos, sin usar la IA.`;
+    els.demoNotice.classList.toggle("error", porFallo);
+    els.demoNotice.hidden = false;
+  } else {
+    els.demoNotice.hidden = true;
+  }
 
   els.steps.innerHTML = "";
 

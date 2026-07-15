@@ -116,7 +116,8 @@ Abre **http://localhost:3000** en el navegador.
   sincronizando la voz del avatar con la revelación del contenido en la pizarra y el
   resaltado con puntero.
 - ✅ **Ramificación ligera:** en cada `preguntar`, el alumno responde; se evalúa
-  (correcto → continúa/felicita · incorrecto → otro ejemplo + **un reintento**).
+  (correcto → felicita · incorrecto → **pista del método + reintento**, sin revelar la respuesta;
+  ver *Ramificación ligera*).
 - ✅ Resaltado del **paso activo** en el transcript durante la reproducción.
 
 > **Voz:** requiere **Chrome/Edge** (mejor soporte de voces en español). El escenario
@@ -154,12 +155,13 @@ Cada llamada a Gemini consume saldo. La arquitectura está optimizada para gasta
   se envía inline (los modelos 2.5 aplican caché implícito igualmente).
 - **Caché de respuestas:** la misma consulta no vuelve a llamar a Gemini (se sirve de memoria).
 - **Modelos retirados** se recuerdan → no se gasta una llamada 404 por petición.
-- **Enfriamiento por cuota:** si Gemini responde `429` (saldo agotado), la app deja de llamarlo
-  por 5 min y sirve **modo demo**, en vez de reintentar en bucle.
+- **Enfriamiento por cuota:** un `429` casi siempre es un **límite por minuto** (RPM/TPM) transitorio,
+  no falta de saldo. En modo automático la app espera ~20 s antes de reintentar y sirve **modo demo**
+  mientras tanto (en **Modo IA** explícito siempre intenta Gemini). Esto evita reintentar en bucle.
 - **thinking desactivado** (`thinkingBudget: 0`): sin tokens de razonamiento extendido.
 
-> Si el saldo se agota, la app **no se cae**: degrada a modo demo (píldora "demo/mock").
-> Para reactivar la IA real, recarga créditos en Google AI Studio.
+> Si Gemini no responde, la app **no se cae**: degrada a modo demo y **lo avisa con claridad**
+> (ver *Manejo transparente de errores*). La facturación/cuota de Gemini es de la cuenta del cliente.
 
 ---
 
@@ -206,6 +208,108 @@ Ejemplo — "Resuelve 2x + 5 = 15":
   ]
 }
 ```
+
+---
+
+## PRE Light — de la respuesta de la IA a pasos didácticos
+
+El **PRE Light** ([`src/preLight.js`](src/preLight.js), función `processLSG`) es la capa que
+convierte el LSG **crudo** que devuelve Gemini (que puede venir imperfecto) en bloques
+**predecibles y didácticos** que el resto del sistema puede reproducir con seguridad. Sin esta
+capa, el PSE Light (Fase 2) no tendría eventos fiables que sincronizar.
+
+**Qué transforma, paso a paso:**
+
+1. **Valida la estructura de la escena** y detecta el formato:
+   - **Secuencial** (`directivas: [...]`) para `resolver` / `explicar` — resolución paso a paso.
+   - **Modular** (`modulos: [{ id, directivas }]`) para `aprender` / `practicar` — la lección se
+     organiza en módulos didácticos: **concepto → regla → ejemplo guiado → práctica** (para
+     "aprender") o **recordatorio → práctica** (para "practicar").
+2. **Sanea cada directiva** (`sanitizeDirectiva`): verifica el `tipo`, completa campos por defecto,
+   descarta las inválidas y **limpia la notación** (`sanitizeMath`): convierte LaTeX/`$` a texto
+   plano legible (`x^2` → `x²`, `\frac{a}{b}` → `(a)/(b)`), porque la pizarra y la voz no renderizan LaTeX.
+3. **Numera las directivas** (id incremental) para que el PSE Light tenga referencias exactas y pueda
+   resaltar el paso activo.
+4. **Garantiza UNA sola pregunta de práctica** (`enforceSingleQuestion`): elimina preguntas duplicadas
+   y, si la IA escribió el ejercicio como pizarra (a veces sin `preguntar`), lo **recupera** y lo
+   convierte en la pregunta real y calificable.
+5. **Calcula y verifica la respuesta correcta** (`fixPracticeAnswer` + `computeAnswer`): la respuesta a
+   calificar se **calcula de forma determinista en el servidor** (ver *Validación matemática*), no se
+   confía ciegamente en la IA. Nunca se muestra un ejercicio con una respuesta errónea.
+6. **Estima la duración** de la lección y devuelve además una **lista PLANA de pasos** (útil para el
+   render, el transcript y la depuración).
+
+**Módulos didácticos (formato modular).** Para "aprender" un tema, la lección se estructura así:
+
+| Módulo | Contenido |
+|---|---|
+| `concepto` | Qué es el tema, con un ejemplo cotidiano (la balanza, repartir, etc.). |
+| `regla` | La regla o método general, explicado con palabras sencillas. |
+| `ejemplo_guiado` | Un ejemplo RESUELTO paso a paso, explicando el porqué de cada paso. |
+| `practica` | Cierra con un ejercicio NUEVO (números distintos) para que lo resuelva el alumno. |
+
+Cada módulo empieza con una directiva `hablar` (el porqué) y cada `pizarra` va precedida de su
+explicación hablada. El PRE Light valida esta estructura y descarta módulos vacíos.
+
+---
+
+## Validación matemática (la respuesta siempre es correcta)
+
+El modelo económico (`flash-lite`) **puede equivocarse en aritmética simple** (llegó a responder
+"7 × 3 = 12"). Por eso **no se confía en la respuesta de la IA**: el servidor **calcula la respuesta
+él mismo** con una calculadora determinista de aritmética exacta (`computeAnswer` en `preLight.js`).
+
+- Cubre: operaciones (`+ − × ÷`), **fracciones** exactas (`2/5 + 1/10 = 1/2`), paréntesis y
+  precedencia, y fórmulas de problemas verbales: **velocidad** (distancia/tiempo), **área y
+  perímetro** (rectángulo, cuadrado, triángulo), **porcentajes**, **potencias**, **raíces exactas**,
+  **promedios** y **volúmenes**.
+- Si el ejercicio no es reconocible, usa el resultado que la IA calculó **paso a paso** (`Resultado:`)
+  como último recurso; y las raíces irracionales **no se adivinan**.
+- Resultado: se evita mostrar errores como "200 ÷ 25 = 200". Verificado en producción.
+
+---
+
+## Continuidad conversacional (contexto de sesión)
+
+Para que la IA entienda seguimientos como *"explícamelo con manzanas"* o *"dame otro ejemplo"* sin
+perder el tema, el frontend **arrastra el contexto** en cada consulta:
+
+- `currentTopic`: el **tema activo** de la conversación.
+- `historial`: las **últimas consultas** del alumno.
+
+El backend los reenvía a Gemini como *contexto de la conversación*, con la instrucción de **mantener
+el tema activo** en un seguimiento y **cambiar solo** ante un tema nuevo y claro. Además, un detector
+local clasifica el seguimiento (`reexplicar` / `más fácil` / `más difícil` / `otro ejemplo`) — en
+**español e inglés**. Así, "con manzanas" sobre *diferencia de cuadrados* sigue siendo diferencia de
+cuadrados con manzanas, y no "baja" a sumas.
+
+---
+
+## Ramificación ligera (pista + reintento, sin revelar la respuesta)
+
+Cuando el alumno se equivoca, el sistema **no repite el mismo ejercicio a secas ni revela la
+respuesta**. En su lugar (en `pseLight.js`, `_handleQuestion` + `buildHint`):
+
+1. Da una **pista del método** adaptada al tipo de ejercicio (ecuación → "usa la operación inversa";
+   fracciones → "fíjate en los denominadores"; problema verbal → "qué fórmula relaciona los datos")
+   y **reabre la caja para reintentar**.
+2. Si vuelve a fallar, da una **pista más concreta** (el primer paso del método) y permite otro intento.
+3. Si aún no acierta, **recuerda el método y anima a repasar** la lección — **sin decir el número**
+   de la respuesta. Las pistas nunca contienen la respuesta (la función ni siquiera la recibe).
+
+---
+
+## Manejo transparente de errores
+
+Si Gemini falla por **cuota (429), conexión o respuesta inválida**, la plataforma degrada a **modo
+demostración** (contenido local de respaldo) pero **lo informa con claridad**, sin presentarlo como
+una respuesta normal de la IA:
+
+- Un **aviso visible** sobre el escenario: *"⚠️ Modo demostración. Gemini alcanzó su límite… Esta
+  lección es contenido de respaldo, no una respuesta generada por la IA."*
+- La píldora de origen cambia de **"IA: Gemini"** a **"IA: Modo demostración"** (resaltada).
+- Se distingue el **modo demostración elegido por el usuario** (aviso neutro) del **fallo de Gemini**
+  (aviso de error), para que el alumno siempre sepa qué está viendo.
 
 ---
 
@@ -276,6 +380,40 @@ llamada funciona aunque tu ubicación esté bloqueada. El repo incluye
 
 > El puerto lo asigna Render vía `PORT` (el servidor ya lo respeta). El plan `free`
 > "duerme" tras inactividad; la primera petición tras dormir tarda unos segundos.
+
+### Cambiar la API key de Gemini
+
+La clave vive **solo** en la variable de entorno `GEMINI_API_KEY` (nunca en el código). Para cambiarla:
+
+- **En local:** edita `.env`, actualiza `GEMINI_API_KEY=...` y reinicia (`npm start`).
+- **En Render (interfaz):** servicio → **Environment** → edita `GEMINI_API_KEY` → **Save changes**
+  (Render redepliega solo). Comprueba `/api/health` → `{"modo_ia":"gemini"}`.
+- **En Render (API), sin abrir la web:**
+  ```bash
+  # 1) Instala la nueva clave
+  curl -X PUT -H "Authorization: Bearer $RENDER_API_KEY" -H "Content-Type: application/json" \
+    "https://api.render.com/v1/services/$SVC/env-vars/GEMINI_API_KEY" -d '{"value":"NUEVA_CLAVE"}'
+  # 2) Dispara un despliegue para que tome la clave
+  curl -X POST -H "Authorization: Bearer $RENDER_API_KEY" -H "Content-Type: application/json" \
+    "https://api.render.com/v1/services/$SVC/deploys" -d '{"clearCache":"do_not_clear"}'
+  ```
+  (`$SVC` = id del servicio, p.ej. `srv-...`; `$RENDER_API_KEY` = token de Render.)
+
+> **La clave y su facturación son de la cuenta del cliente.** Conviene usar una clave de un
+> **proyecto de Google Cloud con facturación activa** (no "Nivel gratuito"), o los `429` serán frecuentes.
+
+---
+
+## Cierre de Fases 1 y 2 — checklist de aceptación
+
+| # | Compromiso | Estado | Dónde |
+|---|---|---|---|
+| 1 | **Continuidad conversacional** (contexto de mensajes previos para seguimientos) | ✅ | `currentTopic`+`historial` → Gemini · [app.js](public/app.js), [server.js](server.js), [geminiClient.js](src/geminiClient.js) |
+| 2 | **Validación matemática** (verificar respuestas/ejercicios antes de mostrarlos) | ✅ | `computeAnswer`/`fixPracticeAnswer` · [preLight.js](src/preLight.js) |
+| 3 | **Ramificación ligera** (pista o alternativa + reintento, sin repetir/revelar) | ✅ | `_handleQuestion`+`buildHint` · [pseLight.js](public/pseLight.js) |
+| 4 | **PRE Light** documentado (transforma la salida de la IA en pasos y módulos) | ✅ | Sección *PRE Light* de este README · `processLSG` en [preLight.js](src/preLight.js) |
+| 5 | **Manejo transparente de errores** (avisar cuando usa modo demostración) | ✅ | Aviso en el escenario · [app.js](public/app.js) `renderResult` |
+| 6 | **Validación final y entrega técnica** (pruebas con Gemini, reporte, versión, instrucciones) | ✅ | `npm run qa` (116+/0) · este README · [ENTREGA.md](ENTREGA.md) |
 
 ---
 

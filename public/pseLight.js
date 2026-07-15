@@ -349,22 +349,75 @@ export class PSELight {
       return;
     }
 
-    // Incorrecto → un reintento (ramificación ligera). CLAVE: el ejercicio y la caja
-    // de respuesta NO deben desaparecer. Reabrimos la caja y re-mostramos la pregunta
-    // DE INMEDIATO (sin esperar a que termine el audio), y la voz suena en paralelo.
-    this.ui.showFeedback(false, "Casi. Vuelve a mirar el ejercicio en la pizarra e inténtalo otra vez.");
-    this._speak("Casi. Vuelve a mirar el ejercicio en la pizarra e inténtalo otra vez.", "hablando", signal);
-    const retry = await this.ui.askAnswer(d.texto, { signal }); // reabre la caja y re-muestra la pregunta ya
-    if (signal.aborted || retry == null) return;
-
-    if (checkAnswer(retry, expected).correct) {
-      this.ui.showFeedback(true, "¡Eso es! Ahora sí. 🎉");
-      await this._speak("¡Eso es! Ahora sí lo tienes.", "sonriendo", signal);
-    } else {
-      this.ui.showFeedback(false, `La respuesta correcta es: ${expected}. ¡Sigue practicando!`);
-      await this._speak(`La respuesta correcta es ${expected}. ¡Sigue practicando, vas bien!`, "hablando", signal);
+    // RAMIFICACIÓN LIGERA ante un error: en vez de repetir el mismo ejercicio a secas o revelar la
+    // respuesta, damos una PISTA (cada vez más concreta) del MÉTODO y permitimos REINTENTAR. La caja
+    // de respuesta NO desaparece: se reabre de inmediato y la voz suena en paralelo.
+    const boardText = this._exerciseBoard(timeline, index);
+    const nudges = [
+      "Casi. ",
+      "Aún no, pero vas bien. ",
+    ];
+    for (let intento = 0; intento < nudges.length; intento++) {
+      const hint = buildHint(d.texto, boardText, intento + 1);
+      const msg = `${nudges[intento]}${hint} Inténtalo otra vez.`;
+      this.ui.showFeedback(false, msg);
+      this._speak(msg, "hablando", signal); // no bloquea: la caja se reabre ya
+      const retry = await this.ui.askAnswer(d.texto, { signal });
+      if (signal.aborted || retry == null) return;
+      if (checkAnswer(retry, expected).correct) {
+        this.ui.showFeedback(true, "¡Eso es! Ahora sí. 🎉");
+        await this._speak("¡Eso es! Ahora sí lo tienes. ¡Bien hecho!", "sonriendo", signal);
+        return;
+      }
     }
+
+    // Sigue sin acertar: NO revelamos el número. Recordamos el MÉTODO y animamos a repasar/reintentar.
+    const cierre = `No te preocupes, así se aprende. ${buildHint(d.texto, boardText, 2)} Puedes volver a reproducir la lección para repasar el método y luego intentarlo de nuevo. ¡Tú puedes!`;
+    this.ui.showFeedback(false, cierre);
+    await this._speak(cierre, "hablando", signal);
   }
+
+  // Devuelve el ejercicio escrito en la pizarra JUSTO antes de la pregunta (para dar pistas).
+  _exerciseBoard(timeline, questionIndex) {
+    for (let i = questionIndex - 1; i >= 0; i--) {
+      if (timeline[i]?.tipo === "pizarra" && timeline[i].contenido) return timeline[i].contenido;
+    }
+    return "";
+  }
+}
+
+// Genera una PISTA del método (sin revelar la respuesta), adaptada al tipo de ejercicio.
+// `nivel` 1 = pista suave; 2 = pista más concreta (primer paso del método).
+export function buildHint(question, board, nivel) {
+  const t = `${question || ""} ${board || ""}`.toLowerCase();
+  const b = (board || "").toLowerCase();
+  // Problemas con FÓRMULA o enunciado verbal (velocidad, área, distancia/tiempo, %, potencia, promedio…).
+  if (/velocidad|rapidez|distancia|tiempo|[aá]rea|per[ií]metro|volumen|por ciento|%|al cuadrado|al cubo|elevado|ra[ií]z|promedio|\bmedia\b/.test(t)) {
+    return nivel >= 2
+      ? "Identifica la fórmula u operación que relaciona los datos y calcúlala paso a paso con los números del enunciado."
+      : "Pista: piensa qué fórmula u operación conecta los datos del ejercicio.";
+  }
+  // Fracciones.
+  if (/\d+\s*\/\s*\d+/.test(t)) {
+    return nivel >= 2
+      ? "Con el mismo denominador, opera solo los numeradores y mantén el denominador; al final simplifica si puedes."
+      : "Pista: fíjate primero en los denominadores antes de sumar o restar.";
+  }
+  // Ecuación (variable aislada junto a un número/operador y un "="): guiar con la operación inversa.
+  if (b.includes("=") && /\d[a-z]|\b[a-z]\s*[-+=]|=\s*[a-z]\b/.test(b)) {
+    return nivel >= 2
+      ? "Para despejar la letra, primero pasa el número que la acompaña al otro lado con la operación inversa (si suma, resta; si resta, suma) y luego divide por el coeficiente."
+      : "Pista: usa la operación inversa en ambos lados para dejar la letra sola.";
+  }
+  // Aritmética con un operador.
+  if (/[×÷*+]|\d\s*\/\s*\d|\d\s*-\s*\d/.test(t)) {
+    return nivel >= 2
+      ? "Resuelve paso a paso: identifica la operación y calcúlala con calma; recuerda el orden (primero × y ÷, luego + y −)."
+      : "Pista: mira con calma qué operación pide el ejercicio y hazla paso a paso.";
+  }
+  return nivel >= 2
+    ? "Repasa el último paso escrito en la pizarra: ahí está el método para resolverlo."
+    : "Pista: vuelve a fijarte en el método que usamos en el ejemplo de la pizarra.";
 }
 
 function mapAvatarAction(accion) {

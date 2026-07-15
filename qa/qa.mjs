@@ -12,7 +12,7 @@ import { classifyIntent } from "../src/classifier.js";
 import { processLSG, solveLinearFromText, solveFractionFromText, resultadoFromVerificacion, computeAnswer } from "../src/preLight.js";
 import { mockLSG } from "../src/lsgPrompt.js";
 import { generateLSG } from "../src/geminiClient.js";
-import { checkAnswer, flattenLSG, PSELight } from "../public/pseLight.js";
+import { checkAnswer, flattenLSG, PSELight, buildHint } from "../public/pseLight.js";
 
 const BASE = process.env.QA_URL || "https://math-ia.onrender.com";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -80,6 +80,16 @@ async function unitTests() {
   // "Distancia = 200" jamás debe "resolverse" como 200 (bug reportado por el cliente).
   check("solver: 'Distancia = 200 metros' → null (no 200)", solveLinearFromText("Distancia = 200 metros, Tiempo = 25 segundos") === null);
   check("solver: 'Tiempo = 25 segundos' → null", solveLinearFromText("Tiempo = 25 segundos") === null);
+
+  // Ramificación ligera: la PISTA guía el método y NUNCA revela la respuesta (no recibe el valor).
+  check("hint: ecuación → operación inversa", /inversa|despejar/.test(buildHint("¿cuánto vale x?", "2x + 5 = 15", 2)));
+  check("hint: fracciones → denominador", /denominador/.test(buildHint("¿2/5 + 1/5?", "2/5 + 1/5", 1)));
+  check("hint: problema verbal → fórmula", /f[oó]rmula|operaci/.test(buildHint("¿velocidad?", "Distancia = 200, Tiempo = 25", 1)));
+  // Estructuralmente NO puede revelar la respuesta: buildHint no recibe el valor esperado y su
+  // texto no contiene dígitos (guía el método, no da números).
+  check("hint: no contiene dígitos (no revela la respuesta)",
+    [["¿x?", "2x + 5 = 15"], ["¿2/5+1/5?", "2/5 + 1/5"], ["¿7×3?", "7 × 3"], ["¿velocidad?", "Distancia = 200, Tiempo = 25"]]
+      .every(([q, b]) => !/\d/.test(buildHint(q, b, 1)) && !/\d/.test(buildHint(q, b, 2))));
 
   check("checkAnswer: 5 == 5", checkAnswer("5", "5").correct === true);
   check("checkAnswer: 9 != 5", checkAnswer("9", "5").correct === false);

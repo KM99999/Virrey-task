@@ -138,6 +138,24 @@ textarea:focus { outline: none; border-color: var(--accent); }
   border: 1px solid var(--border);
   color: var(--muted);
 }
+.pill.demo { color: #ffd27a; border-color: #b98a2e; }
+
+/* Aviso transparente de MODO DEMOSTRACIÓN (respaldo, no respuesta real de la IA). */
+.demo-notice {
+  margin: 10px 0 4px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  background: rgba(255, 210, 122, 0.10);
+  border: 1px solid #b98a2e;
+  color: #ffdca0;
+}
+.demo-notice.error {
+  background: rgba(255, 107, 107, 0.12);
+  border-color: var(--danger);
+  color: #ffc2c2;
+}
 
 /* Result */
 .result-head { display: flex; align-items: center; justify-content: space-between; }

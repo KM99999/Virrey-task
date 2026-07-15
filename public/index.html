@@ -38,6 +38,11 @@
       </div>
     </div>
 
+    <!-- Aviso transparente: se muestra cuando la lección viene del MODO DEMOSTRACIÓN
+         (por elección del usuario o porque Gemini falló por cuota/conexión), para NO
+         presentar el contenido de respaldo como una respuesta normal de la IA. -->
+    <div class="demo-notice" id="demoNotice" role="status" aria-live="polite" hidden></div>
+
     <!-- Barra de pasos: retroceder/avanzar a cualquier punto de la lección -->
     <div class="scrubber" id="scrubber" hidden>
       <input id="seekBar" type="range" min="0" max="0" value="0" step="1"
