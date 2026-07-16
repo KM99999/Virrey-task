@@ -101,7 +101,7 @@ export async function generateLSG(query, intent, opts = {}) {
       + (prev ? `- Esto YA se explicó antes (NO lo repitas, ofrece algo NUEVO): "${prev}"\n` : "")
       + `- Si pide una ANALOGÍA con un objeto concreto (perritos, manzanas, dinero), úsala manteniendo el tema.\n`
       + `- Si es una pregunta conceptual ("¿eso quiere decir…?"): respóndela clara y directa con un ejemplo.\n`
-      + `Responde de forma NATURAL: NO cites el enunciado del alumno y NO uses frases como "Tomé nota de tu consulta". Cierra con una pregunta de práctica del tema.`;
+      + `Empieza DIRECTAMENTE con la explicación real; NUNCA escribas el mensaje del alumno (ni un fragmento de él) como texto de una directiva, y NO uses frases como "Tomé nota de tu consulta". Cierra con una pregunta de práctica del tema.`;
   } else if (reexplain) {
     reteach = "\n\nIMPORTANTE: el alumno dijo que NO ENTENDIÓ. NO repitas las mismas palabras ni el mismo ejemplo; explícalo de OTRA forma. Enséñalo COMO A ALGUIEN QUE NO SABE NADA: parte de una ANALOGÍA cotidiana (comida, dinero, objetos), ve MUY paso a paso y con MUCHO detalle, define cada término, no asumas ningún conocimiento previo y no te saltes pasos. Cuenta o desarrolla lo que haga falta hasta que quede clarísimo, y cierra con un ejercicio más fácil. El objetivo es que POR FIN lo entienda.";
   }

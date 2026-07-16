@@ -109,7 +109,7 @@ app.post("/api/query", async (req, res) => {
     );
 
     // 3) PRE Light: validar y normalizar en bloques predecibles.
-    const { lsg, pasos, warnings } = processLSG(rawLsg, classification.intent);
+    const { lsg, pasos, warnings } = processLSG(rawLsg, classification.intent, effectiveQuery);
 
     const payload = {
       query,

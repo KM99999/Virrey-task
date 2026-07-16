@@ -406,7 +406,7 @@ const COSTO_SEGUNDOS = {
  * @param {string} intent - intención esperada (del clasificador).
  * @returns {{ lsg: object, pasos: object[], warnings: string[] }}
  */
-export function processLSG(rawLsg, intent) {
+export function processLSG(rawLsg, intent, mensaje = "") {
   const warnings = [];
 
   if (!rawLsg || typeof rawLsg !== "object") {
@@ -468,6 +468,10 @@ export function processLSG(rawLsg, intent) {
       throw new Error("PRE Light: la escena no contenía directivas válidas.");
     }
   }
+
+  // Anti-eco: descarta cualquier "hablar" que sea una REPETICIÓN del mensaje del alumno
+  // (a veces la IA "cita" la consulta como si fuera parte de la lección, p.ej. «dame otro ejemplo").»).
+  dropEchoedHablar(lsg, mensaje);
 
   // Garantizar EXACTAMENTE una pregunta en toda la lección (la IA a veces genera
   // varias "preguntar" casi idénticas → dos cajas de respuesta). Si no hay ninguna,
@@ -593,6 +597,27 @@ function sanitizeDirectiva(raw, warnings, context) {
 
 // Conserva SOLO la primera "preguntar" de toda la lección (elimina duplicadas de la
 // IA) y, si no hay ninguna, añade una de cierre. Luego reconstruye `pasos`.
+// Normaliza texto para comparar "eco" (minúsculas, sin tildes ni signos, espacios colapsados).
+function normEcho(s) {
+  return String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/["'“”¿?¡!.,;:()]/g, "").replace(/\s+/g, " ").trim();
+}
+// Elimina directivas "hablar" que solo REPITEN el mensaje del alumno (la IA a veces "cita" la
+// consulta como si fuera parte de la lección). Evita que el avatar lea la consulta en voz alta.
+function dropEchoedHablar(lsg, mensaje) {
+  const m = normEcho(mensaje);
+  if (m.length < 6) return; // mensaje muy corto → no arriesgar
+  const arrays = Array.isArray(lsg.modulos) ? lsg.modulos.map((x) => x.directivas) : [lsg.directivas];
+  for (const arr of arrays) {
+    for (let i = 0; i < arr.length; i++) {
+      if (arr[i].tipo !== "hablar") continue;
+      const h = normEcho(arr[i].texto);
+      const esEco = h.length >= 6 && (h === m || (Math.abs(h.length - m.length) <= 6 && (h.includes(m) || m.includes(h))));
+      if (esEco) { arr.splice(i, 1); i--; }
+    }
+  }
+}
+
 function enforceSingleQuestion(lsg, pasos, counter, intent) {
   const arrays = Array.isArray(lsg.modulos)
     ? lsg.modulos.map((m) => m.directivas)
