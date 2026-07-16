@@ -45,8 +45,8 @@ app.post("/api/query", async (req, res) => {
   // Contexto de conversación: el último tema, para reexplicar cuando el alumno dice
   // "no entendí". El frontend lo envía solo cuando la consulta es un seguimiento.
   const contexto = typeof req.body?.contexto === "string" ? req.body.contexto.trim().slice(0, 2000) : "";
-  // Tipo de seguimiento del tema activo (opcional): reexplicar | mas_facil | mas_dificil | continuacion | desglosar.
-  const SEG_VALIDOS = ["reexplicar", "mas_facil", "mas_dificil", "continuacion", "desglosar"];
+  // Tipo de seguimiento del tema activo (opcional): reexplicar | mas_facil | mas_dificil | continuacion | desglosar | practicar.
+  const SEG_VALIDOS = ["reexplicar", "mas_facil", "mas_dificil", "continuacion", "desglosar", "practicar"];
   const seguimiento = SEG_VALIDOS.includes(req.body?.seguimiento) ? req.body.seguimiento
     : (contexto ? "reexplicar" : ""); // compatibilidad: si hay contexto sin tipo, es un "no entendí"
   // Contexto de conversación: tema activo + últimas consultas del alumno. Se pasa a la IA para que
@@ -101,20 +101,20 @@ app.post("/api/query", async (req, res) => {
     // Seguimiento del tema activo (mantiene el TEMA anterior; no es un tema nuevo).
     const reexplain = !!contexto;
     const esNivel = seguimiento === "mas_facil" || seguimiento === "mas_dificil";
+    const esOtraPractica = seguimiento === "practicar"; // "dame otro ejercicio (diferente)" del MISMO tema
     const esContinuacion = seguimiento === "continuacion";
-    // effectiveQuery: reexplicar/nivel re-usan el TEMA; "continuacion" responde el MENSAJE real del
-    // alumno pero ANCLADO al tema (para que Gemini y el demo no lo pierdan).
-    // reexplicar/nivel re-usan el TEMA; "continuacion" usa el MENSAJE real del alumno (natural),
-    // y el tema activo se le pasa a la IA como contexto (opts.tema), no dentro del enunciado.
+    // effectiveQuery: reexplicar/nivel re-usan el TEMA; "continuación"/"otra práctica" usan el MENSAJE
+    // real del alumno (natural) ANCLADO al tema (opts.tema), para que Gemini/demo no pierdan el tema.
     const effectiveQuery = !reexplain ? query
       : esContinuacion ? query
+      : esOtraPractica ? query
       : contexto;
 
-    // 1) Intención: "más fácil/difícil" → practicar (ejercicio del mismo tema); "continuación" o
-    //    "no entendí" → explicar (responder/re-enseñar dentro del tema). Si no es seguimiento, la
-    //    decide el clasificador local.
+    // 1) Intención: "más fácil/difícil" y "otro ejercicio" → practicar (ejercicio del MISMO tema);
+    //    "continuación" o "no entendí" → explicar (responder/re-enseñar dentro del tema). Si no es
+    //    seguimiento, la decide el clasificador local.
     const classification = reexplain
-      ? esNivel
+      ? (esNivel || esOtraPractica)
         ? { intent: "practicar", confidence: 0.9, scores: { resolver: 0, aprender: 0, explicar: 0, practicar: 1 } }
         : { intent: "explicar", confidence: 0.9, scores: { resolver: 0, aprender: 0, explicar: 1, practicar: 0 } }
       : classifyIntent(query);

@@ -91,6 +91,13 @@ export async function generateLSG(query, intent, opts = {}) {
     reteach = "\n\nIMPORTANTE: el alumno pide algo MÁS BÁSICO del MISMO tema de la consulta. NO cambies de tema bajo ninguna circunstancia (si el tema es ecuaciones, sigue siendo ecuaciones; NO pases a sumar u otro tema). Mantente EXACTAMENTE en ese tema pero baja el nivel: usa números más pequeños y sencillos, ve más despacio y con más detalle, y propón un ejercicio de práctica MÁS FÁCIL del mismo tema.";
   } else if (seg === "mas_dificil") {
     reteach = "\n\nIMPORTANTE: el alumno pide algo MÁS DIFÍCIL del MISMO tema de la consulta. NO cambies de tema. Mantente EXACTAMENTE en ese tema pero sube el nivel: números o casos algo más complejos y un ejercicio de práctica más retador del mismo tema.";
+  } else if (seg === "practicar") {
+    const tema = opts.tema ? `"${opts.tema}"` : "el de la conversación anterior";
+    const evitar = extractExclusion(query);
+    const prev = typeof opts.previo === "string" && opts.previo.trim() ? opts.previo.trim().slice(0, 400) : "";
+    reteach = `\n\nIMPORTANTE: el alumno pide OTRO EJERCICIO de práctica del MISMO tema (${tema}), NO un tema nuevo. NO cambies de tema bajo ninguna circunstancia (si el tema es derivadas, el ejercicio DEBE ser de derivadas; NO propongas ecuaciones lineales u otro tema). Genera un ejercicio de práctica NUEVO y DISTINTO del mismo tema, con un breve recordatorio del método y una pregunta clara para que lo resuelva el alumno.`
+      + (evitar ? ` El alumno pide EVITAR "${evitar}": no repitas ese caso.` : "")
+      + (prev ? ` Esto ya se vio antes (propón algo distinto): "${prev}".` : "");
   } else if (seg === "continuacion") {
     const tema = opts.tema ? `"${opts.tema}"` : "el de la conversación anterior";
     const evitar = extractExclusion(query);

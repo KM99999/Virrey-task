@@ -178,6 +178,16 @@ export function computeDerivative(text) {
   return exp === 1 ? `${c}x` : `${c}x${toSuper(String(exp))}`;
 }
 
+// Deriva una FUNCIÓN escrita en la pizarra/enunciado: "f(x) = x³", "y = 2x³" o un monomio suelto
+// "x³". Toma el lado DERECHO de "=" (la función real) y aplica la regla de la potencia. Sirve para
+// calificar cuando el exponente está en el TABLERO y la pregunta solo dice "¿la derivada de f(x)?".
+export function derivarFuncion(expr) {
+  if (typeof expr !== "string" || !expr.trim()) return null;
+  let s = expr;
+  if (s.includes("=")) s = s.split("=").pop(); // RHS: "f(x) = x³" → " x³"
+  return computeDerivative("derivada de " + s);
+}
+
 // Calcula la respuesta EXACTA del ejercicio descrito en el texto, o null si no lo reconoce.
 export function computeAnswer(text) {
   if (typeof text !== "string" || !text.trim()) return null;
@@ -738,11 +748,20 @@ function enforceSingleQuestion(lsg, pasos, counter, intent) {
     //    de la pizarra para no duplicarla);
     //  - si es una ecuación resoluble ("2x - 5 = 7"), la planteamos como "resuélvelo tú".
     // Tomamos la ÚLTIMA coincidencia (el ejercicio de cierre).
+    // ¿La lección es de DERIVADAS? (algún texto lo menciona) → una función en la pizarra ("f(x) = x³")
+    // se plantea como "deriva tú", con respuesta calificable, en vez de una pregunta genérica.
+    let esDerivadas = false;
+    for (const arr of arrays) for (const d of arr) {
+      if (/deriv/i.test(d.texto || "") || /deriv/i.test(d.contenido || "")) { esDerivadas = true; break; }
+    }
     let promote = null;
     for (const arr of arrays) for (let i = 0; i < arr.length; i++) {
       const d = arr[i];
       if (d.tipo !== "pizarra" || !d.contenido) continue;
       if (/\?\s*$/.test(d.contenido)) promote = { arr, i, texto: d.contenido, quitar: true };
+      else if (esDerivadas && /x\s*(?:\^|[²³⁴⁵⁶⁷⁸⁹])/.test(d.contenido) && derivarFuncion(d.contenido)) {
+        promote = { arr, i, texto: `Ahora deriva tú: ${d.contenido}. ¿Cuál es la derivada?`, quitar: false };
+      }
       else if (solveLinearFromText(d.contenido) !== null) {
         promote = { arr, i, texto: `Ahora resuélvelo tú: ${d.contenido}. ¿Cuánto vale?`, quitar: false };
       }
@@ -824,6 +843,15 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
   // Pizarra (ejercicio) inmediatamente anterior a la pregunta.
   let board = null;
   for (let i = qIdx - 1; i >= 0; i--) { if (flat[i].tipo === "pizarra") { board = flat[i].contenido; break; } }
+
+  // 0) DERIVADA: si la pregunta pide derivar y la función está en la PIZARRA ("f(x) = x³"), derivamos
+  //    la función del tablero (regla de la potencia). Va PRIMERO porque, si no, computeAnswer(q.texto)
+  //    sobre "¿la derivada de f(x)?" parsearía "f(x)" y devolvería "1" (incorrecto). Así "2x" a la
+  //    derivada de x³ (=3x²) se califica MAL y NO se felicita.
+  if (/deriv/i.test(q.texto) || (board && /deriv/i.test(board))) {
+    const der = (board && derivarFuncion(board)) || computeDerivative(q.texto);
+    if (der) { setResp(der); return; }
+  }
 
   // 1) Ecuación lineal LIMPIA (en la pizarra o en el propio texto) → solución EXACTA determinista
   //    (p.ej. "x-4=7" → 11); evita copiar la respuesta del ejemplo.

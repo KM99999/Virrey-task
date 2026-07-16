@@ -156,6 +156,19 @@ async function unitTests() {
     { tipo: "preguntar", texto: "¿Cuál es la derivada de x³?" }] }] }, "practicar");
   check("práctica de derivada: recibe respuesta calificable (3x²)", derLSG.pasos.find((d) => d.tipo === "preguntar")?.respuesta === "3x²");
   check("hint: derivada → regla de la potencia (sin número)", /potencia|exponente/.test(buildHint("¿derivada de x³?", "Derivada de x³", 2)) && !/\d/.test(buildHint("¿derivada de x³?", "Derivada de x³", 2)));
+  // Derivada con notación de función en la PIZARRA ("f(x) = x³"): se deriva el tablero, no "f(x)".
+  const derFn = processLSG({ escena: "d", intencion: "practicar", modulos: [{ id: "practica", directivas: [
+    { tipo: "hablar", texto: "Aquí tienes un ejercicio de derivadas para que lo resuelvas tú." },
+    { tipo: "pizarra", contenido: "f(x) = x³" },
+    { tipo: "preguntar", texto: "¿Cuál es la derivada de f(x)?" }] }] }, "practicar");
+  check("derivada f(x)=x³: respuesta calificable 3x² (no '1')", derFn.pasos.find((d) => d.tipo === "preguntar")?.respuesta === "3x²");
+  check("derivada f(x)=x³: '2x' es INCORRECTO", checkAnswer("2x", derFn.pasos.find((d) => d.tipo === "preguntar")?.respuesta).correct === false);
+  // Práctica de derivada SIN pregunta explícita: se promueve a pregunta calificable (no genérica).
+  const derSinQ = processLSG({ escena: "d", intencion: "practicar", modulos: [
+    { id: "recordatorio", directivas: [{ tipo: "hablar", texto: "Vamos a practicar con derivadas de potencias." }] },
+    { id: "practica", directivas: [{ tipo: "hablar", texto: "Aquí tienes un ejercicio para que lo resuelvas tú." }, { tipo: "pizarra", contenido: "f(x) = x³" }] }] }, "practicar");
+  const qSinQ = derSinQ.pasos.find((d) => d.tipo === "preguntar");
+  check("derivada sin pregunta: se plantea 'deriva tú' con respuesta 3x²", /deriv/i.test(qSinQ?.texto || "") && qSinQ?.respuesta === "3x²");
 
   check("checkAnswer: 5 == 5", checkAnswer("5", "5").correct === true);
   check("checkAnswer: 9 != 5", checkAnswer("9", "5").correct === false);

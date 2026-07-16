@@ -174,6 +174,20 @@ function pidePasos(q) {
   return false;
 }
 
+// ¿La consulta pide OTRO EJERCICIO para practicar (del MISMO tema)? ("dame otro ejercicio",
+// "déjame uno diferente", "más ejercicios", "otro problema", en ES/EN). Es un seguimiento de
+// PRÁCTICA: se mantiene el tema activo y se pide a la IA un ejercicio NUEVO del mismo tema —
+// así "otro ejercicio diferente" sobre derivadas NO se convierte en ecuaciones lineales.
+// OJO: si nombra un tema nuevo ("dame un ejercicio de fracciones"), NO es seguimiento (lo maneja
+// el clasificador como tema nuevo); por eso se exige que NO haya tema explícito.
+function pideOtroEjercicio(q) {
+  const n = q.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+  if (tieneTemaExplicito(q)) return false; // nombra un tema → tema nuevo, no seguimiento
+  const es = /(otro|otra|nuev[oa]|distint[oa]|diferente|mas|un|una)\s+(ejercicio|ejercicios|problema|problemas|practica|reto)|(ejercicio|problema)\s+(diferente|distint[oa]|nuev[oa]|mas dificil|mas facil)|(dame|dejame|deja|ponme|pon|quiero|otro|otra|mas)\s+(ejercicio|ejercicios|problema|problemas|practica|practicar|uno|reto)|mas ejercicios|otro ejercicio|otro problema|dejame otro|dame otro/;
+  const en = /(another|other|different|new|one more|a new)\s+(exercise|problem|question|one|practice)|(give|show).*(another|other|different)\s+(exercise|problem|one)|more (exercises|problems|practice)/;
+  return es.test(n) || en.test(n);
+}
+
 // Clasifica el tipo de SEGUIMIENTO del tema activo (o null si es un tema nuevo).
 function clasificarSeguimiento(q) {
   // "Explícame los pasos" del ejercicio actual → desglosar ESE ejercicio (solo si hay uno guardado).
@@ -184,8 +198,19 @@ function clasificarSeguimiento(q) {
   const aj = ajusteNivel(q);            // "mas_facil" | "mas_dificil"
   if (aj) return aj;
   if (esSeguimiento(q)) return "reexplicar"; // "no entendí", "otra vez", "de otra forma"…
+  if (pideOtroEjercicio(q)) return "practicar"; // otro ejercicio del MISMO tema (mantiene derivadas, etc.)
   if (esContinuacion(q)) return "continuacion"; // otro ejemplo / analogía / pregunta contextual
   return null;
+}
+
+// ¿La consulta NOMBRA un tema/ejercicio concreto (derivadas, fracciones, una ecuación…)? Se usa
+// para NO sobrescribir el tema activo con peticiones genéricas sin tema ("dame un ejercicio"),
+// que antes borraban "derivadas" y hacían que la IA "bajara" a ecuaciones lineales por defecto.
+function tieneTemaExplicito(q) {
+  const n = q.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+  const temas = /(derivad|integral|deriva\b|ecuacion|inecuacion|fraccion|decimal|porcentaje|por ciento|\bsuma|sumar|\bresta|restar|multiplic|divi(de|di|si)|\bpotencia|\braiz|\barea|perimetro|volumen|geometr|trigonometr|\bseno|coseno|tangente|algebra|factoriz|diferencia de cuadrados|polinomi|logaritm|limite|matriz|probabilidad|estadistic|promedio|numero primo|maximo comun|minimo comun|regla de tres|proporcion|angulo|triangulo|circulo|cuadrado|rectangulo|derivative|integral|equation|fraction|percent|algebra|geometry|trigonometry)/;
+  const expr = /\d\s*[-+*/^=]\s*[\w(]|\b[a-z]\s*=|[a-z]\s*[²³⁴⁵⁶⁷⁸⁹]|\bx\^/; // "2x+3", "x=", "x³", "x^2"
+  return temas.test(n) || expr.test(q);
 }
 
 // --- Fase 2: avatar, voz y PSE Light ----------------------------------------
@@ -391,8 +416,10 @@ async function submitQuery() {
       throw new Error(data.detalle || data.error || `Error ${res.status}`);
     }
 
-    // Recordar el último TEMA real (para reexplicarlo si luego dice "no entendí").
-    if (!seguimiento) lastTopicQuery = query;
+    // Recordar el último TEMA real. SOLO se actualiza si la consulta NOMBRA un tema/ejercicio
+    // concreto (o no había tema aún): así una petición genérica ("dame otro ejercicio") NO borra
+    // "derivadas" y la IA no "baja" a ecuaciones lineales por defecto en la siguiente práctica.
+    if (!seguimiento && (tieneTemaExplicito(query) || !lastTopicQuery)) lastTopicQuery = query;
     // Memoria de la lección recién generada (para que un próximo "otro ejemplo" no la repita).
     lastLessonSummary = resumenLeccion(data.lsg);
     // Recordar el EJERCICIO en pantalla (para "explícame los pasos"). Solo se actualiza si la
