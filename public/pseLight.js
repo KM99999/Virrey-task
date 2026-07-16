@@ -102,9 +102,10 @@ export function checkAnswer(student, expected) {
   const b = normalizeAnswer(expected);
   if (!a) return { known: true, correct: false };
   if (a === b) return { known: true, correct: true };
-  // Respuesta ALGEBRAICA (monomio: derivadas, etc.): comparar SOLO la forma simbólica completa,
-  // sin caer en la comparación numérica (que aceptaría "2x" o "3" para un esperado "3x²").
-  if (esMonomio(b)) {
+  // Respuesta ALGEBRAICA (monomio: "3x", "3x²"…): si CUALQUIERA de las dos es algebraica, se compara
+  // SOLO la forma simbólica completa. Así no se validan falsos positivos por la comparación numérica,
+  // que solo mira el número inicial: "3x" NO es "3", ni "2x" es "3x²".
+  if (esMonomio(a) || esMonomio(b)) {
     return { known: true, correct: normSym(a) === normSym(b) };
   }
   // Comparación por VALOR, aceptando fracciones equivalentes (1/2 == 3/6 == 0.5),

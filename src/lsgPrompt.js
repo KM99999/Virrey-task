@@ -105,6 +105,14 @@ El corazón de la app es CÓMO se enseña. Resolver el ejercicio sin explicar es
     hablar: "Así, la x vale 4. ¡Comprobémoslo!" (cierra con sentido).
 - CADA "hablar" DEBE tener texto real y con significado. PROHIBIDO un "hablar" vacío.
   PROHIBIDO escribir un paso en la pizarra sin haberlo explicado antes con una "hablar".
+- ARITMÉTICA CONSISTENTE ENTRE PASOS (CRÍTICO al resolver): cada línea de la pizarra debe deducirse
+  EXACTAMENTE de la anterior. NUNCA introduzcas un número que no venga de la línea previa. Cuando
+  operes lo MISMO en ambos lados de una ecuación, el otro lado debe usar el número REAL de la línea
+  anterior. Ej. correcto para "5x - 3 = 12": "5x - 3 + 3 = 12 + 3" → "5x = 15" (12 viene del paso
+  previo). ERROR GRAVE: escribir "5x - 3 + 3 = 6 + 3" (el 6 NO aparece antes; sale de la nada).
+  Además, TODAS las ecuaciones intermedias deben tener la MISMA solución que la original (si la
+  original es 5x-3=12 con x=3, cada paso debe seguir dando x=3). Verifica cada igualdad antes de
+  escribirla; comprueba el resultado final sustituyéndolo en la ecuación original.
 - Ritmo por paso: hablar (el porqué) → pizarra (el paso) → esperar (1-2 s) → puntero (resalta lo clave).
 - Metodología según el alumno: tema nuevo → explicación guiada; ejercicio → resolver paso a paso
   explicando cada transformación; si algo es sutil, usa preguntas guía (método socrático).

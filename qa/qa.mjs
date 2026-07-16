@@ -179,6 +179,12 @@ async function unitTests() {
   const compPura = processLSG({ escena: "x", intencion: "aprender", modulos: [{ id: "m", directivas: [{ tipo: "hablar", texto: "Las fracciones son partes de un todo." }, { tipo: "preguntar", texto: "¿Entendiste la explicación?" }] }] }, "aprender");
   check("comprensión pura (sin ejercicio): NO recibe respuesta calificable", compPura.pasos.find((d) => d.tipo === "preguntar")?.respuesta === undefined);
 
+  // NO validar respuestas erróneas como correctas: "3x" NO es "3" (el número inicial coincide, pero
+  // la variable lo cambia). Falso positivo reportado por el cliente.
+  check("checkAnswer: '3x' NO es correcto para esperado '3'", checkAnswer("3x", "3").correct === false);
+  check("checkAnswer: '5x' NO es correcto para esperado '15'", checkAnswer("5x", "15").correct === false);
+  check("checkAnswer: '8' SÍ vale para '8 metros/segundo' (unidad, no variable)", checkAnswer("8", "8 metros/segundo").correct === true);
+
   check("checkAnswer: 5 == 5", checkAnswer("5", "5").correct === true);
   check("checkAnswer: 9 != 5", checkAnswer("9", "5").correct === false);
   check("checkAnswer: sin verdad-base → known:false", checkAnswer("lo que sea", "").known === false);
