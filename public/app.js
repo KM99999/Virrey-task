@@ -55,6 +55,14 @@ let currentLSG = null; // último LSG generado, para reproducir en el escenario
 let seeking = false;   // true mientras el usuario arrastra la barra de pasos
 let lastTopicQuery = null; // último TEMA consultado (para reexplicar en un "no entendí")
 const historial = [];      // consultas recientes del alumno (contexto de conversación para la IA)
+let lastLessonSummary = ""; // resumen de la ÚLTIMA lección (memoria: para no repetir el mismo ejemplo)
+
+// Resumen breve de una lección (sus primeras explicaciones), para dárselo a la IA como "lo ya visto".
+function resumenLeccion(lsg) {
+  const flat = flattenLSG(lsg) || [];
+  const textos = flat.filter((d) => d.tipo === "hablar").map((d) => d.texto).filter(Boolean);
+  return textos.slice(0, 2).join(" ").slice(0, 400);
+}
 let modo = "ia"; // "ia" = temas avanzados con Gemini · "demo" = temas básicos sin IA (instantáneo)
 
 // Selector de modo: Demostración (básico, sin IA) / IA (avanzado, Gemini).
@@ -319,6 +327,7 @@ async function submitQuery() {
   if (seguimiento) {
     body.contexto = lastTopicQuery;               // el TEMA activo, para no perderlo
     body.seguimiento = tipoSeg;                    // reexplicar | mas_facil | mas_dificil | continuacion
+    if (lastLessonSummary) body.previo = lastLessonSummary; // memoria: qué se explicó, para no repetir
   }
   // Registrar la consulta en el historial de la conversación (para el contexto de la IA).
   historial.push(query);
@@ -339,6 +348,8 @@ async function submitQuery() {
 
     // Recordar el último TEMA real (para reexplicarlo si luego dice "no entendí").
     if (!seguimiento) lastTopicQuery = query;
+    // Memoria de la lección recién generada (para que un próximo "otro ejemplo" no la repita).
+    lastLessonSummary = resumenLeccion(data.lsg);
 
     renderResult(data);
     addToHistory(data);
@@ -597,6 +608,7 @@ els.clearHistory.addEventListener("click", () => {
   history.length = 0;
   lastTopicQuery = null;   // olvida el TEMA activo (no se seguirá enviando como contexto)
   historial.length = 0;    // olvida el historial de conversación que se manda a la IA
+  lastLessonSummary = "";  // olvida la memoria de la última lección
   renderHistory();
   toast("Sesión reiniciada: se borró el historial, el tema activo y el contexto. La próxima consulta empieza de cero.");
 });

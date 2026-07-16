@@ -55,6 +55,16 @@ let lastGeminiError = "";            // último error/estado interno de Gemini (
  * @param {string} intent - intención (del clasificador LOCAL).
  * @returns {Promise<{ lsg: object, source: "gemini" | "mock", model?: string }>}
  */
+// Extrae lo que el alumno pide EVITAR en un seguimiento ("otro ejemplo que no sea la velocidad",
+// "diferente a X", "sin usar X") → devuelve el concepto a excluir, o "" si no hay ninguno.
+function extractExclusion(q) {
+  const m = String(q || "").match(
+    /(?:diferente[s]? a|distint[oa][s]? a|que no (?:sea|tenga|use|utilice|hable de|incluya|contenga)|sin(?: usar)?|en vez de|en lugar de)\s+(?:la |el |los |las |un |una |lo |de |del )?([\p{L}][\p{L} ]{2,28})/iu
+  );
+  if (!m) return "";
+  return m[1].trim().replace(/\s+(que|para|como|y|en|de|del|al)$/i, "").trim();
+}
+
 export async function generateLSG(query, intent, opts = {}) {
   const reexplain = !!opts.reexplain; // "no entendí": enseñar de OTRA forma, no repetir
   // Modo DEMOSTRACIÓN forzado por el usuario: contenido básico instantáneo, sin llamar a la IA.
@@ -83,7 +93,15 @@ export async function generateLSG(query, intent, opts = {}) {
     reteach = "\n\nIMPORTANTE: el alumno pide algo MÁS DIFÍCIL del MISMO tema de la consulta. NO cambies de tema. Mantente EXACTAMENTE en ese tema pero sube el nivel: números o casos algo más complejos y un ejercicio de práctica más retador del mismo tema.";
   } else if (seg === "continuacion") {
     const tema = opts.tema ? `"${opts.tema}"` : "el de la conversación anterior";
-    reteach = `\n\nIMPORTANTE: el mensaje del alumno es un SEGUIMIENTO del MISMO tema (${tema}), NO un tema nuevo. NO cambies de tema bajo ninguna circunstancia. Responde su mensaje DENTRO de ese tema: si pide un EJEMPLO o ANALOGÍA distinta (perritos, manzanas, dinero, deporte…), úsala manteniendo el tema y sin repetir el ejemplo anterior; si es una pregunta conceptual ("¿eso quiere decir…?", "¿qué relación tienen… con…?"), respóndela de forma clara y directa con un ejemplo. Responde de forma NATURAL y directa: NO cites ni repitas el enunciado del alumno y NO uses frases como "Tomé nota de tu consulta". Cierra con una pregunta de práctica del tema.`;
+    const evitar = extractExclusion(query);
+    const prev = typeof opts.previo === "string" && opts.previo.trim() ? opts.previo.trim().slice(0, 400) : "";
+    reteach = `\n\nIMPORTANTE: el mensaje del alumno es un SEGUIMIENTO del MISMO tema (${tema}), NO un tema nuevo. NO cambies de tema bajo ninguna circunstancia. Responde su mensaje DENTRO de ese tema:\n`
+      + `- Si pide "otro ejemplo", una "analogía" o algo "diferente/distinto": ofrece una APLICACIÓN o CONTEXTO NUEVO de la vida real del concepto (NO otro cálculo ni un ejercicio para resolver, salvo que lo pida). Ten VARIEDAD: p.ej. para "derivadas", además de la velocidad puedes usar el crecimiento de una población, el enfriamiento de un café (flujo de calor), el dinero que crece con interés en el banco, la pendiente de una montaña o la rapidez con que sube el agua en un tanque. Elige UNA aplicación distinta y explícala con claridad.\n`
+      + (evitar ? `- El alumno pide EVITAR "${evitar}": NO uses ese ejemplo bajo ninguna circunstancia; elige uno claramente distinto.\n` : `- Si pide evitar algo ("que no sea X", "diferente a X", "sin X"), NO uses ese ejemplo.\n`)
+      + (prev ? `- Esto YA se explicó antes (NO lo repitas, ofrece algo NUEVO): "${prev}"\n` : "")
+      + `- Si pide una ANALOGÍA con un objeto concreto (perritos, manzanas, dinero), úsala manteniendo el tema.\n`
+      + `- Si es una pregunta conceptual ("¿eso quiere decir…?"): respóndela clara y directa con un ejemplo.\n`
+      + `Responde de forma NATURAL: NO cites el enunciado del alumno y NO uses frases como "Tomé nota de tu consulta". Cierra con una pregunta de práctica del tema.`;
   } else if (reexplain) {
     reteach = "\n\nIMPORTANTE: el alumno dijo que NO ENTENDIÓ. NO repitas las mismas palabras ni el mismo ejemplo; explícalo de OTRA forma. Enséñalo COMO A ALGUIEN QUE NO SABE NADA: parte de una ANALOGÍA cotidiana (comida, dinero, objetos), ve MUY paso a paso y con MUCHO detalle, define cada término, no asumas ningún conocimiento previo y no te saltes pasos. Cuenta o desarrolla lo que haga falta hasta que quede clarísimo, y cierra con un ejercicio más fácil. El objetivo es que POR FIN lo entienda.";
   }

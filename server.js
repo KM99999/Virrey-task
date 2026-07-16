@@ -55,6 +55,8 @@ app.post("/api/query", async (req, res) => {
   const historial = Array.isArray(req.body?.historial)
     ? req.body.historial.filter((s) => typeof s === "string" && s.trim()).slice(-5).map((s) => s.trim().slice(0, 200))
     : [];
+  // Resumen de la lección ANTERIOR (memoria): lo ya explicado, para que un "otro ejemplo" no repita.
+  const previo = typeof req.body?.previo === "string" ? req.body.previo.trim().slice(0, 500) : "";
   // Modo elegido por el usuario en la interfaz: "demo" (contenido básico sin IA),
   // "ia" (usa Gemini) o vacío (automático: intenta IA y cae a demo si falla).
   const modo = req.body?.modo === "demo" || req.body?.modo === "ia" ? req.body.modo : "";
@@ -102,7 +104,7 @@ app.post("/api/query", async (req, res) => {
     //    (sin bloqueo por enfriamiento); auto (vacío) → intenta IA con enfriamiento tras 429.
     const { lsg: rawLsg, source, model, usage, cached } = await generateLSG(
       effectiveQuery, classification.intent,
-      { reexplain, seguimiento, tema: contexto || currentTopic, currentTopic, historial,
+      { reexplain, seguimiento, tema: contexto || currentTopic, currentTopic, historial, previo,
         forceDemo: modo === "demo", forceAI: modo === "ia" }
     );
 
