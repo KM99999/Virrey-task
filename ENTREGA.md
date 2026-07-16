@@ -2,11 +2,62 @@
 
 **Proyecto:** Math IA — tutor de matemáticas web (avatar + pizarra + voz).
 **En vivo:** https://math-ia.onrender.com
-**Versión final desplegada:** commit `76013ee` (rama `main`, GitHub: `KM99999/Virrey-task`).
+**Versión final desplegada = entregada:** el commit desplegado es **verificable en vivo** en
+`GET /api/health` (campo `version`), y el `.zip` entregado se genera con `git archive` de **ese mismo
+commit** → coinciden. (La verificación con Gemini real de abajo se ejecutó sobre este mismo código;
+si ve un commit distinto en `/api/health` es solo por cambios de documentación, sin cambios de código
+ejecutable — comprobable con `git diff <commit_verificación>..HEAD -- server.js src public`.)
 **Fecha:** 2026-07-15.
 
-Este documento cierra los 6 puntos de aceptación acordados. No son funcionalidades nuevas,
-sino la **validación y cierre** de los compromisos de las Fases 1 y 2, verificados en producción.
+Este documento cierra los puntos de aceptación acordados (Fases 1 y 2), verificados en producción.
+
+---
+
+## Revisión 2 — puntos solicitados el 2026-07-15
+
+**A. Validación matemática integral** ✅
+No solo se corrige la respuesta que califica: ahora el servidor **verifica y corrige TODA operación**
+escrita en la pizarra y **dicha por el avatar**. Detecta igualdades aritméticas erróneas (p.ej.
+"200 ÷ 25 = 200") y corrige el resultado ("= 8") antes de mostrar la lección; las ecuaciones
+algebraicas ("2x + 5 = 15") no se tocan. Código: `corregirIgualdades` en [src/preLight.js](src/preLight.js),
+aplicado a cada `hablar` y `pizarra`. Verificado: en la ejecución final, **0 operaciones erróneas** en las 4 lecciones.
+
+**B. Ramificación ligera con ejemplo alternativo resuelto** ✅
+Ante un error, además de la pista, se muestra **otro ejemplo PARECIDO resuelto paso a paso** en la
+pizarra (narrado por el avatar) y luego se **reabre para reintentar** con el ejercicio propio; si
+persiste el error, se refuerza el método **sin revelar la respuesta**. Código: `otroEjemploResuelto`
+(servidor, adjunta `otro_ejemplo` a la pregunta) + `_showWorkedExample` en
+[public/pseLight.js](public/pseLight.js). *(Las pistas progresivas se mantienen como apoyo adicional;
+el ejemplo alternativo resuelto es lo primario, tal como pide el compromiso.)*
+
+**C. Limpieza completa de la sesión** ✅
+El botón **"Limpiar historial"** ahora borra el historial visible **y** el tema activo (`lastTopicQuery`)
+**y** el contexto que se envía a Gemini (`historial`). Tras limpiar, la siguiente consulta empieza como
+**sesión nueva**. Código: handler de `clearHistory` en [public/app.js](public/app.js).
+
+**D. Prueba final verificable (Gemini real, sin demo) + código = desplegado** ✅
+- Script reproducible: `node qa/verificar.mjs` (contra producción, **exige Gemini real**, reintenta si
+  hay 429). Comprueba las 4 intenciones, la continuidad, las respuestas correctas y la ramificación.
+- **Resultado de la ejecución final: 25 verificaciones OK · 0 fallidas** (ver reporte abajo).
+- **Código entregado == desplegado:** `GET /api/health` devuelve el `version` (commit) desplegado, y el
+  `.zip` se genera con `git archive` de ese mismo commit. Ambos coinciden.
+
+### Reporte de la ejecución final (`node qa/verificar.mjs`, Gemini real)
+
+```
+[0] servicio en línea · IA = Gemini (no mock) · versión desplegada = 1895c23 · modelo gemini-2.5-flash-lite
+[1] 4 intenciones (Gemini real):
+    resolver  "desarrolla 2x + x = 12"            → Gemini ✓ · 4 explicaciones · 1 pregunta · sin operaciones erróneas ✓
+    aprender  "enséñame ecuaciones de 1er grado"  → Gemini ✓ · 10 explicaciones · 1 pregunta · sin operaciones erróneas ✓
+    explicar  "¿por qué se factoriza x²-9?"       → Gemini ✓ · 6 explicaciones · 1 pregunta · sin operaciones erróneas ✓
+    practicar "dame un ejercicio de fracciones"   → Gemini ✓ · 2 explicaciones · 1 pregunta · respuesta correcta 3/5 ✓
+[2] continuidad: "explícamelo con manzanas" mantiene el tema (ecuaciones) con manzanas ✓
+[3] ramificación: la pregunta incluye un ejemplo alternativo resuelto ✓
+─────────────────────────────────────────────────────────────
+25 verificaciones OK · 0 fallidas · ✅ VERIFICACIÓN SUPERADA (Gemini real)
+```
+
+---
 
 ---
 
