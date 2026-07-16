@@ -27,6 +27,9 @@ app.get("/api/health", (_req, res) => {
     status: "ok",
     modo_ia: process.env.GEMINI_API_KEY ? "gemini" : "mock",
     modelo: process.env.GEMINI_MODEL || "gemini-2.5-flash-lite",
+    // Commit git realmente desplegado (Render lo inyecta) → permite comprobar que el código
+    // entregado (.zip) es EXACTAMENTE el mismo que está en producción.
+    version: process.env.RENDER_GIT_COMMIT || process.env.COMMIT || "desconocido",
   });
 });
 
