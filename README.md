@@ -279,9 +279,27 @@ perder el tema, el frontend **arrastra el contexto** en cada consulta:
 
 El backend los reenvía a Gemini como *contexto de la conversación*, con la instrucción de **mantener
 el tema activo** en un seguimiento y **cambiar solo** ante un tema nuevo y claro. Además, un detector
-local clasifica el seguimiento (`reexplicar` / `más fácil` / `más difícil` / `otro ejemplo`) — en
-**español e inglés**. Así, "con manzanas" sobre *diferencia de cuadrados* sigue siendo diferencia de
-cuadrados con manzanas, y no "baja" a sumas.
+local clasifica el seguimiento (`reexplicar` / `más fácil` / `más difícil` / `otro ejemplo` /
+`desglosar`) — en **español e inglés**. Así, "con manzanas" sobre *diferencia de cuadrados* sigue
+siendo diferencia de cuadrados con manzanas, y no "baja" a sumas.
+
+---
+
+## Continuidad de artefacto — "explícame los pasos" del ejercicio actual
+
+Además del *tema*, el sistema recuerda el **ejercicio que está en pantalla**. Cuando el alumno pide
+*"explícame los pasos anteriores"*, *"paso a paso"*, *"desglósalo"* o *"¿cómo se resuelve?"*, el
+detector `pidePasos` lo clasifica como seguimiento **`desglosar`** (en español e inglés) — **antes**
+de que el clasificador vea la palabra "ejercicio(s)" y lo confunda con *pedir práctica* (el defecto
+que generaba **ejercicios nuevos** en lugar de explicar).
+
+El frontend envía el **ejercicio actual + su respuesta** (`ejercicio`, `respuesta`) al backend, que
+**re-narra la solución de ESE ejercicio, paso a paso y de forma determinista** (`processStepByStep`
+en [preLight.js](src/preLight.js)) — **sin llamar a la IA** (sin coste): reutiliza `solveLinearSteps`
+para ecuaciones y `computeAnswer` para aritmética/fórmulas, así que los pasos coinciden exactamente
+con la respuesta que el sistema califica. La lección resultante se marca como fuente `local` (no es
+Gemini ni un fallo → **no** muestra el aviso de modo demostración). Si no hay un ejercicio
+reconocible, degrada con elegancia a `reexplicar` (re-enseñar el tema).
 
 ---
 
@@ -409,6 +427,7 @@ La clave vive **solo** en la variable de entorno `GEMINI_API_KEY` (nunca en el c
 | # | Compromiso | Estado | Dónde |
 |---|---|---|---|
 | 1 | **Continuidad conversacional** (contexto de mensajes previos para seguimientos) | ✅ | `currentTopic`+`historial` → Gemini · [app.js](public/app.js), [server.js](server.js), [geminiClient.js](src/geminiClient.js) |
+| 1b | **Continuidad de artefacto** ("explícame los pasos" re-narra el ejercicio actual, no crea uno nuevo) | ✅ | `pidePasos`+`lastExercise` · [app.js](public/app.js) · `processStepByStep` · [preLight.js](src/preLight.js) |
 | 2 | **Validación matemática** (verificar respuestas/ejercicios antes de mostrarlos) | ✅ | `computeAnswer`/`fixPracticeAnswer` · [preLight.js](src/preLight.js) |
 | 3 | **Ramificación ligera** (pista o alternativa + reintento, sin repetir/revelar) | ✅ | `_handleQuestion`+`buildHint` · [pseLight.js](public/pseLight.js) |
 | 4 | **PRE Light** documentado (transforma la salida de la IA en pasos y módulos) | ✅ | Sección *PRE Light* de este README · `processLSG` en [preLight.js](src/preLight.js) |

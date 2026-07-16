@@ -390,6 +390,74 @@ function attachAltExample(lsg, pasos) {
   }
 }
 
+// ─── Desglose paso a paso del EJERCICIO ACTUAL (continuidad de artefacto) ──────
+// Cuando el alumno pide "explícame los pasos anteriores / paso a paso / cómo se resuelve",
+// NO hay que generar un ejercicio NUEVO: hay que RE-NARRAR la solución del ejercicio que ya
+// está en pantalla. Reconstruimos esos pasos de forma DETERMINISTA (sin llamar a la IA):
+//   - ecuación lineal  → `solveLinearSteps` (mismos pasos verificados de la calificación);
+//   - aritmética/fórmula → mostramos el ejercicio, el método y el resultado exacto.
+// Frase de método según el tipo de operación (breve, sin revelar cuentas ajenas al ejercicio).
+function metodoDe(ejercicio) {
+  const t = String(ejercicio || "").toLowerCase();
+  if (/velocidad|rapidez|distancia|tiempo/.test(t)) return "Aplicamos la fórmula que relaciona los datos (por ejemplo, velocidad = distancia ÷ tiempo) y calculamos con los números del enunciado.";
+  if (/[aá]rea|per[ií]metro|volumen/.test(t)) return "Usamos la fórmula de la figura y sustituimos las medidas del enunciado.";
+  if (/%|por\s*ciento/.test(t)) return "Un porcentaje se calcula multiplicando la cantidad por el número y dividiendo entre 100.";
+  if (/\d+\s*\/\s*\d+/.test(t)) return "Con fracciones buscamos el mismo denominador, operamos los numeradores y simplificamos al final.";
+  if (/÷|divid|\bentre\b/.test(t)) return "Dividir es repartir en partes iguales: vemos cuántas veces cabe el segundo número en el primero.";
+  if (/×|multiplic|\bpor\b/.test(t)) return "Multiplicar es sumar el mismo número varias veces.";
+  if (/-|\bmenos\b|resta/.test(t)) return "Restar es quitar: al primer número le quitamos el segundo.";
+  if (/\+|\bm[aá]s\b|suma/.test(t)) return "Sumar es juntar las cantidades.";
+  return "Lo resolvemos con calma, paso a paso, aplicando la operación que pide el ejercicio.";
+}
+
+// Construye un LSG (secuencial) que NARRA la solución del ejercicio dado, paso a paso.
+// `respuesta` (opcional) es la respuesta ya calculada por el PRE Light para ese ejercicio.
+// Devuelve un LSG crudo o null si no hay ejercicio.
+export function buildStepByStepLSG(ejercicio, respuesta) {
+  const ej = str(ejercicio);
+  if (!ej) return null;
+  const directivas = [
+    { tipo: "avatar", accion: "pensando" },
+    { tipo: "hablar", texto: "Claro, repasemos juntos —paso a paso— cómo se resuelve este ejercicio." },
+  ];
+  const lin = solveLinearSteps(ej);
+  if (lin) {
+    // Ecuación lineal: mostramos el enunciado y CADA paso del despeje (los mismos que valida el sistema).
+    directivas.push({ tipo: "pizarra", accion: "escribir", contenido: lin.original });
+    for (const p of lin.steps) {
+      directivas.push({ tipo: "hablar", texto: p.explica });
+      directivas.push({ tipo: "pizarra", accion: "escribir", contenido: p.escribe });
+    }
+    directivas.push({ tipo: "hablar", texto: `Y así llegamos a la solución: ${lin.varName} = ${lin.answer}.` });
+  } else {
+    // Aritmética / fórmula / problema verbal: enunciado + método + resultado exacto.
+    const ans = str(respuesta) || computeAnswer(ej) || "";
+    directivas.push({ tipo: "pizarra", accion: "escribir", contenido: ej.length <= 80 ? ej : "Repasemos el ejercicio" });
+    directivas.push({ tipo: "hablar", texto: metodoDe(ej) });
+    if (ans) {
+      directivas.push({ tipo: "pizarra", accion: "escribir", contenido: `Resultado: ${ans}` });
+      directivas.push({ tipo: "hablar", texto: `Siguiendo esos pasos, el resultado es ${ans}.` });
+    }
+  }
+  directivas.push({ tipo: "hablar", texto: "Ese es el procedimiento. Si quieres, lo intentamos ahora con otro ejemplo parecido." });
+  return { escena: "desglose_pasos", intencion: "explicar", directivas };
+}
+
+// Finaliza el LSG de desglose SIN la maquinaria de práctica (no añade preguntas ni "otro ejemplo"):
+// solo numera, sanea (corrige operaciones), arma `pasos` y estima duración. Devuelve
+// { lsg, pasos, warnings } o null si no hay ejercicio reconocible.
+export function processStepByStep(ejercicio, respuesta) {
+  const raw = buildStepByStepLSG(ejercicio, respuesta);
+  if (!raw) return null;
+  const warnings = [];
+  const counter = { n: 0 };
+  const pasos = [];
+  const directivas = normalizeDirectivas(raw.directivas, counter, warnings, pasos, "desglose");
+  if (!directivas.length) return null;
+  const lsg = { escena: "desglose_pasos", intencion: "explicar", duracion_estimada: estimateDuration(pasos), directivas };
+  return { lsg, pasos, warnings };
+}
+
 // Segundos estimados que "cuesta" cada directiva (para duracion_estimada).
 const COSTO_SEGUNDOS = {
   avatar: 1,

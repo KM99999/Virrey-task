@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 
 import { classifyIntent } from "./src/classifier.js";
 import { generateLSG } from "./src/geminiClient.js";
-import { processLSG } from "./src/preLight.js";
+import { processLSG, processStepByStep } from "./src/preLight.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -45,8 +45,8 @@ app.post("/api/query", async (req, res) => {
   // Contexto de conversación: el último tema, para reexplicar cuando el alumno dice
   // "no entendí". El frontend lo envía solo cuando la consulta es un seguimiento.
   const contexto = typeof req.body?.contexto === "string" ? req.body.contexto.trim().slice(0, 2000) : "";
-  // Tipo de seguimiento del tema activo (opcional): reexplicar | mas_facil | mas_dificil | continuacion.
-  const SEG_VALIDOS = ["reexplicar", "mas_facil", "mas_dificil", "continuacion"];
+  // Tipo de seguimiento del tema activo (opcional): reexplicar | mas_facil | mas_dificil | continuacion | desglosar.
+  const SEG_VALIDOS = ["reexplicar", "mas_facil", "mas_dificil", "continuacion", "desglosar"];
   const seguimiento = SEG_VALIDOS.includes(req.body?.seguimiento) ? req.body.seguimiento
     : (contexto ? "reexplicar" : ""); // compatibilidad: si hay contexto sin tipo, es un "no entendí"
   // Contexto de conversación: tema activo + últimas consultas del alumno. Se pasa a la IA para que
@@ -57,6 +57,11 @@ app.post("/api/query", async (req, res) => {
     : [];
   // Resumen de la lección ANTERIOR (memoria): lo ya explicado, para que un "otro ejemplo" no repita.
   const previo = typeof req.body?.previo === "string" ? req.body.previo.trim().slice(0, 500) : "";
+  // Continuidad de ARTEFACTO: el EJERCICIO que está en pantalla y su respuesta ya calculada. Se usa
+  // cuando el alumno pide "explícame los pasos anteriores / paso a paso" para RE-NARRAR ESE ejercicio
+  // (no generar uno nuevo ni cambiar de tema).
+  const ejercicio = typeof req.body?.ejercicio === "string" ? req.body.ejercicio.trim().slice(0, 300) : "";
+  const respuestaEj = typeof req.body?.respuesta === "string" ? req.body.respuesta.trim().slice(0, 60) : "";
   // Modo elegido por el usuario en la interfaz: "demo" (contenido básico sin IA),
   // "ia" (usa Gemini) o vacío (automático: intenta IA y cae a demo si falla).
   const modo = req.body?.modo === "demo" || req.body?.modo === "ia" ? req.body.modo : "";
@@ -69,6 +74,30 @@ app.post("/api/query", async (req, res) => {
   }
 
   try {
+    // 0) DESGLOSE PASO A PASO del ejercicio actual (continuidad de artefacto). El alumno pidió
+    //    "explícame los pasos anteriores / paso a paso": re-narramos la solución del ejercicio que
+    //    YA está en pantalla, de forma DETERMINISTA (sin IA, sin coste). Si no llega un ejercicio
+    //    reconocible, seguimos el flujo normal como "reexplicar" (re-enseñar el tema).
+    if (seguimiento === "desglosar") {
+      const built = processStepByStep(ejercicio, respuestaEj);
+      if (built) {
+        return res.json({
+          query,
+          reexplicacion: true,
+          intencion: "explicar",
+          confianza: 1,
+          fuente_ia: "local",          // contenido determinista del PRE Light (no IA, no demo)
+          modelo: "pre-light",
+          lsg: built.lsg,
+          pasos: built.pasos,
+          advertencias: built.warnings,
+          tokens: null,
+          cache_activo: false,
+        });
+      }
+      // sin ejercicio utilizable → cae a "reexplicar" (re-enseñar el tema activo).
+    }
+
     // Seguimiento del tema activo (mantiene el TEMA anterior; no es un tema nuevo).
     const reexplain = !!contexto;
     const esNivel = seguimiento === "mas_facil" || seguimiento === "mas_dificil";

@@ -9,7 +9,7 @@
 // contengan LaTeX ni "$". Imprime un veredicto final APROBADO / RECHAZADO.
 
 import { classifyIntent } from "../src/classifier.js";
-import { processLSG, solveLinearFromText, solveFractionFromText, resultadoFromVerificacion, computeAnswer, corregirIgualdades, otroEjemploResuelto } from "../src/preLight.js";
+import { processLSG, solveLinearFromText, solveFractionFromText, resultadoFromVerificacion, computeAnswer, corregirIgualdades, otroEjemploResuelto, processStepByStep } from "../src/preLight.js";
 import { mockLSG } from "../src/lsgPrompt.js";
 import { generateLSG } from "../src/geminiClient.js";
 import { checkAnswer, flattenLSG, PSELight, buildHint } from "../public/pseLight.js";
@@ -107,6 +107,18 @@ async function unitTests() {
   check("ramificación: ejemplo alterno para ecuación", !!otroEjemploResuelto("¿x?", "x - 4 = 7")?.pasos?.length);
   check("ramificación: ejemplo alterno para multiplicación", /×/.test(otroEjemploResuelto("¿7×3?", "7 × 3")?.pasos?.[0]?.escribe || ""));
   check("ramificación: processLSG adjunta otro_ejemplo", !!lsgFix.pasos.find((d) => d.tipo === "preguntar")?.otro_ejemplo);
+
+  // DESGLOSE PASO A PASO del ejercicio actual ("explícame los pasos anteriores" → re-narra ESE
+  // ejercicio, NO genera uno nuevo). Continuidad de artefacto, determinista (sin IA).
+  const desgLin = processStepByStep("3x = 12", "4");
+  const desgLinFlat = flattenLSG(desgLin.lsg);
+  check("desglose: re-narra el ejercicio lineal (3x=12)", desgLinFlat.some((d) => d.tipo === "pizarra" && d.contenido === "3x = 12"));
+  check("desglose: muestra el resultado correcto (x = 4)", desgLinFlat.some((d) => d.tipo === "pizarra" && /x\s*=\s*4/.test(d.contenido)));
+  check("desglose: NO genera un ejercicio nuevo (sin 'preguntar')", !desgLinFlat.some((d) => d.tipo === "preguntar"));
+  const desgArit = processStepByStep("200 ÷ 25", "8");
+  check("desglose aritmético: resultado exacto (8)", flattenLSG(desgArit.lsg).some((d) => d.tipo === "pizarra" && /\b8\b/.test(d.contenido)));
+  check("desglose combinada: junta términos (2x + x → 3x)", flattenLSG(processStepByStep("2x + x = 12", "4").lsg).some((d) => d.tipo === "pizarra" && d.contenido === "3x = 12"));
+  check("desglose: sin ejercicio → null (cae a reexplicar)", processStepByStep("", "") === null);
 
   check("checkAnswer: 5 == 5", checkAnswer("5", "5").correct === true);
   check("checkAnswer: 9 != 5", checkAnswer("9", "5").correct === false);

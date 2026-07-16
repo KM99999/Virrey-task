@@ -56,6 +56,25 @@ let seeking = false;   // true mientras el usuario arrastra la barra de pasos
 let lastTopicQuery = null; // último TEMA consultado (para reexplicar en un "no entendí")
 const historial = [];      // consultas recientes del alumno (contexto de conversación para la IA)
 let lastLessonSummary = ""; // resumen de la ÚLTIMA lección (memoria: para no repetir el mismo ejemplo)
+let lastExercise = null;    // EJERCICIO en pantalla { ejercicio, respuesta } — para "explícame los pasos"
+
+// Extrae el EJERCICIO de práctica de un LSG: el enunciado escrito en la pizarra (o, en su defecto,
+// el texto de la pregunta) junto con su respuesta ya calculada. Sirve para RE-NARRARLO paso a paso
+// cuando el alumno pide "explícame los pasos anteriores" (continuidad de artefacto). null si no hay.
+function extraerEjercicio(lsg) {
+  const flat = flattenLSG(lsg) || [];
+  const qIdx = flat.findIndex((d) => d.tipo === "preguntar");
+  if (qIdx === -1) return null;
+  const q = flat[qIdx];
+  let board = "";
+  for (let i = qIdx - 1; i >= 0; i--) {
+    if (flat[i].tipo === "pizarra" && flat[i].contenido) { board = flat[i].contenido; break; }
+  }
+  const ejercicio = (board || q.texto || "").trim();
+  if (!ejercicio) return null;
+  const respuesta = (q.respuesta && String(q.respuesta).trim()) || "";
+  return { ejercicio, respuesta };
+}
 
 // Resumen breve de una lección (sus primeras explicaciones), para dárselo a la IA como "lo ya visto".
 function resumenLeccion(lsg) {
@@ -139,8 +158,29 @@ function esContinuacion(q) {
   return null;
 }
 
+// ¿La consulta pide que le EXPLIQUEN LOS PASOS / EL PROCEDIMIENTO del ejercicio que ya está en
+// pantalla? ("explícame los pasos anteriores", "paso a paso", "desglósalo", "cómo lo resolviste",
+// "muéstrame el procedimiento"…). Es continuidad de ARTEFACTO: hay que re-narrar ESE ejercicio,
+// NO dar uno nuevo. OJO: NO debe confundirse con pedir un tema nuevo ("explícame las derivadas"):
+// por eso exige palabras de PROCEDIMIENTO (paso, desglos, procedimiento, cómo se resuelve…).
+function pidePasos(q) {
+  const n = q.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+  // Español: "los pasos (anteriores)", "paso a paso", "desglosa/desglose", "el procedimiento/proceso",
+  // "cómo lo/la resolviste/hiciste/sacaste", "cómo se resuelve/hace/calcula", "detállame".
+  if (/paso a paso|pasos? (anterior|previo|de|del|para|que|de ese|de este|del ejercicio)|desglos|(muestra|ensena|explica|detalla|dame)\w*\s*(me)?\s*(los?\s*)?(paso|procedimiento|proceso)|el procedimiento|el proceso de resol|como (lo|la|se)\s*(resolv|resuelv|hall|calcul|hiciste|hizo|saca|obtuv|obtien)|como se (resuelve|hace|calcula|obtiene)/.test(n)) return true;
+  // Inglés: "step by step", "the (previous) steps", "break it down", "walk me through",
+  // "how did you solve/get", "show me the steps", "explain the procedure/process".
+  if (/step[\s-]*by[\s-]*step|the (previous )?steps|break (it|this|that) down|walk me through|how (did|do) you (solve|get|do)|how (is|was) (it|this|that) (solved|done)|(show|explain).*(steps|procedure|process)/.test(n)) return true;
+  return false;
+}
+
 // Clasifica el tipo de SEGUIMIENTO del tema activo (o null si es un tema nuevo).
 function clasificarSeguimiento(q) {
+  // "Explícame los pasos" del ejercicio actual → desglosar ESE ejercicio (solo si hay uno guardado).
+  // Se comprueba PRIMERO: si no, la palabra "ejercicio(s)" haría que el clasificador lo tomara como
+  // "practicar" y generara ejercicios NUEVOS (el defecto reportado). Sin ejercicio guardado, se
+  // trata como "reexplicar" (re-enseñar el tema).
+  if (pidePasos(q)) return lastExercise ? "desglosar" : "reexplicar";
   const aj = ajusteNivel(q);            // "mas_facil" | "mas_dificil"
   if (aj) return aj;
   if (esSeguimiento(q)) return "reexplicar"; // "no entendí", "otra vez", "de otra forma"…
@@ -326,8 +366,13 @@ async function submitQuery() {
   if (historial.length) body.historial = historial.slice(-5);
   if (seguimiento) {
     body.contexto = lastTopicQuery;               // el TEMA activo, para no perderlo
-    body.seguimiento = tipoSeg;                    // reexplicar | mas_facil | mas_dificil | continuacion
+    body.seguimiento = tipoSeg;                    // reexplicar | mas_facil | mas_dificil | continuacion | desglosar
     if (lastLessonSummary) body.previo = lastLessonSummary; // memoria: qué se explicó, para no repetir
+    // Desglose paso a paso: enviamos el EJERCICIO actual + su respuesta para re-narrarlo (no crear uno nuevo).
+    if (tipoSeg === "desglosar" && lastExercise) {
+      body.ejercicio = lastExercise.ejercicio;
+      body.respuesta = lastExercise.respuesta;
+    }
   }
   // Registrar la consulta en el historial de la conversación (para el contexto de la IA).
   historial.push(query);
@@ -350,6 +395,10 @@ async function submitQuery() {
     if (!seguimiento) lastTopicQuery = query;
     // Memoria de la lección recién generada (para que un próximo "otro ejemplo" no la repita).
     lastLessonSummary = resumenLeccion(data.lsg);
+    // Recordar el EJERCICIO en pantalla (para "explícame los pasos"). Solo se actualiza si la
+    // lección trae uno; un desglose (que no lo trae) conserva el ejercicio anterior.
+    const ejActual = extraerEjercicio(data.lsg);
+    if (ejActual) lastExercise = ejActual;
 
     renderResult(data);
     addToHistory(data);
@@ -376,14 +425,17 @@ function renderResult(data) {
   els.pipeline.hidden = false;
   els.pillIntent.textContent = `Intención: ${data.intencion} (${Math.round(data.confianza * 100)}%)`;
   const esGemini = data.fuente_ia === "gemini";
-  els.pillSource.textContent = `IA: ${esGemini ? "Gemini" : "Modo demostración"}`;
-  els.pillSource.classList.toggle("demo", !esGemini);
+  // "local" = desglose paso a paso calculado por el PRE Light (determinista, sin IA y sin coste):
+  // NO es un fallo de Gemini, así que NO se muestra el aviso de modo demostración.
+  const esLocal = data.fuente_ia === "local";
+  els.pillSource.textContent = esLocal ? "Paso a paso (PRE Light)" : `IA: ${esGemini ? "Gemini" : "Modo demostración"}`;
+  els.pillSource.classList.toggle("demo", !esGemini && !esLocal);
   els.pillDuration.textContent = `Duración: ~${data.lsg.duracion_estimada}s`;
 
-  // MANEJO TRANSPARENTE DE ERRORES: si la lección NO vino de Gemini, avisamos con claridad
-  // que es contenido de MODO DEMOSTRACIÓN, sin presentarlo como una respuesta normal de la IA.
-  // Distinguimos si el alumno eligió el modo demostración o si Gemini falló (cuota/conexión).
-  if (!esGemini) {
+  // MANEJO TRANSPARENTE DE ERRORES: si la lección NO vino de Gemini (y no es un desglose local),
+  // avisamos con claridad que es contenido de MODO DEMOSTRACIÓN, sin presentarlo como respuesta
+  // normal de la IA. Distinguimos si el alumno eligió el modo demostración o si Gemini falló.
+  if (!esGemini && !esLocal) {
     const porFallo = modo !== "demo"; // el usuario quería IA pero Gemini no respondió
     const motivo = data.modelo === "limite-temporal"
       ? "Gemini alcanzó su límite de uso por el momento (cuota/uso por minuto)."
@@ -609,6 +661,7 @@ els.clearHistory.addEventListener("click", () => {
   lastTopicQuery = null;   // olvida el TEMA activo (no se seguirá enviando como contexto)
   historial.length = 0;    // olvida el historial de conversación que se manda a la IA
   lastLessonSummary = "";  // olvida la memoria de la última lección
+  lastExercise = null;     // olvida el ejercicio en pantalla (para "explícame los pasos")
   renderHistory();
   toast("Sesión reiniciada: se borró el historial, el tema activo y el contexto. La próxima consulta empieza de cero.");
 });
