@@ -169,6 +169,15 @@ async function unitTests() {
     { id: "practica", directivas: [{ tipo: "hablar", texto: "Aquí tienes un ejercicio para que lo resuelvas tú." }, { tipo: "pizarra", contenido: "f(x) = x³" }] }] }, "practicar");
   const qSinQ = derSinQ.pasos.find((d) => d.tipo === "preguntar");
   check("derivada sin pregunta: se plantea 'deriva tú' con respuesta 3x²", /deriv/i.test(qSinQ?.texto || "") && qSinQ?.respuesta === "3x²");
+  // Ejercicio de derivada en la pizarra + pregunta GENÉRICA de cierre: se califica el ejercicio del
+  // tablero (no se elogia por participar). Y una comprensión SIN ejercicio sigue sin calificarse.
+  const derGen = processLSG({ escena: "d", intencion: "practicar", modulos: [
+    { id: "recordatorio", directivas: [{ tipo: "hablar", texto: "Vamos a practicar con derivadas de potencias." }] },
+    { id: "practica", directivas: [{ tipo: "hablar", texto: "Aquí tienes un ejercicio." }, { tipo: "pizarra", contenido: "f(x) = x³" }, { tipo: "preguntar", texto: "¿Te gustaría practicar con otro ejemplo?" }] }] }, "practicar");
+  const qGen = derGen.pasos.find((d) => d.tipo === "preguntar");
+  check("derivada + pregunta genérica: se califica el tablero (3x², '2x' falla)", qGen?.respuesta === "3x²" && checkAnswer("2x", qGen?.respuesta).correct === false);
+  const compPura = processLSG({ escena: "x", intencion: "aprender", modulos: [{ id: "m", directivas: [{ tipo: "hablar", texto: "Las fracciones son partes de un todo." }, { tipo: "preguntar", texto: "¿Entendiste la explicación?" }] }] }, "aprender");
+  check("comprensión pura (sin ejercicio): NO recibe respuesta calificable", compPura.pasos.find((d) => d.tipo === "preguntar")?.respuesta === undefined);
 
   check("checkAnswer: 5 == 5", checkAnswer("5", "5").correct === true);
   check("checkAnswer: 9 != 5", checkAnswer("9", "5").correct === false);

@@ -833,23 +833,39 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
     if (p) delete p.respuesta;
   };
 
-  // Pregunta GENÉRICA de comprensión ("¿entendiste?", "¿te gustaría practicar?"): no se califica
-  // con un número; borramos cualquier respuesta espuria para no marcar mal un "sí"/"no".
-  if (/¿?\s*(entendiste|comprendiste|te gustar[ií]a|quieres practicar|alguna duda)/i.test(q.texto)) {
-    delResp();
-    return;
-  }
-
   // Pizarra (ejercicio) inmediatamente anterior a la pregunta.
   let board = null;
   for (let i = qIdx - 1; i >= 0; i--) { if (flat[i].tipo === "pizarra") { board = flat[i].contenido; break; } }
+  // Deriva un monomio del tablero SOLO si tiene exponente NUMÉRICO concreto ("x²", "x^3"): así no
+  // se intenta derivar una FÓRMULA con 'n' ("xⁿ = n·xⁿ⁻¹") ni se inventa un resultado.
+  const derivadaBoardConcreto = () =>
+    (board && /x\s*(?:\^\s*\d|[²³⁴⁵⁶⁷⁸⁹])/.test(board)) ? derivarFuncion(board) : null;
+  // Reescribe la pregunta (texto + respuesta) para calificar el ejercicio del tablero.
+  const setPregunta = (texto, val) => {
+    q.texto = texto; setResp(val);
+    const p = pasos.find((x) => x.tipo === "preguntar");
+    if (p) p.texto = texto;
+  };
+
+  // Pregunta GENÉRICA de comprensión ("¿entendiste?", "¿te gustaría practicar?"): normalmente no se
+  // califica con un número. PERO si hay un EJERCICIO calificable en la pizarra (una derivada de
+  // potencia, una ecuación lineal…), calificamos ESE ejercicio en vez de elogiar por participar
+  // (evita el defecto: mostrar "f(x)=x³" y dar por buena cualquier respuesta).
+  if (/¿?\s*(entendiste|comprendiste|te gustar[ií]a|quieres practicar|alguna duda)/i.test(q.texto)) {
+    const der = derivadaBoardConcreto();
+    const lin = board != null ? solveLinearFromText(board) : null;
+    if (der) { setPregunta(`Ahora deriva tú: ${board}. ¿Cuál es la derivada?`, der); return; }
+    if (lin !== null) { setPregunta(`Ahora resuélvelo tú: ${board}. ¿Cuánto vale?`, lin); return; }
+    delResp();
+    return;
+  }
 
   // 0) DERIVADA: si la pregunta pide derivar y la función está en la PIZARRA ("f(x) = x³"), derivamos
   //    la función del tablero (regla de la potencia). Va PRIMERO porque, si no, computeAnswer(q.texto)
   //    sobre "¿la derivada de f(x)?" parsearía "f(x)" y devolvería "1" (incorrecto). Así "2x" a la
   //    derivada de x³ (=3x²) se califica MAL y NO se felicita.
   if (/deriv/i.test(q.texto) || (board && /deriv/i.test(board))) {
-    const der = (board && derivarFuncion(board)) || computeDerivative(q.texto);
+    const der = derivadaBoardConcreto() || computeDerivative(q.texto);
     if (der) { setResp(der); return; }
   }
 
