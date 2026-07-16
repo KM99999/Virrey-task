@@ -9,7 +9,7 @@
 // contengan LaTeX ni "$". Imprime un veredicto final APROBADO / RECHAZADO.
 
 import { classifyIntent } from "../src/classifier.js";
-import { processLSG, solveLinearFromText, solveFractionFromText, resultadoFromVerificacion, computeAnswer, corregirIgualdades, otroEjemploResuelto, processStepByStep } from "../src/preLight.js";
+import { processLSG, solveLinearFromText, solveFractionFromText, resultadoFromVerificacion, computeAnswer, corregirIgualdades, otroEjemploResuelto, processStepByStep, computeDerivative } from "../src/preLight.js";
 import { mockLSG } from "../src/lsgPrompt.js";
 import { generateLSG } from "../src/geminiClient.js";
 import { checkAnswer, flattenLSG, PSELight, buildHint } from "../public/pseLight.js";
@@ -134,6 +134,28 @@ async function unitTests() {
   check("voz: '20%' → '20 por ciento'", /20 por ciento/.test(normalizeForSpeech("el 20% de 50")));
   check("voz: NO rompe palabras con 'x' (exponente)", /exponente/.test(normalizeForSpeech("el exponente crece")));
   check("voz: NO convierte guion de palabra (auto-evaluación)", normalizeForSpeech("la auto-evaluación") === "la auto-evaluación");
+
+  // DERIVADAS (regla de la potencia): califica la respuesta simbólica; una respuesta MAL ("2x"
+  // para la derivada de x³ = 3x²) NO debe marcarse como correcta (el defecto reportado).
+  check("derivada: x³ → 3x²", computeDerivative("derivada de x³") === "3x²");
+  check("derivada: x² → 2x", computeDerivative("derivada de x²") === "2x");
+  check("derivada: 3x² → 6x", computeDerivative("deriva 3x^2") === "6x");
+  check("derivada: 5x → 5", computeDerivative("derivada de 5x") === "5");
+  check("derivada: x → 1", computeDerivative("derivada de x") === "1");
+  check("derivada: polinomio no soportado → null", computeDerivative("derivada de x² + 3x") === null);
+  check("derivada: computeAnswer también la calcula", computeAnswer("¿Cuál es la derivada de x³?") === "3x²");
+  check("califica derivada: '2x' es INCORRECTO para 3x²", checkAnswer("2x", "3x²").correct === false);
+  check("califica derivada: '3' NO cuela para 3x²", checkAnswer("3", "3x²").correct === false);
+  check("califica derivada: '3x' NO cuela para 3x²", checkAnswer("3x", "3x²").correct === false);
+  check("califica derivada: '3x²' es correcto", checkAnswer("3x²", "3x²").correct === true);
+  check("califica derivada: '3x^2' equivale a 3x²", checkAnswer("3x^2", "3x²").correct === true);
+  // El ejercicio de práctica de derivada recibe respuesta calificable (no queda en 'modo comprensión').
+  const derLSG = processLSG({ escena: "d", intencion: "practicar", modulos: [{ id: "practica", directivas: [
+    { tipo: "hablar", texto: "Aquí tienes un ejercicio para que lo resuelvas tú." },
+    { tipo: "pizarra", contenido: "Derivada de x³" },
+    { tipo: "preguntar", texto: "¿Cuál es la derivada de x³?" }] }] }, "practicar");
+  check("práctica de derivada: recibe respuesta calificable (3x²)", derLSG.pasos.find((d) => d.tipo === "preguntar")?.respuesta === "3x²");
+  check("hint: derivada → regla de la potencia (sin número)", /potencia|exponente/.test(buildHint("¿derivada de x³?", "Derivada de x³", 2)) && !/\d/.test(buildHint("¿derivada de x³?", "Derivada de x³", 2)));
 
   check("checkAnswer: 5 == 5", checkAnswer("5", "5").correct === true);
   check("checkAnswer: 9 != 5", checkAnswer("9", "5").correct === false);

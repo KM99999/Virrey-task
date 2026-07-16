@@ -151,9 +151,39 @@ function evalExpr(expr) {
   return out.length === 1 ? out[0] : null;
 }
 
+// Derivada de un MONOMIO por la regla de la potencia: d/dx(a·xⁿ) = a·n·xⁿ⁻¹.
+// Reconoce "derivada de x³", "deriva 3x^2", "d/dx x⁴", etc. Devuelve el resultado SIMBÓLICO
+// ("3x²", "2x", "5", "1", "0") o null si no es un monomio en potencia de x (polinomios, senos,
+// etc. no se soportan → se devuelve null y NO se califica con un número, en vez de fingir).
+export function computeDerivative(text) {
+  if (typeof text !== "string") return null;
+  let t = text.toLowerCase();
+  if (!/deriv|d\s*\/\s*dx/.test(t)) return null;
+  // Superíndices Unicode → "^n" para un solo parser.
+  t = t.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]+/g, (m) => "^" + [...m].map((c) => "⁰¹²³⁴⁵⁶⁷⁸⁹".indexOf(c)).join(""));
+  // La función a derivar es lo que viene DESPUÉS de "derivada/deriva/d/dx".
+  const after = t.split(/deriv\w*|d\s*\/\s*dx/).pop() || "";
+  // Solo monomio en x: exactamente UNA 'x'. Con más de una (o polinomio a+b) devolvemos null.
+  if ((after.match(/x/g) || []).length !== 1) return null;
+  if (/x[\s\^0-9]*[-+]\s*\d*\s*x?/.test(after)) return null; // varios términos → no soportado
+  const m = after.match(/(-?\d+(?:\.\d+)?)?\s*\*?\s*x\s*(?:\^\s*(-?\d+))?/);
+  if (!m) return null;
+  const a = m[1] != null ? Number(m[1]) : 1;
+  const n = m[2] != null ? Number(m[2]) : 1;
+  if (!Number.isFinite(a) || !Number.isFinite(n)) return null;
+  const coef = a * n, exp = n - 1;
+  if (coef === 0) return "0";
+  if (exp === 0) return String(coef);
+  const c = coef === 1 ? "" : coef === -1 ? "-" : String(coef);
+  return exp === 1 ? `${c}x` : `${c}x${toSuper(String(exp))}`;
+}
+
 // Calcula la respuesta EXACTA del ejercicio descrito en el texto, o null si no lo reconoce.
 export function computeAnswer(text) {
   if (typeof text !== "string" || !text.trim()) return null;
+  // Derivada (regla de la potencia) → respuesta simbólica exacta.
+  const der = computeDerivative(text);
+  if (der != null) return der;
   // Normaliza símbolos y operadores escritos con palabras ("dividido entre", "por", "más"…).
   let norm = text.replace(/×|·/g, "*").replace(/÷/g, "/")
     .replace(/dividido\s+(?:entre|por)/gi, " / ")

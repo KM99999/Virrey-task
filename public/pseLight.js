@@ -79,6 +79,18 @@ function numFrom(s) {
   return m ? fracVal(m[0]) : NaN;
 }
 
+// ¿La respuesta es un MONOMIO algebraico ("3x²", "2x", "x", "3x^2")? Para estos, la comparación
+// numérica NO sirve (3x y 3x² empiezan por "3" pero son distintos): hay que comparar la forma
+// simbólica completa. Se usa en respuestas de derivadas y similares.
+const SUP_A_NUM = { "⁰": "0", "¹": "1", "²": "2", "³": "3", "⁴": "4", "⁵": "5", "⁶": "6", "⁷": "7", "⁸": "8", "⁹": "9" };
+function esMonomio(s) {
+  return /^[+-]?\d*\.?\d*[a-z](?:\^?\d+|[⁰¹²³⁴⁵⁶⁷⁸⁹])?$/.test(s);
+}
+function normSym(s) {
+  return String(s).toLowerCase().replace(/\s+/g, "").replace(/[*·]/g, "").replace(/\^/g, "")
+    .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]/g, (c) => SUP_A_NUM[c]);
+}
+
 // Evalúa la respuesta del alumno contra la esperada.
 // Devuelve { known:boolean, correct:boolean }. Si no hay respuesta esperada
 // deducible, known=false (el PSE hará autoevaluación Sí/No).
@@ -90,6 +102,11 @@ export function checkAnswer(student, expected) {
   const b = normalizeAnswer(expected);
   if (!a) return { known: true, correct: false };
   if (a === b) return { known: true, correct: true };
+  // Respuesta ALGEBRAICA (monomio: derivadas, etc.): comparar SOLO la forma simbólica completa,
+  // sin caer en la comparación numérica (que aceptaría "2x" o "3" para un esperado "3x²").
+  if (esMonomio(b)) {
+    return { known: true, correct: normSym(a) === normSym(b) };
+  }
   // Comparación por VALOR, aceptando fracciones equivalentes (1/2 == 3/6 == 0.5),
   // decimales y respuestas con unidades ("8" == "8 metros/segundo").
   const va = numFrom(a);
@@ -412,6 +429,12 @@ export class PSELight {
 export function buildHint(question, board, nivel) {
   const t = `${question || ""} ${board || ""}`.toLowerCase();
   const b = (board || "").toLowerCase();
+  // Derivadas (regla de la potencia): guiar con el MÉTODO, sin dar el resultado.
+  if (/derivad|deriva|d\/dx/.test(t)) {
+    return nivel >= 2
+      ? "Regla de la potencia: baja el exponente multiplicando delante y réstale uno al exponente."
+      : "Pista: para derivar una potencia, usa la regla de la potencia (baja el exponente y réstale una unidad).";
+  }
   // Problemas con FÓRMULA o enunciado verbal (velocidad, área, distancia/tiempo, %, potencia, promedio…).
   if (/velocidad|rapidez|distancia|tiempo|[aá]rea|per[ií]metro|volumen|por ciento|%|al cuadrado|al cubo|elevado|ra[ií]z|promedio|\bmedia\b/.test(t)) {
     return nivel >= 2
