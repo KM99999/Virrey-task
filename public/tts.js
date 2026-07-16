@@ -7,12 +7,75 @@
 // retardo estimado por longitud del texto, para que la sincronización siga
 // funcionando (el avatar "habla" con subtítulos aunque no haya audio).
 
+// ─── Normalización para la VOZ (no para la pantalla) ─────────────────────────
+// Los motores de voz del navegador leen mal las letras de variables y los símbolos
+// matemáticos sueltos: "x" suena "ecs" (no "equis"), "n" suena "en" (no "ene"),
+// la "y" variable suena "i" (como la conjunción). Esta capa convierte SOLO el texto
+// que se HABLA (la pizarra y los subtítulos siguen mostrando "x", "=", "x²").
+const NOMBRE_LETRA = {
+  a: "a", b: "be", c: "ce", d: "de", e: "e", f: "efe", g: "ge", h: "hache",
+  i: "i", j: "jota", k: "ka", l: "ele", m: "eme", n: "ene", "ñ": "eñe", o: "o",
+  p: "pe", q: "cu", r: "erre", s: "ese", t: "te", u: "u", v: "uve",
+  w: "doble uve", x: "equis", y: "ye", z: "zeta",
+};
+const ORD_SUPER = { "⁴": "cuarta", "⁵": "quinta", "⁶": "sexta", "⁷": "séptima", "⁸": "octava", "⁹": "novena" };
+
+export function normalizeForSpeech(text) {
+  if (typeof text !== "string" || !text) return text;
+  let s = " " + text + " ";
+
+  // 1) Exponentes (superíndices) sobre letra/número → palabras.
+  s = s.replace(/([0-9a-zñ)])\s*²/gi, "$1 al cuadrado")
+       .replace(/([0-9a-zñ)])\s*³/gi, "$1 al cubo")
+       .replace(/([0-9a-zñ)])\s*ⁿ/gi, "$1 a la ene")
+       .replace(/([0-9a-zñ)])\s*([⁴⁵⁶⁷⁸⁹])/gi, (_, b, e) => `${b} a la ${ORD_SUPER[e]}`);
+
+  // 2) Símbolos matemáticos → palabras.
+  s = s.replace(/\s*=\s*/g, " igual a ")
+       .replace(/\s*[×·]\s*/g, " por ")
+       .replace(/\s*÷\s*/g, " entre ")
+       .replace(/√\s*/g, " raíz de ")
+       .replace(/\s*≈\s*/g, " aproximadamente ")
+       .replace(/\s*≠\s*/g, " distinto de ")
+       .replace(/\s*≤\s*/g, " menor o igual que ")
+       .replace(/\s*≥\s*/g, " mayor o igual que ")
+       .replace(/\s*±\s*/g, " más menos ")
+       .replace(/(\d)\s*%/g, "$1 por ciento")
+       .replace(/π/g, " pi ");
+
+  // 3) Operadores + - * / en contexto matemático (evita tocar guiones de palabras:
+  //    el "-" solo se convierte si hay un dígito en algún lado; "auto-evaluación" queda intacto).
+  s = s.replace(/([0-9a-zñ)])\s*\*\s*([0-9a-zñ(])/gi, "$1 por $2")
+       .replace(/([0-9a-zñ)])\s*\/\s*([0-9a-zñ(])/gi, "$1 entre $2")
+       .replace(/([0-9a-zñ)])\s*\+\s*([0-9a-zñ(])/gi, "$1 más $2")
+       .replace(/(\d)\s*[-−]\s*([0-9a-zñ(])/gi, "$1 menos $2")
+       .replace(/([0-9a-zñ)])\s*[-−]\s*(\d)/gi, "$1 menos $2");
+
+  // 4) Coeficiente pegado a variable: "3x" → "3 equis", "2y" → "2 ye".
+  s = s.replace(/(\d)([a-zñ])(?![a-zñ])/gi, (_, d, l) => `${d} ${NOMBRE_LETRA[l.toLowerCase()] || l}`);
+
+  // 5) "y" como VARIABLE (no la conjunción "y"=«y»): solo junto a contexto matemático.
+  s = s.replace(/\by\s+igual a/gi, "ye igual a")
+       .replace(/igual a\s+y\b/gi, "igual a ye")
+       .replace(/\b(despej\w*|variable|inc[oó]gnita|valor de|t[eé]rmino)\s+y\b/gi, "$1 ye");
+
+  // 6) Letras de variable AISLADAS → su nombre. Solo consonantes (+w): las vocales a/e/i/o/u
+  //    ya se pronuncian igual como letra o como palabra, así que no hace falta tocarlas, y así
+  //    "manzanas y peras" o "5 y 3" conservan la "y"/vocales de la lengua natural.
+  s = s.replace(/(^|[^a-zñáéíóúü])([b-df-hj-np-tvwxz])(?=$|[^a-zñáéíóúü])/gi,
+        (_, pre, l) => pre + (NOMBRE_LETRA[l.toLowerCase()] || l));
+
+  // 7) Paréntesis → pausa (el motor los lee raro); limpiar espacios.
+  s = s.replace(/[()]/g, " ").replace(/\s{2,}/g, " ").trim();
+  return s;
+}
+
 export class TTS {
   constructor() {
     this.synth = typeof window !== "undefined" ? window.speechSynthesis : null;
     this.enabled = !!this.synth;
     this.voice = null;
-    this.rate = 1.0;
+    this.rate = 0.95; // un poco más pausado: se entiende mejor y suena menos entrecortado
     this.pitch = 1.0;
     this._pickVoice();
     // Las voces cargan async en algunos navegadores.
@@ -49,13 +112,16 @@ export class TTS {
    */
   speak(text, opts = {}) {
     const { signal } = opts;
+    // Lo que se DICE se normaliza (variables y símbolos → palabras); la pantalla/subtítulos
+    // muestran el texto ORIGINAL (esto no los toca: solo afecta a la locución).
+    const spoken = normalizeForSpeech(text);
     return new Promise((resolve) => {
       if (signal?.aborted) return resolve();
-      if (!text) return resolve();
+      if (!spoken) return resolve();
 
       // Fallback sin audio: retardo proporcional a la longitud del texto.
       const timedFallback = () => {
-        const ms = Math.min(9000, Math.max(1200, text.length * 55));
+        const ms = Math.min(9000, Math.max(1200, spoken.length * 55));
         const t = setTimeout(resolve, ms);
         signal?.addEventListener("abort", () => { clearTimeout(t); resolve(); }, { once: true });
       };
@@ -64,7 +130,7 @@ export class TTS {
 
       try {
         this.synth.cancel();
-        const u = new SpeechSynthesisUtterance(text);
+        const u = new SpeechSynthesisUtterance(spoken);
         u.lang = this.voice?.lang || "es-ES";
         if (this.voice) u.voice = this.voice;
         u.rate = this.rate;
@@ -76,7 +142,7 @@ export class TTS {
         signal?.addEventListener("abort", () => { this.synth.cancel(); finish(); }, { once: true });
         this.synth.speak(u);
         // Salvaguarda: si el navegador nunca dispara onend, no colgar la escena.
-        const guard = setTimeout(finish, Math.min(15000, Math.max(3000, text.length * 120)));
+        const guard = setTimeout(finish, Math.min(15000, Math.max(3000, spoken.length * 120)));
         u.onend = () => { clearTimeout(guard); finish(); };
       } catch {
         timedFallback();

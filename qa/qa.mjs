@@ -13,6 +13,7 @@ import { processLSG, solveLinearFromText, solveFractionFromText, resultadoFromVe
 import { mockLSG } from "../src/lsgPrompt.js";
 import { generateLSG } from "../src/geminiClient.js";
 import { checkAnswer, flattenLSG, PSELight, buildHint } from "../public/pseLight.js";
+import { normalizeForSpeech } from "../public/tts.js";
 
 const BASE = process.env.QA_URL || "https://math-ia.onrender.com";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -119,6 +120,20 @@ async function unitTests() {
   check("desglose aritmético: resultado exacto (8)", flattenLSG(desgArit.lsg).some((d) => d.tipo === "pizarra" && /\b8\b/.test(d.contenido)));
   check("desglose combinada: junta términos (2x + x → 3x)", flattenLSG(processStepByStep("2x + x = 12", "4").lsg).some((d) => d.tipo === "pizarra" && d.contenido === "3x = 12"));
   check("desglose: sin ejercicio → null (cae a reexplicar)", processStepByStep("", "") === null);
+
+  // VOZ: normalización de letras/símbolos para el TTS (variables y símbolos → palabras habladas),
+  // sin tocar la pantalla ni el lenguaje natural (la "y" conjunción se conserva).
+  check("voz: 'x' variable → 'equis'", /\bequis\b/.test(normalizeForSpeech("para dejar x sola")) && !/\bx\b/.test(normalizeForSpeech("para dejar x sola")));
+  check("voz: 'n' variable → 'ene'", /\bene\b/.test(normalizeForSpeech("el exponente n")));
+  check("voz: 'y' variable → 'ye'", /\bye\b/.test(normalizeForSpeech("la variable y vale 5")));
+  check("voz: 'y' conjunción NO cambia", normalizeForSpeech("manzanas y peras") === "manzanas y peras");
+  check("voz: '=' → 'igual a'", /igual a/.test(normalizeForSpeech("x = 4")));
+  check("voz: '3x' → '3 equis'", /3 equis/.test(normalizeForSpeech("son 3x")));
+  check("voz: 'x²' → 'equis al cuadrado'", /equis al cuadrado/.test(normalizeForSpeech("x²")));
+  check("voz: '÷' → 'entre', '×' → 'por'", /entre/.test(normalizeForSpeech("200 ÷ 25")) && /por/.test(normalizeForSpeech("7 × 3")));
+  check("voz: '20%' → '20 por ciento'", /20 por ciento/.test(normalizeForSpeech("el 20% de 50")));
+  check("voz: NO rompe palabras con 'x' (exponente)", /exponente/.test(normalizeForSpeech("el exponente crece")));
+  check("voz: NO convierte guion de palabra (auto-evaluación)", normalizeForSpeech("la auto-evaluación") === "la auto-evaluación");
 
   check("checkAnswer: 5 == 5", checkAnswer("5", "5").correct === true);
   check("checkAnswer: 9 != 5", checkAnswer("9", "5").correct === false);

@@ -4,3 +4,7 @@ node_modules/
 npm-debug.log*
 .DS_Store
 dist/
+
+# Artefactos de entrega (build)
+math-ia-codigo-fuente.zip
+*.zip
