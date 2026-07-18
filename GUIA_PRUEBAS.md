@@ -11,6 +11,21 @@ punto acordado funciona. Marque cada casilla al comprobarla.
 
 ## Antes de empezar
 
+> ### ⏱️ IMPORTANTE — la primera visita puede tardar hasta ~1 minuto
+>
+> El prototipo está alojado en un **plan gratuito**, que **suspende el servicio tras unos 15 minutos
+> sin visitas** para ahorrar recursos. Por eso, **la primera vez que abra el enlace** (o si lleva un
+> rato sin usarlo), el servidor tiene que **"despertar"**: la página puede quedarse **en blanco o
+> cargando durante 1–2 minutos**.
+>
+> **Esto es normal y no es un fallo de la aplicación.** Qué hacer:
+> 1. Abra https://math-ia.onrender.com y **espere hasta 2 minutos** sin cerrar la pestaña.
+> 2. Si sigue en blanco, **recargue la página** (F5) una vez.
+> 3. A partir de ahí la aplicación responde **de inmediato** (menos de 2 segundos) mientras la siga usando.
+>
+> *(Si se desea eliminar por completo esta espera, se requiere un plan de alojamiento de pago; es una
+> decisión de coste del cliente, ajena al código del prototipo.)*
+
 - **Navegador:** use **Google Chrome** o **Microsoft Edge**. La *entrada por voz* usa la Web Speech
   API, que **no** está disponible en Firefox.
 - **Audio:** los navegadores solo reproducen sonido tras una interacción del usuario; haga **un clic**
@@ -61,7 +76,7 @@ punto acordado funciona. Marque cada casilla al comprobarla.
 
 | # | Qué se prueba | Cómo verificarlo | ✔ |
 |---|---|---|---|
-| 20 | **Despliegue en ambiente de prueba** | Abra https://math-ia.onrender.com — carga y responde | ☐ |
+| 20 | **Despliegue en ambiente de prueba** | Abra https://math-ia.onrender.com — carga y responde. **Recuerde:** si es la primera visita del día, espere hasta ~2 min a que el servidor despierte (ver aviso al inicio) | ☐ |
 | 21 | **Código fuente completo** | Archivo `math-ia-codigo-fuente.zip` (incluye todo el código; **sin** la clave de la IA) | ☐ |
 | 22 | **Documentación técnica** | `README.md` (instalación, ejecución y configuración de la API) y `ENTREGA.md` | ☐ |
 | 23 | **La clave de la IA está protegida** | La clave (`GEMINI_API_KEY`) vive **solo** en variable de entorno, nunca escrita en el código | ☐ |

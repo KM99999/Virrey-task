@@ -6,7 +6,11 @@ name: keep-warm
 
 on:
   schedule:
-    - cron: "*/10 * * * *"   # cada 10 minutos (GitHub puede retrasarlo unos min)
+    - cron: "*/5 * * * *"    # cada 5 min (mínimo que permite GitHub). OJO: GitHub RETRASA y a veces
+                             # OMITE las tareas programadas cuando hay carga, así que el servicio
+                             # puede dormirse igualmente. Para eliminar el arranque en frío por
+                             # completo hace falta un plan de Render de pago (decisión del cliente),
+                             # o un pinger externo (p. ej. UptimeRobot / cron-job.org).
   workflow_dispatch: {}       # permite ejecutarlo a mano desde la pestaña Actions
 
 jobs:
