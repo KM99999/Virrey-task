@@ -18,6 +18,9 @@ punto acordado funciona. Marque cada casilla al comprobarla.
 > rato sin usarlo), el servidor tiene que **"despertar"**: la página puede quedarse **en blanco o
 > cargando durante 1–2 minutos**.
 >
+> Mientras despierta, el navegador puede mostrar una **página en blanco**, quedarse **cargando**, o
+> incluso mostrar un error tipo **"502 Bad Gateway"** o **"tiempo de espera agotado"**.
+>
 > **Esto es normal y no es un fallo de la aplicación.** Qué hacer:
 > 1. Abra https://math-ia.onrender.com y **espere hasta 2 minutos** sin cerrar la pestaña.
 > 2. Si sigue en blanco, **recargue la página** (F5) una vez.
