@@ -20,7 +20,16 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json({ limit: "64kb" }));
-app.use(express.static(path.join(__dirname, "public")));
+// Estáticos con "no-cache" en HTML/JS/CSS: el navegador DEBE revalidar en cada carga (devuelve 304
+// si no cambió, o el código NUEVO si cambió). Así, una recarga trae SIEMPRE la última versión y no
+// hay diferencia entre lo desplegado y lo que prueba el cliente. (Una pestaña YA abierta se detecta
+// aparte con el aviso de "versión nueva" del frontend.)
+app.use(express.static(path.join(__dirname, "public"), {
+  etag: true,
+  setHeaders: (res, filePath) => {
+    if (/\.(html|js|css)$/i.test(filePath)) res.setHeader("Cache-Control", "no-cache");
+  },
+}));
 
 // Salud del servicio y si hay API key configurada (sin revelarla).
 app.get("/api/health", (_req, res) => {

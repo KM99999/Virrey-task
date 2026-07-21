@@ -370,10 +370,32 @@ els.steps.addEventListener("click", (e) => {
 });
 
 // --- Estado del servicio -----------------------------------------------------
+let loadedVersion = null; // versión (commit) desplegada con la que se cargó ESTA pestaña
+
+// Aviso de VERSIÓN NUEVA: si el despliegue cambia mientras la pestaña sigue abierta, el navegador
+// puede estar ejecutando código VIEJO (caché de la pestaña). Se detecta comparando la versión
+// desplegada con la que se cargó, y se invita a recargar → así la prueba del cliente coincide
+// SIEMPRE con la versión desplegada (no hay diferencia entre "mi prueba" y "la del cliente").
+function avisarVersionNueva() {
+  if (document.getElementById("versionNotice")) return;
+  const bar = document.createElement("div");
+  bar.id = "versionNotice";
+  bar.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:9999;background:#14304f;color:#fff;padding:10px 16px;text-align:center;font:600 14px/1.4 'Segoe UI',Arial,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.3)";
+  bar.innerHTML = 'Hay una <b>versión nueva</b> del tutor. Recarga para usarla: ' +
+    '<button id="reloadBtn" style="margin-left:8px;padding:4px 12px;border:0;border-radius:6px;background:#4da3ff;color:#fff;font-weight:700;cursor:pointer">Recargar ahora</button>';
+  document.body.appendChild(bar);
+  document.getElementById("reloadBtn").addEventListener("click", () => location.reload(true));
+}
+
 async function checkHealth() {
   try {
-    const res = await fetch("/api/health");
+    const res = await fetch("/api/health", { cache: "no-store" });
     const data = await res.json();
+    // Control de versión desplegada (para detectar pestañas con código viejo en caché).
+    if (data.version && data.version !== "desconocido") {
+      if (loadedVersion === null) loadedVersion = data.version;   // primera carga: fija la versión
+      else if (data.version !== loadedVersion) avisarVersionNueva(); // cambió el despliegue → avisar
+    }
     if (data.modo_ia === "gemini") {
       els.statusDot.className = "dot ok";
       els.statusText.textContent = `Gemini · ${data.modelo}`;
@@ -725,5 +747,8 @@ document.querySelectorAll(".chip").forEach((chip) => {
 
 // --- Init --------------------------------------------------------------------
 checkHealth();
+// Re-chequeo periódico: si se despliega una versión nueva mientras la pestaña sigue abierta, se
+// detecta y se invita a recargar (garantiza que se prueba SIEMPRE la versión desplegada).
+setInterval(checkHealth, 90000);
 initSpeech();
 renderHistory();
