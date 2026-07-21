@@ -134,6 +134,12 @@ async function unitTests() {
   check("voz: '20%' → '20 por ciento'", /20 por ciento/.test(normalizeForSpeech("el 20% de 50")));
   check("voz: NO rompe palabras con 'x' (exponente)", /exponente/.test(normalizeForSpeech("el exponente crece")));
   check("voz: NO convierte guion de palabra (auto-evaluación)", normalizeForSpeech("la auto-evaluación") === "la auto-evaluación");
+  // Notación con circunflejo "^" (el motor decía "circunflejo") y cálculo (dx → "dec", ∫).
+  check("voz: 'x^2' → 'al cuadrado' (no 'circunflejo')", /al cuadrado/.test(normalizeForSpeech("x^2")) && !/circunflejo|\^/.test(normalizeForSpeech("x^2")));
+  check("voz: 'x^n' → 'elevado a la ene'", /elevado a la ene/.test(normalizeForSpeech("x^n")));
+  check("voz: diferencial 'dx' → 'de equis' (no 'dec')", /de equis/.test(normalizeForSpeech("La dx al final")) && !/\bdx\b/.test(normalizeForSpeech("La dx al final")));
+  check("voz: integral '∫' → 'integral de'", /integral de/.test(normalizeForSpeech("escribimos ∫ f(x) dx")));
+  check("voz: NO rompe palabras con 'd' natural ('de repente', 'dado')", normalizeForSpeech("de repente dado que") === "de repente dado que");
 
   // DERIVADAS (regla de la potencia): califica la respuesta simbólica; una respuesta MAL ("2x"
   // para la derivada de x³ = 3x²) NO debe marcarse como correcta (el defecto reportado).

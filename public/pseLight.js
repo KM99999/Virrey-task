@@ -208,10 +208,12 @@ export class PSELight {
     this._notifyControls();
   }
 
-  // Retroceder/avanzar: salta al paso `i` y reconstruye la pizarra hasta ahí.
+  // Retroceder/avanzar: salta EXACTAMENTE al paso `i` que indica el usuario y se queda ahí, en pausa.
+  // Antes se auto-reanudaba la reproducción, y la barra "se escapaba" hacia adelante (al punto donde
+  // iba la app, no al que el usuario soltó). Ahora queda en el punto indicado; el usuario pulsa
+  // Reanudar para continuar DESDE ahí.
   seek(i) {
     if (!this.timeline.length) return;
-    const wasActive = this.playing && !this.paused;
     if (this._abort) this._abort.abort();
     this.tts.cancel();
     this.avatar.setSpeaking(false);
@@ -220,8 +222,8 @@ export class PSELight {
     this.paused = true;
     this._rebuildBoardTo(this.index);
     this.ui.onProgress?.(this.index, this.timeline.length);
+    this.ui.setCaption("⏸ En pausa — pulsa Reanudar para continuar desde aquí.");
     this._notifyControls();
-    if (wasActive) this.play(); // si estaba reproduciendo, continúa desde el nuevo punto
   }
 
   // Reproduce/reanuda desde el paso actual. Con `lsg`, carga una lección nueva.

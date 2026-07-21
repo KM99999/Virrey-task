@@ -30,6 +30,19 @@ export function normalizeForSpeech(text) {
        .replace(/([0-9a-zñ)])\s*ⁿ/gi, "$1 a la ene")
        .replace(/([0-9a-zñ)])\s*([⁴⁵⁶⁷⁸⁹])/gi, (_, b, e) => `${b} a la ${ORD_SUPER[e]}`);
 
+  // 1b) Exponente con ACENTO CIRCUNFLEJO "^" (el motor decía "circunflejo"): "x^2" → "al cuadrado",
+  //     "x^3" → "al cubo", "x^n" → "elevado a la n". Cubre también "^" suelto.
+  s = s.replace(/\s*\^\s*2\b/g, " al cuadrado")
+       .replace(/\s*\^\s*3\b/g, " al cubo")
+       .replace(/\s*\^\s*(\d+)/g, " elevado a la $1")
+       .replace(/\s*\^\s*([a-zñ])/gi, (_, l) => ` elevado a la ${NOMBRE_LETRA[l.toLowerCase()] || l}`)
+       .replace(/\^/g, " elevado a la ");
+
+  // 1c) Cálculo: diferencial "dx/dy/dz/dt" (el motor decía "dec") → "de equis/ye/zeta/te";
+  //     e integral "∫" → "integral de".
+  s = s.replace(/∫/g, " integral de ")
+       .replace(/\bd\s*([xyzt])\b/gi, (_, l) => `de ${NOMBRE_LETRA[l.toLowerCase()]}`);
+
   // 2) Símbolos matemáticos → palabras.
   s = s.replace(/\s*=\s*/g, " igual a ")
        .replace(/\s*[×·]\s*/g, " por ")
