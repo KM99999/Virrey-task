@@ -107,6 +107,16 @@ export function classifyIntent(text) {
     };
   }
 
+  // "Enséñame/quiero aprender A <hacer algo>" SIN un ejercicio concreto → APRENDER el tema (no
+  // resolver un ejercicio). Evita que "enséñame a resolver ecuaciones" caiga en "resolver".
+  if (/\b(ensen\w*|aprender|quiero aprender)\s+a\s+\w/.test(norm) && !looksLikeConcreteExercise(norm)) {
+    return { intent: "aprender", confidence: 0.9, scores: { resolver: 0, aprender: 1, explicar: 0, practicar: 0 } };
+  }
+  // "Cómo se resuelve/hace/calcula/factoriza…" SIN ejercicio concreto → EXPLICAR el método.
+  if (/\bcomo\s+(se\s+)?(resuelv|hace|calcul|factoriz|deriv|integr|despej|opera|obtien|saca|hall|simplific)/.test(norm) && !looksLikeConcreteExercise(norm)) {
+    return { intent: "explicar", confidence: 0.9, scores: { resolver: 0, aprender: 0, explicar: 1, practicar: 0 } };
+  }
+
   const scores = {
     resolver: countMatches(norm, KEYWORDS.resolver),
     aprender: countMatches(norm, KEYWORDS.aprender),

@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import { classifyIntent } from "./src/classifier.js";
 import { generateLSG } from "./src/geminiClient.js";
 import { processLSG, processStepByStep } from "./src/preLight.js";
+import { mockLSG } from "./src/lsgPrompt.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -131,14 +132,27 @@ app.post("/api/query", async (req, res) => {
 
     // 2) Generar el LSG. Modo "demo" → contenido básico sin IA; "ia" → SIEMPRE intenta Gemini
     //    (sin bloqueo por enfriamiento); auto (vacío) → intenta IA con enfriamiento tras 429.
-    const { lsg: rawLsg, source, model, usage, cached } = await generateLSG(
+    const gen = await generateLSG(
       effectiveQuery, classification.intent,
       { reexplain, seguimiento, tema: contexto || currentTopic, currentTopic, historial, previo,
         forceDemo: modo === "demo", forceAI: modo === "ia" }
     );
+    let { lsg: rawLsg, source, model } = gen;
+    const { usage, cached } = gen;
 
-    // 3) PRE Light: validar y normalizar en bloques predecibles.
-    const { lsg, pasos, warnings } = processLSG(rawLsg, classification.intent, effectiveQuery);
+    // 3) PRE Light: validar y normalizar en bloques predecibles. Si la IA devolvió un JSON válido
+    //    pero con estructura INESPERADA (processLSG lanza), NO devolvemos un 502: caemos al contenido
+    //    de demostración (siempre válido) y lo señalamos de forma transparente al alumno.
+    let lsg, pasos, warnings;
+    try {
+      ({ lsg, pasos, warnings } = processLSG(rawLsg, classification.intent, effectiveQuery));
+    } catch (preErr) {
+      console.warn("[/api/query] LSG de la IA no procesable, se usa modo demostración:", preErr.message);
+      const demo = mockLSG(effectiveQuery, classification.intent, { reexplain });
+      ({ lsg, pasos, warnings } = processLSG(demo, classification.intent, effectiveQuery));
+      source = "mock";
+      model = "demo-respaldo"; // el frontend lo mostrará como "Modo demostración"
+    }
 
     const payload = {
       query,
@@ -166,10 +180,11 @@ app.post("/api/query", async (req, res) => {
 
     return res.json(payload);
   } catch (err) {
-    console.error("[/api/query] Error:", err.message);
+    // Log COMPLETO en el servidor (con stack) para diagnosticar bugs propios; al cliente solo un
+    // mensaje genérico (no se filtran mensajes internos de excepción).
+    console.error("[/api/query] Error:", err.stack || err.message);
     return res.status(502).json({
-      error: "No se pudo generar la lección.",
-      detalle: err.message,
+      error: "No se pudo generar la lección. Inténtalo de nuevo en unos momentos.",
     });
   }
 });

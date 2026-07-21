@@ -102,6 +102,13 @@ setModo(modo, false); // estado inicial (sin aviso)
 // ¿La consulta es un SEGUIMIENTO ("no entendí", "explícamelo otra vez", "más simple")?
 // En ese caso reexplicamos el último tema, no la tratamos como un tema nuevo.
 // TOLERANTE A ERRATAS ("no enetendí", "no entiedo") — los alumnos escriben con errores.
+// ¿La consulta es un SALUDO o mensaje META (no un tema de matemáticas)? Para no fijarlo como
+// "tema activo" (evita que "hola" o "gracias" se envíen como currentTopic a la IA).
+function esSaludoOMeta(q) {
+  const n = q.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+  return /^(hola|buenas|buenos dias|buenas tardes|buenas noches|hey|ola|que tal|como estas|gracias|muchas gracias|ok|okay|vale|listo|perfecto|adios|chao|hi|hello|thanks|thank you|help|ayuda|test|prueba)\b[\s!.?]*$/.test(n);
+}
+
 function esSeguimiento(q) {
   const n = q.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
   // "No entendí / no lo entiendo / no comprendo" en CUALQUIER posición (frase clara de no-comprensión).
@@ -111,6 +118,10 @@ function esSeguimiento(q) {
   if (corta && /\bno\b/.test(n) && /(t[ie]nd|tiend|ent[a-z]{0,3}d|entiend|comprend|capt|pill)/.test(n)) return true;
   // Inglés: no-comprensión / pedir re-explicación ("I don't understand", "explain again", "for dummies").
   if (/\b(i\s+)?(don'?t|do not|didn'?t|did not|can'?t|cannot)\s+(understand|get|follow)\b|\bdidn'?t (understand|get)\b|explain\s+(it\s+|this\s+)?(again|differently|another way)|\bfor dummies\b|\bonce more\b|\bmake it (simpler|clearer)\b/.test(n)) return true;
+  // "Sigo sin entender / me perdí / estoy perdido / ni idea / no me queda claro / explícalo mejor"
+  // (frases de no-comprensión que piden reexplicar, muy comunes y antes NO detectadas).
+  if (/sigo sin entend|sigo sin comprend|me perd[ií]|estoy perdid|ando perdid|ni idea|no me queda claro|no me quedo claro|no lo veo|no capto|no capté|explica\w*\s+(lo\s+)?mejor|explica\w*\s+bien|mejor explic/.test(n)) return true;
+  if (/\b(i'?m|i am)\s+lost\b|\bstill (don'?t|do not)\s+(get|understand)\b|\bno idea\b|\bexplain\s+(it\s+)?better\b/.test(n)) return true;
   // Pedir que se lo expliquen OTRA VEZ / el paso anterior / de otra forma / más despacio / "para dummies"
   // (peticiones conversacionales que se refieren a la lección anterior, no a un tema nuevo).
   return /(paso anterior|paso previo|otra vez|de nuevo|nuevamente|mas simple|mas facil|mas despacio|mas lento|mas claro|de otra forma|para dummies|no me quedo claro|no lo pill|no lo capt|reexplic|repite|repetir|vuelve a explic|regresa al|explica(me|lo)?\s*(de nuevo|otra vez|mejor|mas|el paso|paso))/.test(n);
@@ -148,13 +159,18 @@ function esContinuacion(q) {
   // manzanas"; los temas matemáticos ("de fracciones") NO están en la lista de objetos, así que no
   // se confunden con analogías.
   if (/(otro|otra|distint[oa]|diferente)\s*(ejemplos?|analog|forma|manera)|con\s+(otro|un)\s+ejemplos?|ejemplos?\s+(distint|diferent|nuev)|que no sea\b|diferente a\b|(ense[nñ]a|expl[ií]ca)\w*\s+con\b|(con|de)\s+(perr|gat|manzan|pera|naranj|platano|banana|dinero|moneda|comida|dulce|pelot|caramel|fruta|deporte|futbol|carro|coche|juguete|animal|galleta|pizza|chocolate|flor|arbol|canica|globo)/.test(n)) return true;
+  // Pedir UN ejemplo (del tema activo), más ejemplos, "otro", o continuar ("sigue", "continúa").
+  if (/\b(dame|ponme|pon|dame otro|muestrame|ensename)\s+(un|otro|mas)?\s*ejemplos?\b|\bmas ejemplos?\b|\botro\b\s*$|\b(sigue|continua|continu[ée]|adelante|prosigue)\b/.test(n)) return true;
+  // Pregunta conceptual de aplicación/relación referida al tema activo ("¿para qué sirve?",
+  // "¿y en la vida real?", "¿cómo se relaciona/se usa?", "¿qué tiene que ver con…?").
+  if (/para que sirve|para que se usa|en la vida real|en la practica|c[oó]mo se (usa|aplica|relaciona)|se relaciona con|tiene que ver|qu[eé] relaci[oó]n|y (la|el|las|los) de\b/.test(n)) return true;
   // Pregunta/afirmación que se refiere a lo ANTERIOR (deixis) o a los ejemplos ya vistos.
   if (/\beso\b|\besto\b|\besos\b|\bentonces\b|\bo sea\b|quiere decir|\bpor eso\b|los? ejemplos?\b|lo anterior|lo que (dij|mencion|explic|vimo)|qu[eé] relaci[oó]n/.test(n)) return true;
   // Inglés: analogía con un objeto ("with/using apples"), otro ejemplo, o pregunta conceptual (deixis).
   // "explain addition with examples" NO entra (nombra un tema): solo objetos concretos y "another example".
   if (/\b(with|using|use)\s+(an?\s+|the\s+)?(apple|orange|banana|pear|dog|puppy|cat|money|coin|ball|candy|fruit|food|car|toy|animal|cookie|pizza|star|flower)s?\b/.test(n)) return true;
-  if (/\b(another|other|a different)\s+(example|analogy|way)\b|\bdifferent example\b/.test(n)) return true;
-  if (/\bdoes that mean\b|\bthat means\b|\bwhat('?s| is) the (relation|relationship)\b|\bhow (is|does) (this|that|it) relate\b/.test(n)) return true;
+  if (/\b(another|other|a different)\s+(example|analogy|way)\b|\bdifferent example\b|\bgive (me )?an? example\b|\bmore examples?\b|\b(keep going|go on|continue|next)\b/.test(n)) return true;
+  if (/\bdoes that mean\b|\bthat means\b|\bwhat('?s| is) the (relation|relationship)\b|\bhow (is|does) (this|that|it) relate\b|\bwhat('?s| is) it (for|used for)\b|\bin real life\b/.test(n)) return true;
   return null;
 }
 
@@ -391,10 +407,13 @@ async function submitQuery() {
   // Así, aunque un seguimiento no se detecte con exactitud, la IA tiene el hilo y no "baja" de tema.
   if (lastTopicQuery) body.currentTopic = lastTopicQuery;
   if (historial.length) body.historial = historial.slice(-5);
+  // Memoria de lo YA explicado: se envía SIEMPRE que haya lección previa y un tema activo (no solo en
+  // seguimientos detectados), para que la IA no repita el mismo ejemplo aunque el seguimiento no se
+  // detecte con exactitud. En una consulta de tema NUEVO explícito no estorba (es contexto).
+  if (lastLessonSummary && lastTopicQuery) body.previo = lastLessonSummary;
   if (seguimiento) {
     body.contexto = lastTopicQuery;               // el TEMA activo, para no perderlo
     body.seguimiento = tipoSeg;                    // reexplicar | mas_facil | mas_dificil | continuacion | desglosar
-    if (lastLessonSummary) body.previo = lastLessonSummary; // memoria: qué se explicó, para no repetir
     // Desglose paso a paso: enviamos el EJERCICIO actual + su respuesta para re-narrarlo (no crear uno nuevo).
     if (tipoSeg === "desglosar" && lastExercise) {
       body.ejercicio = lastExercise.ejercicio;
@@ -415,13 +434,15 @@ async function submitQuery() {
 
     const data = await res.json();
     if (!res.ok) {
-      throw new Error(data.detalle || data.error || `Error ${res.status}`);
+      throw new Error(data.error || `Error ${res.status}`);
     }
 
-    // Recordar el último TEMA real. SOLO se actualiza si la consulta NOMBRA un tema/ejercicio
-    // concreto (o no había tema aún): así una petición genérica ("dame otro ejercicio") NO borra
-    // "derivadas" y la IA no "baja" a ecuaciones lineales por defecto en la siguiente práctica.
-    if (!seguimiento && (tieneTemaExplicito(query) || !lastTopicQuery)) lastTopicQuery = query;
+    // Recordar el último TEMA real. Se actualiza si la consulta NOMBRA un tema/ejercicio concreto,
+    // o si aún no había tema y NO es un saludo/meta. Así: (a) una petición genérica ("dame otro
+    // ejercicio") NO borra "derivadas"; (b) un saludo ("hola") NO se convierte en el "tema activo".
+    if (!seguimiento && !esSaludoOMeta(query) && (tieneTemaExplicito(query) || !lastTopicQuery)) {
+      lastTopicQuery = query;
+    }
     // Memoria de la lección recién generada (para que un próximo "otro ejemplo" no la repita).
     lastLessonSummary = resumenLeccion(data.lsg);
     // Recordar el EJERCICIO en pantalla (para "explícame los pasos"). Solo se actualiza si la
@@ -435,7 +456,8 @@ async function submitQuery() {
     // para que el avatar explique de inmediato sin que el usuario tenga que buscar
     // el botón "Reproducir" (era la principal confusión reportada).
     els.stage.scrollIntoView({ behavior: "smooth", block: "start" });
-    pse.play(currentLSG);
+    // La reproducción es async: capturamos su posible rechazo para no dejar una promesa sin manejar.
+    Promise.resolve(pse.play(currentLSG)).catch((e) => console.warn("Reproducción interrumpida:", e));
   } catch (err) {
     toast(`No se pudo generar la lección: ${err.message}`);
   } finally {

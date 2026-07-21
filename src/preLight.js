@@ -34,12 +34,20 @@ function normLabel(v, fallback) {
 // (p.ej. "1/2 x = 4" o "3 x = 6" con espacio): en esos casos el valor saldría erróneo.
 // Preferimos NO juzgar (modo comprensión) antes que dar un resultado incorrecto.
 function tieneCoeficienteRecortado(text, index) {
-  const before = text.slice(0, index).replace(/\s$/, ""); // quita UN espacio de separación
-  // Rechaza si justo antes hay un dígito/paréntesis/exponente (coeficiente recortado)
-  // O una LETRA: eso significa que la "variable" es en realidad la última letra de una
-  // palabra (p.ej. "Distanci[a] = 200" o "Tiemp[o] = 25"), no una ecuación. Sin este
-  // guardo, "Distancia = 200 metros" se "resolvería" como a = 200 y calificaría 200.
-  return /[0-9a-záéíóúñü)/.²³^]$/.test(before);
+  const rawBefore = text[index - 1] || "";                     // char JUSTO antes (sin quitar espacio)
+  const empiezaVar = /[a-záéíóúñü]/i.test(text[index] || "");  // el match empieza con una LETRA suelta
+  // (a) Pegado a una palabra/número/paréntesis SIN espacio: la "variable" es la última letra de una
+  //     palabra ("Distanci[a] = 200", "Tiemp[o] = 25") o un coeficiente pegado. → no es una ecuación.
+  if (/[0-9a-záéíóúñü)/.²³^]/i.test(rawBefore)) return true;
+  // (b) Coeficiente NUMÉRICO recortado con espacio ("3 x = 6", "1/2 x = 4"): el match empieza con la
+  //     variable suelta y justo antes (quitando un espacio) hay un número o paréntesis.
+  // OJO: NO rechaza "resuelve 2x + 5 = 15" — ahí el match empieza con dígito (coef incluido) y antes
+  //      solo hay una palabra, no un número; la ecuación es válida.
+  if (empiezaVar) {
+    const before = text.slice(0, index).replace(/\s$/, "");
+    if (/[0-9)]$/.test(before)) return true;
+  }
+  return false;
 }
 
 export function solveLinearFromText(text) {
@@ -166,10 +174,11 @@ export function computeDerivative(text) {
   // Solo monomio en x: exactamente UNA 'x'. Con más de una (o polinomio a+b) devolvemos null.
   if ((after.match(/x/g) || []).length !== 1) return null;
   if (/x[\s\^0-9]*[-+]\s*\d*\s*x?/.test(after)) return null; // varios términos → no soportado
-  const m = after.match(/(-?\d+(?:\.\d+)?)?\s*\*?\s*x\s*(?:\^\s*(-?\d+))?/);
+  // El signo se captura aparte para no perder el "-" cuando el coeficiente es implícito (-x → -1·x).
+  const m = after.match(/(-)?\s*(\d+(?:\.\d+)?)?\s*\*?\s*x\s*(?:\^\s*(-?\d+))?/);
   if (!m) return null;
-  const a = m[1] != null ? Number(m[1]) : 1;
-  const n = m[2] != null ? Number(m[2]) : 1;
+  const a = (m[1] ? -1 : 1) * (m[2] != null ? Number(m[2]) : 1);
+  const n = m[3] != null ? Number(m[3]) : 1;
   if (!Number.isFinite(a) || !Number.isFinite(n)) return null;
   const coef = a * n, exp = n - 1;
   if (coef === 0) return "0";
@@ -230,8 +239,16 @@ export function computeAnswer(text) {
     .replace(/\bmás\b/gi, " + ").replace(/\bmenos\b/gi, " - ");
 
   // 1) Expresión aritmética explícita (al menos un operador entre números; admite paréntesis).
-  const m = norm.match(/\(?\s*\d+\.?\d*\s*(?:[-+*/]\s*\(?\s*\d+\.?\d*\s*\)?\s*)+/);
-  if (m) { try { const r = evalExpr(m[0].replace(/\s+/g, "")); if (r) return fmtRat(r); } catch { /* sigue */ } }
+  //    Admite un signo negativo INICIAL ("-5 + 3" = -2): se antepone un 0 para el menos unario.
+  const m = norm.match(/-?\s*\(?\s*\d+\.?\d*\s*(?:[-+*/]\s*\(?\s*-?\s*\d+\.?\d*\s*\)?\s*)+/);
+  if (m) {
+    try {
+      let e = m[0].replace(/\s+/g, "");
+      if (e[0] === "-") e = "0" + e;              // menos unario inicial → 0 - …
+      const r = evalExpr(e);
+      if (r) return fmtRat(r);
+    } catch { /* sigue */ }
+  }
 
   const low = text.toLowerCase();
   const nums = (low.match(/\d+(?:[.,]\d+)?/g) || []).map((x) => Number(x.replace(",", ".")));
@@ -355,12 +372,13 @@ export function solveLinearSteps(text) {
 // igualdades cuyo lado izquierdo es una expresión NUMÉRICA pura; las ecuaciones algebraicas
 // ("2x + 5 = 15", "x = 5") se dejan intactas (no son igualdades a verificar).
 function evalAritToRat(expr) {
-  const n = String(expr)
+  let n = String(expr)
     .replace(/×|·/g, "*").replace(/÷/g, "/").replace(/,/g, ".")
     .replace(/(\d+)\s*²/g, "($1*$1)").replace(/(\d+)\s*³/g, "($1*$1*$1)")
     .replace(/(\d+)\s*⁴/g, "($1*$1*$1*$1)")
     .replace(/\s+/g, "");
   if (/[a-zA-Z]/.test(n)) return null; // tiene variables → no es aritmética pura
+  if (n[0] === "-") n = "0" + n;        // menos unario inicial ("-5+3" → "0-5+3")
   try { return evalExpr(n); } catch { return null; }
 }
 function rhsToRat(rhs) {
@@ -375,17 +393,31 @@ export function corregirIgualdades(texto) {
   if (typeof texto !== "string" || !texto.includes("=")) return { texto, correcciones: 0 };
   let correcciones = 0;
   const nuevo = texto.replace(
-    /([0-9][0-9\s.,+\-*/×÷·()²³⁴⁵⁶⁷⁸⁹]*[0-9)²³⁴⁵⁶⁷⁸⁹])\s*=\s*(-?[0-9]+(?:[.,][0-9]+)?(?:\s*\/\s*[0-9]+)?)/g,
+    /(-?[0-9][0-9\s.,+\-*/×÷·()²³⁴⁵⁶⁷⁸⁹]*[0-9)²³⁴⁵⁶⁷⁸⁹])\s*=\s*(-?[0-9]+(?:[.,][0-9]+)?(?:\s*\/\s*[0-9]+)?)/g,
     (m, lhs, rhs) => {
-      if (!/[+\-*/×÷·²³⁴⁵⁶⁷⁸⁹]/.test(lhs)) return m;   // sin operador → no es una operación
+      // Requiere un operador REAL en el LHS (no un simple signo negativo inicial) para ser una operación.
+      if (!/[0-9)]\s*[+\-*/×÷·]\s*[0-9(]|[²³⁴⁵⁶⁷⁸⁹]/.test(lhs)) return m;
       const val = evalAritToRat(lhs);
       if (!val) return m;
       const rv = rhsToRat(rhs);
       if (!rv) return m;
-      if (val.n * rv.d === rv.n * val.d) return m;       // ya es correcto
+      if (val.n * rv.d === rv.n * val.d) return m;       // ya es correcto (exacto)
+      const valNum = val.n / val.d;
+      const rhsStr = String(rhs).replace(/,/g, ".").replace(/\s+/g, "");
+      const isDec = rhsStr.includes(".") && !rhsStr.includes("/");
+      const dec = isDec ? (rhsStr.split(".")[1] || "").length : 0;
+      // DECIMAL REDONDEADO/TRUNCADO correcto ("10/3 = 3.333", "1/7 = 0.142") → dejarlo intacto.
+      if (dec > 0 && Math.abs(valNum - Number(rhsStr)) <= Math.pow(10, -dec)) return m;
       correcciones++;
+      // Resultado corregido: si el valor exacto es una fracción no entera y el RHS venía en decimal,
+      // se corrige con un DECIMAL redondeado (evita reescrituras confusas tipo "10/3 = 10/3").
+      let corregido = fmtRat(val);
+      if (isDec && corregido.includes("/")) {
+        const p = Math.pow(10, Math.max(dec, 2));
+        corregido = String(Math.round(valNum * p) / p);
+      }
       const sep = m.slice(lhs.length, m.length - rhs.length); // el " = " exacto entre lhs y rhs
-      return lhs + sep + fmtRat(val);                    // corrige SOLO el resultado (evita tocar el lhs)
+      return lhs + sep + corregido;                      // corrige SOLO el resultado (evita tocar el lhs)
     }
   );
   return { texto: nuevo, correcciones };

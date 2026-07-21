@@ -63,6 +63,12 @@ async function unitTests() {
   check("clasif: 'dame una ecuación lineal' → practicar", classifyIntent("Dame una ecuación lineal").intent === "practicar");
   check("clasif: 'dame la solución de 2x=8' → resolver", classifyIntent("Dame la solución de 2x = 8").intent === "resolver");
   check("clasif: 'quiero aprender a resolver' → aprender", classifyIntent("Quiero aprender a resolver ecuaciones").intent === "aprender");
+  // "Enséñame A resolver / cómo se resuelve" = APRENDER/EXPLICAR el método, no resolver un ejercicio.
+  check("clasif: 'enséñame a resolver ecuaciones' → aprender", classifyIntent("enséñame a resolver ecuaciones").intent === "aprender");
+  check("clasif: '¿me enseñas a resolver ecuaciones?' → aprender", classifyIntent("¿me puedes enseñar a resolver ecuaciones?").intent === "aprender");
+  check("clasif: 'enséñame a factorizar' → aprender", classifyIntent("enséñame a factorizar").intent === "aprender");
+  check("clasif: 'cómo se resuelve una ecuación' → explicar", classifyIntent("cómo se resuelve una ecuación").intent === "explicar");
+  check("clasif: 'cómo resuelvo 2x=8' (concreto) → resolver", classifyIntent("cómo resuelvo 2x=8").intent === "resolver");
 
   // Intención "pedir práctica": debe distinguirse de "aprender" (bug reportado por el cliente).
   check("clasif: 'déjame un ejercicio' → practicar", classifyIntent("déjame un ejercicio").intent === "practicar");
@@ -98,6 +104,22 @@ async function unitTests() {
   check("integral: '5² = 20' → 25", corregirIgualdades("5² = 20").texto === "5² = 25");
   check("integral: NO toca ecuación algebraica '2x + 5 = 15'", corregirIgualdades("2x + 5 = 15").texto === "2x + 5 = 15");
   check("integral: NO toca operación correcta '20 ÷ 5 = 4'", corregirIgualdades("20 ÷ 5 = 4").texto === "20 ÷ 5 = 4");
+  // SIGNOS NEGATIVOS (defecto crítico: el signo se perdía → cálculo/calificación erróneos).
+  check("negativo: computeAnswer('-5+3') = -2", computeAnswer("-5+3") === "-2");
+  check("negativo: computeAnswer('-2-3') = -5", computeAnswer("-2-3") === "-5");
+  check("negativo: derivada de -x³ = -3x²", computeDerivative("derivada de -x³") === "-3x²");
+  check("negativo: derivada de -2x³ = -6x²", computeDerivative("derivada de -2x³") === "-6x²");
+  check("negativo: corregirIgualdades NO corrompe '-5 + 3 = -2'", corregirIgualdades("-5 + 3 = -2").texto === "-5 + 3 = -2");
+  check("negativo: corregirIgualdades NO corrompe '-2 × 3 = -6'", corregirIgualdades("-2 × 3 = -6").texto === "-2 × 3 = -6");
+  check("negativo: sí corrige mal '-5 + 3 = 5' → -2", corregirIgualdades("-5 + 3 = 5").texto === "-5 + 3 = -2");
+  // Decimal redondeado correcto NO se reescribe como fracción.
+  check("decimal: '10/3 = 3.333' se deja intacto", corregirIgualdades("10/3 = 3.333").texto === "10/3 = 3.333");
+  check("decimal: '1/7 = 0.142' se deja intacto", corregirIgualdades("1/7 = 0.142").texto === "1/7 = 0.142");
+  // Solver: una PALABRA antes de la ecuación no debe impedir resolverla (flagship en modo demo).
+  check("solver: 'resuelve 2x + 5 = 15' → 5 (palabra antes)", solveLinearFromText("resuelve 2x + 5 = 15") === "5");
+  check("solver: 'calcula x - 4 = 7' → 11 (palabra antes)", solveLinearFromText("calcula x - 4 = 7") === "11");
+  check("solver: 'Distancia = 200' sigue null (guarda)", solveLinearFromText("Distancia = 200 metros") === null);
+  check("solver: '3 x = 6' sigue null (coef recortado)", solveLinearFromText("3 x = 6") === null);
   const lsgFix = processLSG({ escena: "x", intencion: "aprender", modulos: [{ id: "m", directivas: [
     { tipo: "hablar", texto: "Entonces 200 ÷ 25 = 200, esa es la velocidad." },
     { tipo: "pizarra", contenido: "x - 4 = 7" },

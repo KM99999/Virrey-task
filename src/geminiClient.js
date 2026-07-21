@@ -148,9 +148,12 @@ export async function generateLSG(query, intent, opts = {}) {
     }
   }
 
-  // Gemini no respondió bien: degradar a modo demo (nunca un error al alumno).
+  // Gemini no respondió bien: degradar a modo demo (nunca un error al alumno). Se REGISTRA el motivo
+  // en el servidor (antes se calculaba en `lastGeminiError` pero nunca se logueaba: sin rastro para
+  // diagnosticar una caída — p.ej. clave inválida, cuota, modelo retirado).
   const quotaHit = !!(lastErr && lastErr.quota);
-  return { lsg: mockLSG(query, intent, { reexplain }), source: "mock", model: quotaHit ? "limite-temporal" : "demo" };
+  console.warn(`[Gemini→demo] Fallback a modo demostración. Motivo: ${lastGeminiError || (lastErr && lastErr.message) || "desconocido"}`);
+  return { lsg: mockLSG(query, intent, { reexplain }), source: "mock", model: quotaHit ? "limite-temporal" : "demo", motivo: lastGeminiError || undefined };
 }
 
 // Una única llamada a Gemini. Usa el caché del prompt del sistema si está disponible;
