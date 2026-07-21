@@ -13,7 +13,7 @@ import { processLSG, solveLinearFromText, solveFractionFromText, resultadoFromVe
 import { mockLSG } from "../src/lsgPrompt.js";
 import { generateLSG } from "../src/geminiClient.js";
 import { checkAnswer, flattenLSG, PSELight, buildHint } from "../public/pseLight.js";
-import { normalizeForSpeech } from "../public/tts.js";
+import { normalizeForSpeech, chunkForSpeech } from "../public/tts.js";
 
 const BASE = process.env.QA_URL || "https://math-ia.onrender.com";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -140,6 +140,14 @@ async function unitTests() {
   check("voz: diferencial 'dx' → 'de equis' (no 'dec')", /de equis/.test(normalizeForSpeech("La dx al final")) && !/\bdx\b/.test(normalizeForSpeech("La dx al final")));
   check("voz: integral '∫' → 'integral de'", /integral de/.test(normalizeForSpeech("escribimos ∫ f(x) dx")));
   check("voz: NO rompe palabras con 'd' natural ('de repente', 'dado')", normalizeForSpeech("de repente dado que") === "de repente dado que");
+  // Locuciones largas: se trocean en FRASES CORTAS para que el navegador no las corte a mitad
+  // (defecto "no completa las palabras, se saltea"). Cada trozo debe ser corto (≤180).
+  const parrafoLargo = "Imagina que tienes un coche. La derivada te diría qué tan rápido va en cada instante, es decir, su velocidad. La integral, en cambio, te permitiría calcular la distancia total recorrida si conoces su velocidad en cada momento. Esto es muy útil.";
+  const trozos = chunkForSpeech(parrafoLargo);
+  check("voz: texto largo se trocea en varias frases", trozos.length >= 3);
+  check("voz: ningún trozo es largo (≤180 chars, no se corta)", trozos.every((t) => t.length <= 180));
+  check("voz: no pierde contenido al trocear", trozos.join(" ").replace(/\s+/g, "").length >= parrafoLargo.replace(/\s+/g, "").length - 5);
+  check("voz: frase corta → un solo trozo", chunkForSpeech("¿Cuánto es 2x?").length === 1);
 
   // DERIVADAS (regla de la potencia): califica la respuesta simbólica; una respuesta MAL ("2x"
   // para la derivada de x³ = 3x²) NO debe marcarse como correcta (el defecto reportado).

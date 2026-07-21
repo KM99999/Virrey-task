@@ -83,6 +83,30 @@ export function normalizeForSpeech(text) {
   return s;
 }
 
+// Trocea el texto en FRASES CORTAS (≤ ~130 caracteres) para que ninguna locución sea larga y el
+// navegador no la corte a mitad. Divide por signos de puntuación fuertes y, si una frase es enorme,
+// por comas o espacios. Devuelve siempre al menos un trozo.
+export function chunkForSpeech(text) {
+  const s = String(text || "").trim();
+  if (!s) return [];
+  const piezas = s.match(/[^.!?;:]+[.!?;:]*/g) || [s];
+  const out = [];
+  const push = (x) => { const t = x.trim(); if (t) out.push(t); };
+  let buf = "";
+  for (const p of piezas) {
+    if ((buf + p).length > 130 && buf) { push(buf); buf = ""; }
+    buf += p;
+    while (buf.length > 180) {
+      let cut = buf.lastIndexOf(",", 170);
+      if (cut < 60) cut = buf.lastIndexOf(" ", 170);
+      if (cut < 60) cut = 170;
+      push(buf.slice(0, cut)); buf = buf.slice(cut);
+    }
+  }
+  push(buf);
+  return out.length ? out : [s];
+}
+
 export class TTS {
   constructor() {
     this.synth = typeof window !== "undefined" ? window.speechSynthesis : null;
@@ -128,38 +152,61 @@ export class TTS {
     // Lo que se DICE se normaliza (variables y símbolos → palabras); la pantalla/subtítulos
     // muestran el texto ORIGINAL (esto no los toca: solo afecta a la locución).
     const spoken = normalizeForSpeech(text);
-    return new Promise((resolve) => {
-      if (signal?.aborted) return resolve();
-      if (!spoken) return resolve();
+    if (!spoken || signal?.aborted) return Promise.resolve();
 
-      // Fallback sin audio: retardo proporcional a la longitud del texto.
-      const timedFallback = () => {
-        const ms = Math.min(9000, Math.max(1200, spoken.length * 55));
+    // Sin voz real: retardo proporcional (subtítulos temporizados).
+    if (!this.enabled || !this.voice) {
+      return new Promise((resolve) => {
+        const ms = Math.min(22000, Math.max(1200, spoken.length * 60));
         const t = setTimeout(resolve, ms);
         signal?.addEventListener("abort", () => { clearTimeout(t); resolve(); }, { once: true });
+      });
+    }
+
+    // Los motores del navegador CORTAN las locuciones largas (~15 s), dejando palabras a medias y
+    // "saltándose" texto (no se entiende la explicación). Solución: hablar FRASE POR FRASE (trozos
+    // cortos), en secuencia, con un "keepalive" (pause+resume) que evita que Chrome detenga la voz.
+    const chunks = chunkForSpeech(spoken);
+    return new Promise((resolve) => {
+      let aborted = false;
+      signal?.addEventListener("abort", () => { aborted = true; try { this.synth.cancel(); } catch {} }, { once: true });
+      const speakNext = (i) => {
+        if (aborted || i >= chunks.length) return resolve();
+        this._speakOne(chunks[i], () => aborted).then(() => speakNext(i + 1));
       };
+      speakNext(0);
+    });
+  }
 
-      if (!this.enabled || !this.voice) return timedFallback();
-
+  // Habla UN trozo corto. Resuelve al terminar (o al abortar). Keepalive contra el corte de Chrome.
+  _speakOne(chunk, isAborted) {
+    return new Promise((resolve) => {
+      if (isAborted()) return resolve();
+      let done = false, keep = null, guard = null;
+      const finish = () => {
+        if (done) return; done = true;
+        if (keep) clearInterval(keep);
+        if (guard) clearTimeout(guard);
+        resolve();
+      };
       try {
         this.synth.cancel();
-        const u = new SpeechSynthesisUtterance(spoken);
+        const u = new SpeechSynthesisUtterance(chunk);
         u.lang = this.voice?.lang || "es-ES";
         if (this.voice) u.voice = this.voice;
         u.rate = this.rate;
         u.pitch = this.pitch;
-        let done = false;
-        const finish = () => { if (!done) { done = true; resolve(); } };
         u.onend = finish;
         u.onerror = finish;
-        signal?.addEventListener("abort", () => { this.synth.cancel(); finish(); }, { once: true });
         this.synth.speak(u);
-        // Salvaguarda: si el navegador nunca dispara onend, no colgar la escena.
-        const guard = setTimeout(finish, Math.min(15000, Math.max(3000, spoken.length * 120)));
-        u.onend = () => { clearTimeout(guard); finish(); };
-      } catch {
-        timedFallback();
-      }
+        // Keepalive: Chrome detiene la locución tras ~15 s; pause+resume la mantiene viva.
+        keep = setInterval(() => {
+          if (isAborted()) { try { this.synth.cancel(); } catch {} return finish(); }
+          try { this.synth.pause(); this.synth.resume(); } catch {}
+        }, 9000);
+        // Failsafe AMPLIO (por si onend nunca llega): proporcional, SIN tope bajo que corte la voz.
+        guard = setTimeout(finish, Math.max(5000, chunk.length * 150));
+      } catch { finish(); }
     });
   }
 

@@ -335,14 +335,16 @@ els.playBtn.addEventListener("click", () => {
 els.pauseBtn.addEventListener("click", () => pse.pause());
 els.stopBtn.addEventListener("click", () => pse.stop());
 
-// Barra de pasos (scrubber): retroceder/avanzar a cualquier punto.
+// Barra de pasos (scrubber): retroceder/avanzar a cualquier punto. La pizarra sigue al dedo EN VIVO
+// mientras se arrastra (antes solo saltaba al soltar, y no se veía respuesta → "no funciona").
 els.seekBar.addEventListener("input", () => {
   seeking = true;
   const total = Number(els.seekBar.max) + 1;
   els.seekLabel.textContent = `Paso ${Number(els.seekBar.value) + 1} / ${total}`;
+  pse.seek(Number(els.seekBar.value)); // mueve la pizarra al punto indicado, en vivo
 });
 els.seekBar.addEventListener("change", () => {
-  pse.seek(Number(els.seekBar.value));
+  pse.seek(Number(els.seekBar.value)); // punto final exacto donde el usuario suelta
   seeking = false;
 });
 // Clic en un paso del transcript también salta ahí (retroceder/avanzar).
