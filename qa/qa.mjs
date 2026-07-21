@@ -9,7 +9,7 @@
 // contengan LaTeX ni "$". Imprime un veredicto final APROBADO / RECHAZADO.
 
 import { classifyIntent } from "../src/classifier.js";
-import { processLSG, solveLinearFromText, solveFractionFromText, resultadoFromVerificacion, computeAnswer, corregirIgualdades, otroEjemploResuelto, processStepByStep, computeDerivative } from "../src/preLight.js";
+import { processLSG, solveLinearFromText, solveFractionFromText, resultadoFromVerificacion, computeAnswer, corregirIgualdades, otroEjemploResuelto, processStepByStep, computeDerivative, monomioLimpio } from "../src/preLight.js";
 import { mockLSG } from "../src/lsgPrompt.js";
 import { generateLSG } from "../src/geminiClient.js";
 import { checkAnswer, flattenLSG, PSELight, buildHint } from "../public/pseLight.js";
@@ -176,6 +176,19 @@ async function unitTests() {
     { id: "practica", directivas: [{ tipo: "hablar", texto: "Aquí tienes un ejercicio." }, { tipo: "pizarra", contenido: "f(x) = x³" }, { tipo: "preguntar", texto: "¿Te gustaría practicar con otro ejemplo?" }] }] }, "practicar");
   const qGen = derGen.pasos.find((d) => d.tipo === "preguntar");
   check("derivada + pregunta genérica: se califica el tablero (3x², '2x' falla)", qGen?.respuesta === "3x²" && checkAnswer("2x", qGen?.respuesta).correct === false);
+  // "deja ejercicios complejos": un PASO INTERMEDIO garabateado del ejemplo (f'(x) ≈ 3·(2x²⁻¹)) NO
+  // debe convertirse en el ejercicio de práctica. monomioLimpio lo rechaza y se plantea uno SIMPLE.
+  check("monomioLimpio rechaza paso intermedio garabateado", monomioLimpio("f'(x) ≈ 3 · (2x²⁻¹)") === null && monomioLimpio("f'(x) = 6x") === null);
+  check("monomioLimpio acepta función limpia", monomioLimpio("f(x) = 3x²") === "3x²" && monomioLimpio("x³") === "x³");
+  const derCompleja = processLSG({ escena: "d", intencion: "aprender", modulos: [
+    { id: "ej", directivas: [
+      { tipo: "hablar", texto: "Ejemplo: derivar f(x) = 3x² con la regla de la potencia." },
+      { tipo: "pizarra", contenido: "f(x) = 3x²" },
+      { tipo: "pizarra", contenido: "f'(x) = 3 · (2x²⁻¹)" },
+      { tipo: "pizarra", contenido: "f'(x) = 6x" }] }] }, "aprender");
+  const qC = derCompleja.pasos.find((d) => d.tipo === "preguntar");
+  check("práctica de derivada NO usa el paso garabateado (queda limpia)", qC && !/f\s*['´’′]|≈|²⁻|[·{}]|\(/.test(qC.texto));
+  check("práctica de derivada compleja: ejercicio simple con respuesta válida", /derivada de/i.test(qC?.texto || "") && /^[+-]?\d{0,3}x[²³⁴⁵⁶⁷⁸⁹]?$/.test(qC?.respuesta || ""));
   const compPura = processLSG({ escena: "x", intencion: "aprender", modulos: [{ id: "m", directivas: [{ tipo: "hablar", texto: "Las fracciones son partes de un todo." }, { tipo: "preguntar", texto: "¿Entendiste la explicación?" }] }] }, "aprender");
   check("comprensión pura (sin ejercicio): NO recibe respuesta calificable", compPura.pasos.find((d) => d.tipo === "preguntar")?.respuesta === undefined);
 

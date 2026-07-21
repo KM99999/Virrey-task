@@ -188,6 +188,32 @@ export function derivarFuncion(expr) {
   return computeDerivative("derivada de " + s);
 }
 
+// ¿El texto es un MONOMIO LIMPIO en potencia de x, apto para plantear como EJERCICIO de práctica?
+// Acepta "x", "x³", "2x⁴", "f(x) = x³". RECHAZA expresiones intermedias/garabateadas que NO deben
+// mostrarse como ejercicio: notación de derivada (f'(x)), aproximación (≈), exponentes compuestos
+// (x²⁻¹, x^{2-1}), productos con paréntesis (3·(2x…)). Devuelve el monomio limpio ("x³") o null.
+// Sirve para no convertir un PASO intermedio del ejemplo en un ejercicio confuso ("deja ejercicios complejos").
+export function monomioLimpio(text) {
+  if (typeof text !== "string") return null;
+  // Notación de DERIVADA (f'(x), y′) o aproximación (≈) → NO es una función limpia para derivar.
+  if (/[a-z]\s*['´’′]|≈/i.test(text)) return null;
+  // La FUNCIÓN es el lado derecho de "=" (descarta el nombre "f(x) =", que sí es válido).
+  const rhs = (text.includes("=") ? text.split("=").pop() : text).trim();
+  if (/[{}()·]/.test(rhs)) return null;                          // paréntesis/productos → paso intermedio
+  if (/[²³⁴⁵⁶⁷⁸⁹]\s*[⁻⁺]|\^\s*[^0-9]/.test(rhs)) return null;    // exponente compuesto/no numérico
+  const r = rhs.replace(/\s+/g, "");
+  if ((r.match(/x/gi) || []).length !== 1) return null;
+  return /^[+-]?\d{0,3}x(?:\^\d|[²³⁴⁵⁶⁷⁸⁹])?$/.test(r) ? r : null;
+}
+
+// Un ejercicio de derivada LIMPIO y SIMPLE (una potencia de x), distinto de los ya escritos en la
+// lección, para plantear la práctica cuando en la pizarra solo hay pasos intermedios garabateados.
+function ejercicioDerivadaSimple(dirs) {
+  const texto = (dirs || []).map((d) => `${d.texto || ""} ${d.contenido || ""}`).join(" ");
+  for (const c of ["x⁴", "x⁵", "2x³", "x³", "3x⁴", "x⁶"]) if (!texto.includes(c)) return c;
+  return "x⁴";
+}
+
 // Calcula la respuesta EXACTA del ejercicio descrito en el texto, o null si no lo reconoce.
 export function computeAnswer(text) {
   if (typeof text !== "string" || !text.trim()) return null;
@@ -754,15 +780,24 @@ function enforceSingleQuestion(lsg, pasos, counter, intent) {
     for (const arr of arrays) for (const d of arr) {
       if (/deriv/i.test(d.texto || "") || /deriv/i.test(d.contenido || "")) { esDerivadas = true; break; }
     }
+    const todas = arrays.flat();
+    const mostrada = (s) => !!s && todas.some((x) => `${x.contenido || ""} ${x.texto || ""}`.includes(s));
     let promote = null;
     for (const arr of arrays) for (let i = 0; i < arr.length; i++) {
       const d = arr[i];
       if (d.tipo !== "pizarra" || !d.contenido) continue;
-      if (/\?\s*$/.test(d.contenido)) promote = { arr, i, texto: d.contenido, quitar: true };
-      else if (esDerivadas && /x\s*(?:\^|[²³⁴⁵⁶⁷⁸⁹])/.test(d.contenido) && derivarFuncion(d.contenido)) {
-        promote = { arr, i, texto: `Ahora deriva tú: ${d.contenido}. ¿Cuál es la derivada?`, quitar: false };
+      if (/\?\s*$/.test(d.contenido)) { promote = { arr, i, texto: d.contenido, quitar: true }; continue; }
+      if (esDerivadas) {
+        // Solo un monomio LIMPIO (nunca un paso intermedio garabateado) y cuya derivada NO se haya
+        // mostrado ya (si ya se derivó, era el EJEMPLO → mejor un ejercicio nuevo, no repetir).
+        const m = monomioLimpio(d.contenido);
+        const der = m ? derivarFuncion(m) : null;
+        if (m && der && !mostrada(der)) {
+          promote = { arr, i, texto: `Ahora deriva tú: ${m}. ¿Cuál es la derivada?`, quitar: false };
+        }
+        continue; // en lecciones de derivadas no se usa la rama de ecuación lineal
       }
-      else if (solveLinearFromText(d.contenido) !== null) {
+      if (solveLinearFromText(d.contenido) !== null) {
         promote = { arr, i, texto: `Ahora resuélvelo tú: ${d.contenido}. ¿Cuánto vale?`, quitar: false };
       }
     }
@@ -770,6 +805,9 @@ function enforceSingleQuestion(lsg, pasos, counter, intent) {
     if (promote) {
       texto = promote.texto;
       if (promote.quitar) promote.arr.splice(promote.i, 1); // era una pregunta literal: no duplicar
+    } else if (esDerivadas) {
+      // Lección de derivadas sin un monomio limpio para practicar → plantea un ejercicio SIMPLE y limpio.
+      texto = `Ahora te toca a ti: ¿cuál es la derivada de ${ejercicioDerivadaSimple(todas)}?`;
     } else {
       texto = intent === "aprender" || intent === "practicar"
         ? "¿Te gustaría practicar con otro ejemplo?"
@@ -836,10 +874,14 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
   // Pizarra (ejercicio) inmediatamente anterior a la pregunta.
   let board = null;
   for (let i = qIdx - 1; i >= 0; i--) { if (flat[i].tipo === "pizarra") { board = flat[i].contenido; break; } }
-  // Deriva un monomio del tablero SOLO si tiene exponente NUMÉRICO concreto ("x²", "x^3"): así no
-  // se intenta derivar una FÓRMULA con 'n' ("xⁿ = n·xⁿ⁻¹") ni se inventa un resultado.
-  const derivadaBoardConcreto = () =>
-    (board && /x\s*(?:\^\s*\d|[²³⁴⁵⁶⁷⁸⁹])/.test(board)) ? derivarFuncion(board) : null;
+  // Deriva un MONOMIO LIMPIO del tablero (rechaza pasos intermedios garabateados como
+  // "f'(x) ≈ 3·(2x²⁻¹)" y fórmulas con 'n"): devuelve { ejercicio, respuesta } o null.
+  const derivadaBoardLimpio = () => {
+    const m = monomioLimpio(board);
+    const der = m ? computeDerivative("derivada de " + m) : null;
+    return der ? { ejercicio: m, respuesta: der } : null;
+  };
+  const esLeccionDerivadas = flat.some((d) => /deriv/i.test(d.texto || "") || /deriv/i.test(d.contenido || ""));
   // Reescribe la pregunta (texto + respuesta) para calificar el ejercicio del tablero.
   const setPregunta = (texto, val) => {
     q.texto = texto; setResp(val);
@@ -852,10 +894,16 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
   // potencia, una ecuación lineal…), calificamos ESE ejercicio en vez de elogiar por participar
   // (evita el defecto: mostrar "f(x)=x³" y dar por buena cualquier respuesta).
   if (/¿?\s*(entendiste|comprendiste|te gustar[ií]a|quieres practicar|alguna duda)/i.test(q.texto)) {
-    const der = derivadaBoardConcreto();
+    const dl = derivadaBoardLimpio();
     const lin = board != null ? solveLinearFromText(board) : null;
-    if (der) { setPregunta(`Ahora deriva tú: ${board}. ¿Cuál es la derivada?`, der); return; }
+    if (dl) { setPregunta(`Ahora deriva tú: ${dl.ejercicio}. ¿Cuál es la derivada?`, dl.respuesta); return; }
     if (lin !== null) { setPregunta(`Ahora resuélvelo tú: ${board}. ¿Cuánto vale?`, lin); return; }
+    // Lección de derivadas sin ejercicio limpio en la pizarra → plantea uno SIMPLE y limpio.
+    if (esLeccionDerivadas) {
+      const ej = ejercicioDerivadaSimple(flat);
+      setPregunta(`Ahora te toca a ti: ¿cuál es la derivada de ${ej}?`, computeDerivative("derivada de " + ej));
+      return;
+    }
     delResp();
     return;
   }
@@ -865,7 +913,8 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
   //    sobre "¿la derivada de f(x)?" parsearía "f(x)" y devolvería "1" (incorrecto). Así "2x" a la
   //    derivada de x³ (=3x²) se califica MAL y NO se felicita.
   if (/deriv/i.test(q.texto) || (board && /deriv/i.test(board))) {
-    const der = derivadaBoardConcreto() || computeDerivative(q.texto);
+    const dl = derivadaBoardLimpio();
+    const der = (dl && dl.respuesta) || computeDerivative(q.texto);
     if (der) { setResp(der); return; }
   }
 

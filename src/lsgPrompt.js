@@ -155,6 +155,10 @@ velocidad, área, división, fracciones, lo que sea). Reglas ESTRICTAS:
   que calculaste en "verificacion_respuesta" (ver sección de AUTO-VERIFICACIÓN).
 - La pregunta debe ser CORTA y directa: UNA sola frase con el ejercicio (máx. ~15 palabras).
   NO metas instrucciones largas, opciones, ni ejemplos dentro de la pregunta, ni la repitas.
+- EJERCICIO SIMPLE Y LIMPIO: el ejercicio de práctica debe ser SENCILLO y estar bien formado.
+  PROHIBIDO usar como ejercicio un PASO INTERMEDIO del cálculo o una expresión garabateada
+  (p. ej. "f'(x) ≈ 3·(2x²⁻¹)"). En derivadas, plantea una potencia simple y limpia, del tipo
+  "¿Cuál es la derivada de x⁴?" (o "de 2x³"), NUNCA una expresión a medio resolver ni con f'(x).
 - Debe terminar con "?". Las opciones/ecuaciones van dentro de su "texto", no como "preguntar" sueltas.
 - "esperar_respuesta": true. "si_correcto"/"si_incorrecto" son ETIQUETAS: EXACTAMENTE
   "continuar", "felicitar" o "mostrar_otro_ejemplo" (no pongas frases ahí).
