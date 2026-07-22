@@ -999,6 +999,18 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
   // Pizarra (ejercicio) inmediatamente anterior a la pregunta.
   let board = null;
   for (let i = qIdx - 1; i >= 0; i--) { if (flat[i].tipo === "pizarra") { board = flat[i].contenido; break; } }
+  // ¿El "tablero" es una forma YA RESUELTA ("x = 5")? Entonces NO sirve como EJERCICIO de práctica
+  // (revelaría la respuesta). Se detecta para plantear una ecuación NUEVA en su lugar.
+  const esResuelta = (b) => typeof b === "string" && /^\s*[a-z]\s*=\s*-?\d+(?:[.,]\d+)?\s*$/i.test(b);
+  // La ecuación ORIGINAL del ejercicio (la primera pizarra que es una ecuación real, no la solución).
+  const ecOriginal = flat.map((d) => d.contenido).find((c) => c && solveLinearFromText(c) !== null && !esResuelta(c));
+  // Plantea una ecuación de práctica NUEVA y DISTINTA (basada en la original) con su solución, o null.
+  const nuevaPractica = () => {
+    const base = ecOriginal || board;
+    const nueva = base ? altEquationFrom(base) : null;
+    const sol = nueva ? solveLinearSteps(nueva) : null;
+    return sol ? { texto: `Ahora resuélvelo tú: ${nueva}. ¿Cuánto vale ${sol.varName}?`, resp: sol.answer } : null;
+  };
   // Deriva un MONOMIO LIMPIO del tablero (rechaza pasos intermedios garabateados como
   // "f'(x) ≈ 3·(2x²⁻¹)" y fórmulas con 'n"): devuelve { ejercicio, respuesta } o null.
   const derivadaBoardLimpio = () => {
@@ -1022,7 +1034,12 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
     const dl = derivadaBoardLimpio();
     const lin = board != null ? solveLinearFromText(board) : null;
     if (dl) { setPregunta(`Ahora deriva tú: ${dl.ejercicio}. ¿Cuál es la derivada?`, dl.respuesta); return; }
-    if (lin !== null) { setPregunta(`Ahora resuélvelo tú: ${board}. ¿Cuánto vale?`, lin); return; }
+    if (lin !== null) {
+      // Si el tablero es la SOLUCIÓN ("x = 5"), NO lo uses como ejercicio (revelaría la respuesta):
+      // plantea una ecuación NUEVA y distinta de la ya resuelta.
+      if (esResuelta(board)) { const np = nuevaPractica(); if (np) { setPregunta(np.texto, np.resp); return; } delResp(); return; }
+      setPregunta(`Ahora resuélvelo tú: ${board}. ¿Cuánto vale?`, lin); return;
+    }
     // Lección de derivadas sin ejercicio limpio en la pizarra → plantea uno SIMPLE y limpio.
     if (esLeccionDerivadas) {
       const ej = ejercicioDerivadaSimple(flat);
@@ -1052,7 +1069,8 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
 
   // 1) Ecuación lineal LIMPIA (en la pizarra o en el propio texto) → solución EXACTA determinista
   //    (p.ej. "x-4=7" → 11); evita copiar la respuesta del ejemplo.
-  let eqSol = board != null ? solveLinearFromText(board) : null;
+  // Un tablero YA RESUELTO ("x = 5") no debe usarse como verdad-base (revelaría/repetiría la solución).
+  let eqSol = (board != null && !esResuelta(board)) ? solveLinearFromText(board) : null;
   if (eqSol === null) eqSol = solveLinearFromText(q.texto);
   if (eqSol !== null) { setResp(eqSol); return; }
 

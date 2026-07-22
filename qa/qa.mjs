@@ -239,6 +239,17 @@ async function unitTests() {
   check("práctica de derivada compleja: ejercicio simple con respuesta válida", /derivada de/i.test(qC?.texto || "") && /^[+-]?\d{0,3}x[²³⁴⁵⁶⁷⁸⁹]?$/.test(qC?.respuesta || ""));
   const compPura = processLSG({ escena: "x", intencion: "aprender", modulos: [{ id: "m", directivas: [{ tipo: "hablar", texto: "Las fracciones son partes de un todo." }, { tipo: "preguntar", texto: "¿Entendiste la explicación?" }] }] }, "aprender");
   check("comprensión pura (sin ejercicio): NO recibe respuesta calificable", compPura.pasos.find((d) => d.tipo === "preguntar")?.respuesta === undefined);
+  // Cierre de RESOLVER con pregunta genérica: NO debe usar la SOLUCIÓN ("x = 5") como ejercicio de
+  // práctica (revelaría la respuesta). Debe plantear una ecuación NUEVA y distinta.
+  const resGen = processLSG({ escena: "e", intencion: "resolver", directivas: [
+    { tipo: "pizarra", accion: "escribir", contenido: "2x + 5 = 15" },
+    { tipo: "pizarra", accion: "escribir", contenido: "2x = 10" },
+    { tipo: "pizarra", accion: "escribir", contenido: "x = 5" },
+    { tipo: "hablar", texto: "Hemos encontrado que x vale 5." },
+    { tipo: "preguntar", texto: "¿Te gustaría practicar con otro ejemplo?" }] }, "resolver");
+  const qRes = resGen.pasos.find((d) => d.tipo === "preguntar");
+  check("resolver: la práctica NO revela la solución (x = 5)", !/tú:\s*x\s*=\s*5/i.test(qRes?.texto || ""));
+  check("resolver: la práctica plantea una ecuación NUEVA con respuesta válida", /resuélvelo tú:\s*.+=.+¿/i.test(qRes?.texto || "") && /^-?\d+(?:[.,]\d+)?$/.test(String(qRes?.respuesta || "")));
 
   // ── DERIVADA con notación "f(x) = a·xⁿ" en la PREGUNTA (bug reportado: respuesta calificada "10") ──
   // computeDerivative debe derivar el LADO DERECHO ("f(x)" no es una segunda variable).
