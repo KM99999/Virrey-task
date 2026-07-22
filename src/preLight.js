@@ -392,34 +392,78 @@ function rhsToRat(rhs) {
 export function corregirIgualdades(texto) {
   if (typeof texto !== "string" || !texto.includes("=")) return { texto, correcciones: 0 };
   let correcciones = 0;
-  const nuevo = texto.replace(
-    /(-?[0-9][0-9\s.,+\-*/×÷·()²³⁴⁵⁶⁷⁸⁹]*[0-9)²³⁴⁵⁶⁷⁸⁹])\s*=\s*(-?[0-9]+(?:[.,][0-9]+)?(?:\s*\/\s*[0-9]+)?)/g,
-    (m, lhs, rhs) => {
-      // Requiere un operador REAL en el LHS (no un simple signo negativo inicial) para ser una operación.
-      if (!/[0-9)]\s*[+\-*/×÷·]\s*[0-9(]|[²³⁴⁵⁶⁷⁸⁹]/.test(lhs)) return m;
-      const val = evalAritToRat(lhs);
-      if (!val) return m;
-      const rv = rhsToRat(rhs);
-      if (!rv) return m;
-      if (val.n * rv.d === rv.n * val.d) return m;       // ya es correcto (exacto)
-      const valNum = val.n / val.d;
-      const rhsStr = String(rhs).replace(/,/g, ".").replace(/\s+/g, "");
-      const isDec = rhsStr.includes(".") && !rhsStr.includes("/");
-      const dec = isDec ? (rhsStr.split(".")[1] || "").length : 0;
-      // DECIMAL REDONDEADO/TRUNCADO correcto ("10/3 = 3.333", "1/7 = 0.142") → dejarlo intacto.
-      if (dec > 0 && Math.abs(valNum - Number(rhsStr)) <= Math.pow(10, -dec)) return m;
-      correcciones++;
-      // Resultado corregido: si el valor exacto es una fracción no entera y el RHS venía en decimal,
-      // se corrige con un DECIMAL redondeado (evita reescrituras confusas tipo "10/3 = 10/3").
-      let corregido = fmtRat(val);
-      if (isDec && corregido.includes("/")) {
-        const p = Math.pow(10, Math.max(dec, 2));
-        corregido = String(Math.round(valNum * p) / p);
+
+  // Un término es un VALOR suelto (número, decimal o fracción a/b) — no una operación a computar.
+  const esValorSuelto = (t) => /^[+-]?\d+(?:[.,]\d+)?$/.test(t) || /^[+-]?\d+\s*\/\s*\d+$/.test(t);
+  const esDecimal = (t) => /\d[.,]\d/.test(t) && !t.includes("/");
+  const decimales = (t) => { const s = t.replace(",", ".").replace(/\.{3}|…/g, ""); const p = s.split("."); return p[1] ? p[1].length : 0; };
+  const numVal = (r) => r.n / r.d;
+  const igual = (a, b) => a.n * b.d === b.n * a.d;
+  // ¿el término (decimal) es un redondeo/truncamiento CORRECTO del valor de referencia? ("10/3 = 3.333").
+  const esRedondeo = (t, r) => {
+    if (!esDecimal(t)) return false;
+    const dec = decimales(t);
+    const tol = /(\.{3}|…)/.test(t) ? Math.pow(10, -dec) * 5 : Math.pow(10, -dec);
+    return Math.abs(Number(t.replace(",", ".").replace(/\.{3}|…/g, "")) - numVal(r)) <= tol + 1e-9;
+  };
+
+  // Recorre cada CADENA de igualdad NUMÉRICA "A = B = C …" (términos matemáticos unidos por "=").
+  const CHAIN = /[+-]?\d[\d\s.,+\-*\/×÷·()²³⁴⁵⁶⁷⁸⁹…]*=[\d\s.,+\-*\/×÷·()²³⁴⁵⁶⁷⁸⁹=…]*[\d)²³⁴⁵⁶⁷⁸⁹…]/g;
+  const nuevo = texto.replace(CHAIN, (run, offset) => {
+    // FRAGMENTO de una expresión mayor con incógnita: si justo antes (saltando espacios) hay un
+    // OPERADOR, o justo después hay una letra/"(" pegada (coeficiente "15x"), este tramo numérico NO
+    // es una igualdad autónoma → no tocar. Evita romper ecuaciones algebraicas como "2x + 5 = 15",
+    // donde el regex podría capturar solo el trozo "5 = 15".
+    const antes = texto.slice(0, offset).replace(/\s+$/, "");
+    if (/[+\-*\/×÷·]$/.test(antes)) return run;
+    const sig = texto[offset + run.length] || "";
+    if (/[a-zA-Z(]/.test(sig)) return run;
+    const before = correcciones;
+    const pre = run.match(/^\s*/)[0], post = run.match(/\s*$/)[0];
+    const core = run.trim();
+    const rawTerms = core.split("=").map((t) => t.trim());
+    if (rawTerms.length < 2 || rawTerms.some((t) => t === "")) return run;
+    // Evaluar cada término a valor EXACTO (racional). Si alguno no es aritmética pura (incógnita,
+    // basura) → NO tocamos la cadena: preferimos no arriesgar a corromper algo que no entendemos.
+    const vals = rawTerms.map((t) => evalAritToRat(t.replace(/(\.{3}|…)\s*$/, "")));
+    if (vals.some((v) => !v)) return run;
+
+    // Consenso: cada término vota por su valor; un decimal también apoya el valor que redondea.
+    // A igualdad de votos gana el valor respaldado por una OPERACIÓN (la aritmética escrita manda
+    // sobre un resultado tecleado: "5 + 3 = 7" → la verdad es 8, se corrige el 7).
+    let best = null, bestScore = -1, bestHasOp = false;
+    for (let i = 0; i < rawTerms.length; i++) {
+      const cand = vals[i];
+      let score = 0, hasOp = false;
+      for (let j = 0; j < rawTerms.length; j++) {
+        if (igual(vals[j], cand) || esRedondeo(rawTerms[j], cand)) { score++; if (!esValorSuelto(rawTerms[j])) hasOp = true; }
       }
-      const sep = m.slice(lhs.length, m.length - rhs.length); // el " = " exacto entre lhs y rhs
-      return lhs + sep + corregido;                      // corrige SOLO el resultado (evita tocar el lhs)
+      if (score > bestScore || (score === bestScore && hasOp && !bestHasOp)) { best = cand; bestScore = score; bestHasOp = hasOp; }
     }
-  );
+
+    // Reconstruir: se conservan los términos consistentes; un RESULTADO suelto equivocado se CORRIGE;
+    // una OPERACIÓN mal escrita (no se puede reescribir sin adivinar los operandos) se ELIMINA. Así la
+    // pizarra nunca muestra una igualdad falsa.
+    const out = [];
+    for (let i = 0; i < rawTerms.length; i++) {
+      if (igual(vals[i], best) || esRedondeo(rawTerms[i], best)) { out.push(rawTerms[i]); continue; }
+      correcciones++;
+      if (esValorSuelto(rawTerms[i])) {
+        let corr = fmtRat(best);
+        if (esDecimal(rawTerms[i]) && corr.includes("/")) {
+          const p = Math.pow(10, Math.max(decimales(rawTerms[i]), 2));
+          corr = String(Math.round(numVal(best) * p) / p);
+        }
+        out.push(corr);
+      }
+      // operación falsa → descartada (no se empuja nada)
+    }
+    if (correcciones === before) return run; // nada que corregir → intacto (no reformatear)
+    // Quitar repeticiones adyacentes idénticas que pudieran quedar ("1/2 = 1/2").
+    const dedup = out.filter((t, i) => i === 0 || t.replace(/\s+/g, "") !== out[i - 1].replace(/\s+/g, ""));
+    if (dedup.length === 0) return run;
+    return pre + dedup.join(" = ") + post;
+  });
   return { texto: nuevo, correcciones };
 }
 

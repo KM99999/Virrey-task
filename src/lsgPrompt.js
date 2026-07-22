@@ -113,6 +113,10 @@ El corazón de la app es CÓMO se enseña. Resolver el ejercicio sin explicar es
   Además, TODAS las ecuaciones intermedias deben tener la MISMA solución que la original (si la
   original es 5x-3=12 con x=3, cada paso debe seguir dando x=3). Verifica cada igualdad antes de
   escribirla; comprueba el resultado final sustituyéndolo en la ecuación original.
+- FRACCIÓN → DECIMAL (CRÍTICO): para convertir a/b en decimal se divide el NUMERADOR entre el
+  DENOMINADOR, nunca la fracción entera. Correcto: "1/2 = 1 ÷ 2 = 0.5". ERROR GRAVE: "1/2 = 1/2 ÷ 2 = 0.5"
+  (repetir la fracción divide de más y da 0.25, no 0.5). En una cadena "A = B = C" TODOS los términos
+  deben valer EXACTAMENTE lo mismo; verifica cada uno antes de escribirlo.
 - Ritmo por paso: hablar (el porqué) → pizarra (el paso) → esperar (1-2 s) → puntero (resalta lo clave).
 - Metodología según el alumno: tema nuevo → explicación guiada; ejercicio → resolver paso a paso
   explicando cada transformación; si algo es sutil, usa preguntas guía (método socrático).

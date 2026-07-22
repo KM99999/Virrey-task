@@ -104,6 +104,16 @@ async function unitTests() {
   check("integral: '5² = 20' → 25", corregirIgualdades("5² = 20").texto === "5² = 25");
   check("integral: NO toca ecuación algebraica '2x + 5 = 15'", corregirIgualdades("2x + 5 = 15").texto === "2x + 5 = 15");
   check("integral: NO toca operación correcta '20 ÷ 5 = 4'", corregirIgualdades("20 ÷ 5 = 4").texto === "20 ÷ 5 = 4");
+  // CADENA de igualdad completa "A = B = C": TODOS los términos deben valer lo mismo. Antes se
+  // comparaban pares sueltos y una igualdad cierta por casualidad ("1/2 = 1/2") tapaba un tramo falso.
+  check("cadena: '1/2 = 1/2 ÷ 2 = 0.5' → '1/2 = 0.5' (bug reportado)", corregirIgualdades("1/2 = 1/2 ÷ 2 = 0.5").texto === "1/2 = 0.5");
+  check("cadena: '3/4 = 3/4 ÷ 4 = 0.75' → '3/4 = 0.75'", corregirIgualdades("3/4 = 3/4 ÷ 4 = 0.75").texto === "3/4 = 0.75");
+  check("cadena: '1/2 = 1 ÷ 2 = 0.5' correcta → intacta", corregirIgualdades("1/2 = 1 ÷ 2 = 0.5").texto === "1/2 = 1 ÷ 2 = 0.5");
+  check("cadena: '3/4 = 3 ÷ 4 = 0.75' correcta → intacta", corregirIgualdades("3/4 = 3 ÷ 4 = 0.75").texto === "3/4 = 3 ÷ 4 = 0.75");
+  check("cadena: '7 ÷ 3 = 2.333 ...' aprox correcta → intacta", corregirIgualdades("7 ÷ 3 = 2.333 ...").texto === "7 ÷ 3 = 2.333 ...");
+  check("cadena: NO rompe '2x + 5 = 15' embebido en frase", corregirIgualdades("Resuelve 2x + 5 = 15 para hallar x").texto === "Resuelve 2x + 5 = 15 para hallar x");
+  check("cadena: corrige mal en frase '4 × 5 = 25 metros' → 20", corregirIgualdades("El área es 4 × 5 = 25 metros").texto === "El área es 4 × 5 = 20 metros");
+  check("cadena: '1/4 + 2/4 = 4/4' → '1/4 + 2/4 = 3/4'", corregirIgualdades("1/4 + 2/4 = 4/4").texto === "1/4 + 2/4 = 3/4");
   // SIGNOS NEGATIVOS (defecto crítico: el signo se perdía → cálculo/calificación erróneos).
   check("negativo: computeAnswer('-5+3') = -2", computeAnswer("-5+3") === "-2");
   check("negativo: computeAnswer('-2-3') = -5", computeAnswer("-2-3") === "-5");
