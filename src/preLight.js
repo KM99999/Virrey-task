@@ -53,6 +53,11 @@ function tieneCoeficienteRecortado(text, index) {
 export function solveLinearFromText(text) {
   if (typeof text !== "string") return null;
   const t = text.toLowerCase();
+  // Una ecuación LINEAL no tiene POTENCIAS ni PRODUCTOS de binomios. Si hay exponentes (x², x³, x^n,
+  // superíndices) o paréntesis de factorización, NO es lineal → null. Evita interpretar un paso de
+  // factorización ("En x² - 9: a = x, b = 3") como si fuera una ecuación con solución 3 (regresión que
+  // metía prácticas lineales sin sentido, p.ej. "e - 2 = 5", en lecciones de factorización).
+  if (/[²³⁴⁵⁶⁷⁸⁹]|\^|x\s*[*·]\s*x|\)\s*\(/i.test(text)) return null;
   // Ecuación lineal compacta: términos (coef·var o número) unidos por + / -, = número.
   // Captura toda la parte izquierda (varios términos), p.ej. "3x + x", "2x - 3".
   const m = t.match(
@@ -512,7 +517,8 @@ export function corregirIgualdades(texto) {
 // Ante un error, además de la pista, se muestra OTRO ejemplo PARECIDO resuelto paso a paso.
 // Devuelve { intro, original?, pasos:[{explica,escribe}], cierre } o null si no aplica.
 function altEquationFrom(eqText) {
-  const v = (String(eqText).toLowerCase().match(/[a-z]/) || ["x"])[0];
+  const v = "x"; // variable ESTÁNDAR: nunca tomar una letra suelta del texto (daba "e" de "En…",
+                 // confusa con el número e). El ejercicio de práctica siempre usa "x".
   const t = String(eqText).toLowerCase();
   if (/[2-9]\s*[a-z]|\d\d\s*[a-z]/.test(t)) return `3${v} = 12`;  // coeficiente → v = 4
   if (t.includes("-")) return `${v} - 2 = 5`;                     // resta → v = 7
@@ -1040,10 +1046,12 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
   const esResuelta = (b) => typeof b === "string" && /^\s*[a-z]\s*=\s*-?\d+(?:[.,]\d+)?\s*$/i.test(b);
   // La ecuación ORIGINAL del ejercicio (la primera pizarra que es una ecuación real, no la solución).
   const ecOriginal = flat.map((d) => d.contenido).find((c) => c && solveLinearFromText(c) !== null && !esResuelta(c));
-  // Plantea una ecuación de práctica NUEVA y DISTINTA (basada en la original) con su solución, o null.
+  // Plantea una ecuación de práctica NUEVA y DISTINTA con su solución, o null. SOLO si la lección tiene
+  // una ecuación lineal REAL (ecOriginal); si no (factorización, derivadas, otro tema), devuelve null y
+  // NO se inventa una lineal fuera de lugar (evita "e - 2 = 5" en una lección de factorización).
   const nuevaPractica = () => {
-    const base = ecOriginal || board;
-    const nueva = base ? altEquationFrom(base) : null;
+    if (!ecOriginal) return null;
+    const nueva = altEquationFrom(ecOriginal);
     const sol = nueva ? solveLinearSteps(nueva) : null;
     return sol ? { texto: `Ahora resuélvelo tú: ${nueva}. ¿Cuánto vale ${sol.varName}?`, resp: sol.answer } : null;
   };

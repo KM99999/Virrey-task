@@ -268,6 +268,19 @@ async function unitTests() {
     { tipo: "hablar", texto: "Uno." }, { tipo: "pizarra", accion: "escribir", contenido: "1 + 1 = 2" }, { tipo: "esperar", segundos: 1 }, { tipo: "puntero", accion: "resaltar", objetivo: "pizarra" },
     { tipo: "hablar", texto: "Dos." }, { tipo: "preguntar", texto: "¿Cuánto es 2 + 2?" }] }, "aprender", "sumas").pasos;
   check("poda: lección normal conserva su contenido (≥ 5 pasos)", ritmoNormal.length >= 5 && ritmoNormal.some((d) => d.tipo === "esperar"));
+  // FACTORIZACIÓN: un paso "En x² - 9: a = x, b = 3" NO es una ecuación lineal → no debe generar una
+  // práctica lineal fuera de tema ("e - 2 = 5"), ni usar la letra "e". solveLinearFromText rechaza potencias.
+  check("factorización: 'En x² - 9: a = x, b = 3' NO es ecuación lineal", solveLinearFromText("En x² - 9: a = x, b = 3") === null);
+  check("factorización: 'x² - 9 = (x - 3)(x + 3)' NO es lineal", solveLinearFromText("x² - 9 = (x - 3)(x + 3)") === null);
+  const factLSG = processLSG({ escena: "f", intencion: "explicar", directivas: [
+    { tipo: "hablar", texto: "Factorizar x² - 9." },
+    { tipo: "pizarra", accion: "escribir", contenido: "En x² - 9: a = x, b = 3" },
+    { tipo: "pizarra", accion: "escribir", contenido: "b = 3" },
+    { tipo: "pizarra", accion: "escribir", contenido: "x² - 9 = (x - 3)(x + 3)" },
+    { tipo: "preguntar", texto: "¿Te gustaría practicar con otro ejemplo?" }] }, "explicar", "Explícame por qué se factoriza x² - 9");
+  const qFact = factLSG.pasos.find((d) => d.tipo === "preguntar");
+  check("factorización: NO mete práctica lineal off-topic ('e - 2 = 5')", !/resuélvelo tú:\s*[a-z]\s*[-+]\s*\d/i.test(qFact?.texto || ""));
+  check("factorización: NO usa la variable 'e'", !/\be\s*[-+=]/i.test(qFact?.texto || ""));
 
   // ── DERIVADA con notación "f(x) = a·xⁿ" en la PREGUNTA (bug reportado: respuesta calificada "10") ──
   // computeDerivative debe derivar el LADO DERECHO ("f(x)" no es una segunda variable).
