@@ -198,10 +198,24 @@ function pidePasos(q) {
 // el clasificador como tema nuevo); por eso se exige que NO haya tema explícito.
 function pideOtroEjercicio(q) {
   const n = q.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
-  if (tieneTemaExplicito(q)) return false; // nombra un tema → tema nuevo, no seguimiento
-  const es = /(otro|otra|nuev[oa]|distint[oa]|diferente|mas|un|una)\s+(ejercicio|ejercicios|problema|problemas|practica|reto)|(ejercicio|problema)\s+(diferente|distint[oa]|nuev[oa]|mas dificil|mas facil)|(dame|dejame|deja|ponme|pon|quiero|otro|otra|mas)\s+(ejercicio|ejercicios|problema|problemas|practica|practicar|uno|reto)|mas ejercicios|otro ejercicio|otro problema|dejame otro|dame otro/;
-  const en = /(another|other|different|new|one more|a new)\s+(exercise|problem|question|one|practice)|(give|show).*(another|other|different)\s+(exercise|problem|one)|more (exercises|problems|practice)/;
+  if (nombraOtroTema(q)) return false; // nombra un tema DISTINTO → tema nuevo, no seguimiento
+  const es = /(otro|otra|nuev[oa]|distint[oa]|diferente|mas|un|una)\s+(ejercicio|ejercicios|problema|problemas|ecuacion|ecuaciones|practica|reto)|(ejercicio|problema|ecuacion)\s+(diferente|distint[oa]|nuev[oa]|mas dificil|mas facil)|(dame|dejame|deja|ponme|pon|quiero|otro|otra|mas)\s+(ejercicio|ejercicios|problema|problemas|ecuacion|ecuaciones|practica|practicar|uno|reto)|mas ejercicios|otro ejercicio|otro problema|otra ecuacion|dejame otro|dame otro/;
+  const en = /(another|other|different|new|one more|a new)\s+(exercise|problem|equation|question|one|practice)|(give|show|present).*(another|other|different)\s+(exercise|problem|equation|one)|more (exercises|problems|equations|practice)/;
   return es.test(n) || en.test(n);
+}
+
+// ¿La consulta pide OTRA ecuación/ejercicio del MISMO tema y que se lo RESUELVAN (no que lo resuelva
+// el alumno)? ("presenta otra ecuación y resuélvela", "present another equation and solve it",
+// "dame otro y resuélvelo"). Se enruta como seguimiento `resolver_otro` → intención RESOLVER con una
+// ecuación NUEVA (distinta de la anterior), resuelta paso a paso. Antes, en inglés, esto caía a
+// `aprender` y repetía la ecuación inicial.
+function pideResolverOtro(q) {
+  const n = q.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+  if (nombraOtroTema(q)) return false; // trae una ecuación concreta o nombra otro tema → no es seguimiento
+  const otro = /(otr[oa]|distint[oa]|diferente|nuev[oa]|another|other|a\s+different|a\s+new|one\s+more)/;
+  const cosa = /(ecuacion|ecuaciones|equation|problema|problem|ejercicio|exercise|ejemplo|example|operacion|calculo|uno|one)/;
+  const resolver = /(resuelv|resolv|solucion\w*|soluci[oó]n|solve|work\s+(it|them)?\s*out|show.*solution)/;
+  return otro.test(n) && cosa.test(n) && resolver.test(n);
 }
 
 // Clasifica el tipo de SEGUIMIENTO del tema activo (o null si es un tema nuevo).
@@ -214,6 +228,7 @@ function clasificarSeguimiento(q) {
   const aj = ajusteNivel(q);            // "mas_facil" | "mas_dificil"
   if (aj) return aj;
   if (esSeguimiento(q)) return "reexplicar"; // "no entendí", "otra vez", "de otra forma"…
+  if (pideResolverOtro(q)) return "resolver_otro"; // "otra ecuación y resuélvela" → RESOLVER una NUEVA
   if (pideOtroEjercicio(q)) return "practicar"; // otro ejercicio del MISMO tema (mantiene derivadas, etc.)
   if (esContinuacion(q)) return "continuacion"; // otro ejemplo / analogía / pregunta contextual
   return null;
@@ -227,6 +242,18 @@ function tieneTemaExplicito(q) {
   const temas = /(derivad|integral|deriva\b|ecuacion|inecuacion|fraccion|decimal|porcentaje|por ciento|\bsuma|sumar|\bresta|restar|multiplic|divi(de|di|si)|\bpotencia|\braiz|\barea|perimetro|volumen|geometr|trigonometr|\bseno|coseno|tangente|algebra|factoriz|diferencia de cuadrados|polinomi|logaritm|limite|matriz|probabilidad|estadistic|promedio|numero primo|maximo comun|minimo comun|regla de tres|proporcion|angulo|triangulo|circulo|cuadrado|rectangulo|derivative|integral|equation|fraction|percent|algebra|geometry|trigonometry)/;
   const expr = /\d\s*[-+*/^=]\s*[\w(]|\b[a-z]\s*=|[a-z]\s*[²³⁴⁵⁶⁷⁸⁹]|\bx\^/; // "2x+3", "x=", "x³", "x^2"
   return temas.test(n) || expr.test(q);
+}
+
+// ¿La consulta nombra un tema ESPECÍFICO distinto (derivadas, fracciones…) o trae una ecuación
+// CONCRETA? A diferencia de tieneTemaExplicito, NO cuenta el contenedor genérico "ecuación/equation":
+// en "otra ecuación" la palabra "ecuación" no es un tema nuevo, es "otra del mismo tipo". Se usa como
+// guarda de los seguimientos de práctica para no confundir "otra ecuación" (seguimiento) con
+// "un ejercicio de fracciones" (tema nuevo).
+function nombraOtroTema(q) {
+  const n = q.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+  const especifico = /(derivad|integral|deriva\b|inecuacion|fraccion|decimal|porcentaje|por ciento|\bsuma|sumar|\bresta|restar|multiplic|divi(de|di|si)|\bpotencia|\braiz|\barea|perimetro|volumen|geometr|trigonometr|\bseno|coseno|tangente|algebra|factoriz|diferencia de cuadrados|polinomi|logaritm|limite|matriz|probabilidad|estadistic|promedio|numero primo|maximo comun|minimo comun|regla de tres|proporcion|angulo|triangulo|circulo|cuadrado|rectangulo|derivative|fraction|percent|geometry|trigonometry)/;
+  const expr = /\d\s*[-+*/^=]\s*[\w(]|\b[a-z]\s*=|[a-z]\s*[²³⁴⁵⁶⁷⁸⁹]|\bx\^/;
+  return especifico.test(n) || expr.test(q);
 }
 
 // --- Fase 2: avatar, voz y PSE Light ----------------------------------------
@@ -433,9 +460,15 @@ async function submitQuery() {
   // seguimientos detectados), para que la IA no repita el mismo ejemplo aunque el seguimiento no se
   // detecte con exactitud. En una consulta de tema NUEVO explícito no estorba (es contexto).
   if (lastLessonSummary && lastTopicQuery) body.previo = lastLessonSummary;
+  // Cuando el alumno pide OTRA ecuación/ejercicio (para practicar o para que se lo resuelvan), pasamos
+  // EXPLÍCITAMENTE el ejercicio anterior al frente del `previo` para que la IA NO lo repita (era la
+  // queja: "otra ecuación" repetía la inicial). Va delante porque el server recorta `previo` a 400.
+  if ((tipoSeg === "resolver_otro" || tipoSeg === "practicar") && lastExercise?.ejercicio) {
+    body.previo = `Ejercicio anterior (NO lo repitas, usa uno DISTINTO): ${lastExercise.ejercicio}. ` + (body.previo || "");
+  }
   if (seguimiento) {
     body.contexto = lastTopicQuery;               // el TEMA activo, para no perderlo
-    body.seguimiento = tipoSeg;                    // reexplicar | mas_facil | mas_dificil | continuacion | desglosar
+    body.seguimiento = tipoSeg;                    // reexplicar | mas_facil | mas_dificil | continuacion | desglosar | resolver_otro
     // Desglose paso a paso: enviamos el EJERCICIO actual + su respuesta para re-narrarlo (no crear uno nuevo).
     if (tipoSeg === "desglosar" && lastExercise) {
       body.ejercicio = lastExercise.ejercicio;

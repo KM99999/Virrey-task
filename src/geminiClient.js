@@ -98,6 +98,11 @@ export async function generateLSG(query, intent, opts = {}) {
     reteach = `\n\nIMPORTANTE: el alumno pide OTRO EJERCICIO de práctica del MISMO tema (${tema}), NO un tema nuevo. NO cambies de tema bajo ninguna circunstancia (si el tema es derivadas, el ejercicio DEBE ser de derivadas; NO propongas ecuaciones lineales u otro tema). Genera un ejercicio de práctica NUEVO y DISTINTO del mismo tema, con un breve recordatorio del método y una pregunta clara para que lo resuelva el alumno.`
       + (evitar ? ` El alumno pide EVITAR "${evitar}": no repitas ese caso.` : "")
       + (prev ? ` Esto ya se vio antes (propón algo distinto): "${prev}".` : "");
+  } else if (seg === "resolver_otro") {
+    const tema = opts.tema ? `"${opts.tema}"` : "el de la conversación anterior";
+    const prev = typeof opts.previo === "string" && opts.previo.trim() ? opts.previo.trim().slice(0, 400) : "";
+    reteach = `\n\nIMPORTANTE: el alumno pide OTRA ecuación/ejercicio del MISMO tema (${tema}) y que la RESUELVAS TÚ, paso a paso. Haz EXACTAMENTE esto: (1) plantea una ecuación/ejercicio NUEVO y CLARAMENTE DISTINTO del anterior (otros números), del MISMO tema —NO cambies de tema, NO reutilices la ecuación anterior—; (2) resuélvelo COMPLETO paso a paso, mostrando cada operación en la pizarra y explicando el porqué; (3) NO termines con una pregunta para que lo resuelva el alumno: la resuelves TÚ. `
+      + (prev ? `Lo anterior (NO lo repitas, usa números distintos): "${prev}".` : "");
   } else if (seg === "continuacion") {
     const tema = opts.tema ? `"${opts.tema}"` : "el de la conversación anterior";
     const evitar = extractExclusion(query);
