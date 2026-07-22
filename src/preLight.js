@@ -738,11 +738,47 @@ export function processLSG(rawLsg, intent, mensaje = "") {
   // Ramificación ligera: adjunta un ejemplo alternativo RESUELTO para mostrarlo si el alumno falla.
   attachAltExample(lsg, pasos);
 
+  // Poda de RELLENO descontrolado: la IA a veces emite una cola de "esperar"/"puntero" (se han visto 41
+  // pausas seguidas TRAS la pregunta) que hace avanzar el cronograma sin contenido. Se recorta aquí.
+  podarRelleno(lsg, pasos);
+
   lsg.duracion_estimada = Number(rawLsg.duracion_estimada) > 0
     ? Number(rawLsg.duracion_estimada)
     : estimateDuration(pasos);
 
   return { lsg, pasos, warnings };
+}
+
+// Poda de RELLENO: la IA a veces emite una cola descontrolada de "esperar"/"puntero" (p.ej. 41 pausas
+// seguidas tras la pregunta) que hace que el cronograma siga avanzando sin contenido. Se colapsa CUALQUIER
+// racha de relleno a ≤ 2 y se ELIMINA todo el relleno FINAL: la lección debe terminar en CONTENIDO
+// (hablar/pizarra/preguntar), no en pausas. Reconstruye `pasos` para que la duración y el timeline coincidan.
+function podarRelleno(lsg, pasos) {
+  const esRelleno = (d) => d && (d.tipo === "esperar" || d.tipo === "puntero");
+  const colapsar = (arr) => {
+    const out = []; let run = 0;
+    for (const d of arr) {
+      if (esRelleno(d)) { if (++run <= 2) out.push(d); }
+      else { run = 0; out.push(d); }
+    }
+    return out;
+  };
+  const quitarColaRelleno = (arr) => { let e = arr.length; while (e > 0 && esRelleno(arr[e - 1])) e--; return arr.slice(0, e); };
+  if (Array.isArray(lsg.modulos)) {
+    for (const m of lsg.modulos) m.directivas = colapsar(m.directivas);
+    // Recorta el relleno del FINAL, atravesando módulos vacíos hasta encontrar contenido.
+    for (let i = lsg.modulos.length - 1; i >= 0; i--) {
+      lsg.modulos[i].directivas = quitarColaRelleno(lsg.modulos[i].directivas);
+      if (lsg.modulos[i].directivas.length > 0) break;
+    }
+    lsg.modulos = lsg.modulos.filter((m) => m.directivas.length > 0);
+  } else if (Array.isArray(lsg.directivas)) {
+    lsg.directivas = quitarColaRelleno(colapsar(lsg.directivas));
+  }
+  // Rehacer `pasos` (copias, mismo orden) para que la duración y el timeline reflejen la lección podada.
+  pasos.length = 0;
+  if (Array.isArray(lsg.modulos)) { for (const m of lsg.modulos) for (const d of m.directivas) pasos.push({ ...d }); }
+  else if (Array.isArray(lsg.directivas)) { for (const d of lsg.directivas) pasos.push({ ...d }); }
 }
 
 // Normaliza un array de directivas, numerándolas y saneándolas.

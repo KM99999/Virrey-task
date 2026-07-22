@@ -250,6 +250,24 @@ async function unitTests() {
   const qRes = resGen.pasos.find((d) => d.tipo === "preguntar");
   check("resolver: la práctica NO revela la solución (x = 5)", !/tú:\s*x\s*=\s*5/i.test(qRes?.texto || ""));
   check("resolver: la práctica plantea una ecuación NUEVA con respuesta válida", /resuélvelo tú:\s*.+=.+¿/i.test(qRes?.texto || "") && /^-?\d+(?:[.,]\d+)?$/.test(String(qRes?.respuesta || "")));
+  // PODA de relleno: la IA a veces deja una cola de esperar/puntero (se vieron 41 tras la pregunta) que
+  // hace avanzar el cronograma sin contenido. PRE Light debe recortarla → la lección termina en contenido.
+  const inflada = { escena: "d", intencion: "aprender", directivas: [
+    { tipo: "hablar", texto: "Vamos a derivar." },
+    { tipo: "pizarra", accion: "escribir", contenido: "f(x) = x³" },
+    { tipo: "preguntar", texto: "¿Cuál es la derivada de x⁴?" }] };
+  for (let i = 0; i < 30; i++) { inflada.directivas.push({ tipo: "esperar", segundos: 1 }); inflada.directivas.push({ tipo: "puntero", accion: "resaltar", objetivo: "pizarra" }); }
+  const pod = processLSG(inflada, "aprender", "enséñame derivadas").pasos;
+  const ultimo = pod[pod.length - 1]?.tipo;
+  let mr = 0, rr = 0; pod.forEach((x) => { if (x.tipo === "esperar" || x.tipo === "puntero") { rr++; mr = Math.max(mr, rr); } else rr = 0; });
+  check("poda: la lección NO termina en relleno (esperar/puntero)", ultimo !== "esperar" && ultimo !== "puntero");
+  check("poda: ninguna racha de relleno > 2", mr <= 2);
+  check("poda: la cola descontrolada se recorta (63 dir → ≤ 6)", pod.length <= 6);
+  // Una lección NORMAL conserva su ritmo (esperar/puntero entre contenido no se elimina de más).
+  const ritmoNormal = processLSG({ escena: "n", intencion: "aprender", directivas: [
+    { tipo: "hablar", texto: "Uno." }, { tipo: "pizarra", accion: "escribir", contenido: "1 + 1 = 2" }, { tipo: "esperar", segundos: 1 }, { tipo: "puntero", accion: "resaltar", objetivo: "pizarra" },
+    { tipo: "hablar", texto: "Dos." }, { tipo: "preguntar", texto: "¿Cuánto es 2 + 2?" }] }, "aprender", "sumas").pasos;
+  check("poda: lección normal conserva su contenido (≥ 5 pasos)", ritmoNormal.length >= 5 && ritmoNormal.some((d) => d.tipo === "esperar"));
 
   // ── DERIVADA con notación "f(x) = a·xⁿ" en la PREGUNTA (bug reportado: respuesta calificada "10") ──
   // computeDerivative debe derivar el LADO DERECHO ("f(x)" no es una segunda variable).
