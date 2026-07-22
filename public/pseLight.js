@@ -389,12 +389,19 @@ export class PSELight {
     const answer = await this.ui.askAnswer(d.texto, { signal });
     if (signal.aborted || answer == null) return;
 
-    // Sin verdad-base → verificación de comprensión (no se juzga correcto/incorrecto).
+    // Sin verdad-base → NO se juzga correcto/incorrecto. OJO: si la pregunta es COMPUTACIONAL (pide un
+    // resultado concreto: "¿cuál es la derivada…?", "¿cuánto es…?") y no pudimos calcular la verdad
+    // (p.ej. derivada de un producto/trig, fuera de la regla de la potencia), NO se elogia la respuesta
+    // —eso daría por buena una respuesta ERRADA—: se da un mensaje NEUTRAL que remite a la pizarra.
+    // El "¡Muy bien!" se reserva para preguntas de COMPRENSIÓN reales ("¿entendiste?").
     if (!expected) {
       const negativa = /^(no|nop|nel|para nada|no s[eé])\b/i.test(answer.trim());
+      const esComputacional = /cu[aá]nto|cu[aá]l es|calcul|derivada de|deriva\b|resuelv|resultado|valor de|factoriz|simplific/i.test(d.texto || "");
       const msg = negativa
         ? "Sin problema. Puedes volver a reproducir la lección para repasarla con calma. 👍"
-        : "¡Muy bien! Gracias por participar. 👏";
+        : esComputacional
+          ? "Gracias por responder. Compara tu resultado con el procedimiento resuelto en la pizarra para verificarlo. 👀"
+          : "¡Muy bien! Gracias por participar. 👏";
       this.ui.showFeedback(true, msg);
       await this._speak(msg, "sonriendo", signal);
       return;
