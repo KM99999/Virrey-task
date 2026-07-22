@@ -158,9 +158,10 @@ function esContinuacion(q) {
   // con ejemplos" NO (nombra un tema) → se trata como tema nuevo. "de <objeto>" cubre "ejemplos de
   // manzanas"; los temas matemáticos ("de fracciones") NO están en la lista de objetos, así que no
   // se confunden con analogías.
-  if (/(otro|otra|distint[oa]|diferente)\s*(ejemplos?|analog|forma|manera)|con\s+(otro|un)\s+ejemplos?|ejemplos?\s+(distint|diferent|nuev)|que no sea\b|diferente a\b|(ense[nñ]a|expl[ií]ca)\w*\s+con\b|(con|de)\s+(perr|gat|manzan|pera|naranj|platano|banana|dinero|moneda|comida|dulce|pelot|caramel|fruta|deporte|futbol|carro|coche|juguete|animal|galleta|pizza|chocolate|flor|arbol|canica|globo)/.test(n)) return true;
-  // Pedir UN ejemplo (del tema activo), más ejemplos, "otro", o continuar ("sigue", "continúa").
-  if (/\b(dame|ponme|pon|dame otro|muestrame|ensename)\s+(un|otro|mas)?\s*ejemplos?\b|\bmas ejemplos?\b|\botro\b\s*$|\b(sigue|continua|continu[ée]|adelante|prosigue)\b/.test(n)) return true;
+  if (/(otr[oa]s?|distint[oa]s?|diferentes?|nuev[oa]s?)\s+(ejemplos?|analog|forma|manera|caso)|con\s+(otro|un)\s+ejemplos?|ejemplos?\s+(distint|diferent|nuev)|que no sea\b|diferente a\b|(ense[nñ]a|expl[ií]ca)\w*\s+con\b|(con|de)\s+(perr|gat|manzan|pera|naranj|platano|banana|dinero|moneda|comida|dulce|pelot|caramel|fruta|deporte|futbol|carro|coche|juguete|animal|galleta|pizza|chocolate|flor|arbol|canica|globo)/.test(n)) return true;
+  // Pedir MÁS/OTROS ejemplos (del tema activo), o continuar ("sigue", "continúa"). Cubre plural
+  // ("otros/otras ejemplos") y verbos como "escucha/quiero/oye/ver otros ejemplos".
+  if (/\b(dame|ponme|pon|muestrame|ense[nñ]ame|escucha|quiero|oye|ver|da|pon)\s+(un|otr[oa]s?|mas|nuev[oa]s?)?\s*ejemplos?\b|\b(mas|otr[oa]s)\s+ejemplos?\b|\botro\b\s*$|\b(sigue|continua|continu[ée]|adelante|prosigue)\b/.test(n)) return true;
   // Pregunta conceptual de aplicación/relación referida al tema activo ("¿para qué sirve?",
   // "¿y en la vida real?", "¿cómo se relaciona/se usa?", "¿qué tiene que ver con…?").
   if (/para que sirve|para que se usa|en la vida real|en la practica|c[oó]mo se (usa|aplica|relaciona)|se relaciona con|tiene que ver|qu[eé] relaci[oó]n|y (la|el|las|los) de\b/.test(n)) return true;
