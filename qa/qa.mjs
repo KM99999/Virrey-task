@@ -9,7 +9,7 @@
 // contengan LaTeX ni "$". Imprime un veredicto final APROBADO / RECHAZADO.
 
 import { classifyIntent } from "../src/classifier.js";
-import { processLSG, solveLinearFromText, solveFractionFromText, resultadoFromVerificacion, computeAnswer, corregirIgualdades, otroEjemploResuelto, processStepByStep, computeDerivative, monomioLimpio } from "../src/preLight.js";
+import { processLSG, solveLinearFromText, solveFractionFromText, resultadoFromVerificacion, computeAnswer, corregirIgualdades, otroEjemploResuelto, processStepByStep, computeDerivative, monomioLimpio, computeFactorization } from "../src/preLight.js";
 import { mockLSG } from "../src/lsgPrompt.js";
 import { generateLSG } from "../src/geminiClient.js";
 import { checkAnswer, flattenLSG, PSELight, buildHint } from "../public/pseLight.js";
@@ -94,6 +94,20 @@ async function unitTests() {
   // letra" (lineal); y NO se debe adjuntar un ejemplo aritmético suelto ("9 - 4 = 5") por el "-" de x²-9.
   check("hint: factorización → diferencia de cuadrados (no 'despejar')", /cuadrado|factoriz|\(a - b\)/.test(buildHint("¿Cómo se factoriza x² - 16?", "x² - 9 = (x - 3)(x + 3)", 2)) && !/despejar la letra|coeficiente/.test(buildHint("¿Cómo se factoriza x² - 16?", "x² - 9 = (x - 3)(x + 3)", 2)));
   check("ramificación: factorización NO adjunta ejemplo aritmético off-topic", otroEjemploResuelto("¿Cómo se factoriza x² - 16?", "x² - 9 = (x - 3)(x + 3)") === null);
+  // FACTORIZACIÓN calificable (diferencia de cuadrados): se calcula la factorización correcta y se
+  // califica contra ella, NO contra un número suelto ("3"). Así la práctica es REAL (ramificación continúa).
+  check("factorización: x² - 9 → (x - 3)(x + 3)", computeFactorization("¿factorización de x² - 9?") === "(x - 3)(x + 3)");
+  check("factorización: x² - 16 → (x - 4)(x + 4)", computeFactorization("x² - 16") === "(x - 4)(x + 4)");
+  check("factorización: 2x² - 8 → 2(x - 2)(x + 2)", computeFactorization("2x² - 8") === "2(x - 2)(x + 2)");
+  check("factorización: x² - 7 (no cuadrado perfecto) → null", computeFactorization("x² - 7") === null);
+  check("factorización: x² + 9 (suma, no factoriza) → null", computeFactorization("x² + 9") === null);
+  const factPractica = processLSG({ escena: "f", intencion: "aprender", modulos: [
+    { id: "ej", directivas: [{ tipo: "hablar", texto: "Factorizar diferencia de cuadrados." }, { tipo: "pizarra", accion: "escribir", contenido: "x² - 9 = (x - 3)(x + 3)" }] },
+    { id: "practica", directivas: [{ tipo: "hablar", texto: "Ahora tú." }, { tipo: "pizarra", accion: "escribir", contenido: "x² - 16" }, { tipo: "preguntar", texto: "¿Cuál es la factorización de x² - 16?" }] }] }, "aprender", "factoriza x²-9");
+  const qFa = factPractica.pasos.find((d) => d.tipo === "preguntar");
+  check("factorización: práctica calificada con (x - 4)(x + 4), NO un número", qFa?.respuesta === "(x - 4)(x + 4)");
+  check("factorización: alumno '(x+4)(x-4)' (reordenado) es CORRECTO", checkAnswer("(x+4)(x-4)", qFa?.respuesta).correct === true);
+  check("factorización: alumno '(x-2)(x+2)' es INCORRECTO", checkAnswer("(x-2)(x+2)", qFa?.respuesta).correct === false);
   check("hint: fracciones → denominador", /denominador/.test(buildHint("¿2/5 + 1/5?", "2/5 + 1/5", 1)));
   check("hint: problema verbal → fórmula", /f[oó]rmula|operaci/.test(buildHint("¿velocidad?", "Distancia = 200, Tiempo = 25", 1)));
   // Estructuralmente NO puede revelar la respuesta: buildHint no recibe el valor esperado y su

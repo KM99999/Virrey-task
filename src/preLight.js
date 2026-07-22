@@ -214,6 +214,26 @@ export function computeDerivative(text) {
   }).join("");
 }
 
+// Factoriza una DIFERENCIA DE CUADRADOS de forma determinista: "x² - a²" → "(x - a)(x + a)";
+// "c·x² - d" (con d/c cuadrado perfecto de raíz entera) → "c(x - a)(x + a)" (ej. "2x² - 8" → "2(x - 2)(x + 2)").
+// Devuelve la factorización simbólica o null si NO es una diferencia de cuadrados factorizable con raíces
+// enteras (así NO se arriesga a calificar mal: mejor sin nota que con un número inventado como "3").
+export function computeFactorization(text) {
+  if (typeof text !== "string") return null;
+  const t = text.toLowerCase().replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]+/g, (m) => "^" + [...m].map((c) => "⁰¹²³⁴⁵⁶⁷⁸⁹".indexOf(c)).join(""));
+  // "c x^2 - d": coeficiente opcional, variable x al cuadrado, RESTA (diferencia), un número positivo.
+  const m = t.match(/(\d*)\s*\*?\s*x\s*\^\s*2\s*-\s*(\d+)/);
+  if (!m) return null;
+  const c = m[1] === "" ? 1 : Number(m[1]);
+  const d = Number(m[2]);
+  if (!Number.isFinite(c) || !Number.isFinite(d) || c <= 0 || d <= 0) return null;
+  if (d % c !== 0) return null;                 // c·x² - d = c·(x² - d/c); requiere d/c entero
+  const a = Math.sqrt(d / c);
+  if (!Number.isInteger(a)) return null;         // raíz no entera → no factorizable así
+  const coef = c === 1 ? "" : String(c);
+  return `${coef}(x - ${a})(x + ${a})`;
+}
+
 // Deriva una FUNCIÓN escrita en la pizarra/enunciado: "f(x) = x³", "y = 2x³" o un monomio suelto
 // "x³". Toma el lado DERECHO de "=" (la función real) y aplica la regla de la potencia. Sirve para
 // calificar cuando el exponente está en el TABLERO y la pregunta solo dice "¿la derivada de f(x)?".
@@ -1137,6 +1157,16 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
     // (polinomio, producto, regla de la cadena…), NO la calificamos con el número de la IA (no deriva
     // de forma fiable). Mejor sin nota (comprensión) que dar por incorrecta una respuesta correcta.
     if (/deriv/i.test(q.texto)) { delResp(); return; }
+  }
+
+  // 0.5) FACTORIZACIÓN (diferencia de cuadrados): se calcula la factorización CORRECTA (x²-9 → (x-3)(x+3))
+  //      y se califica contra ella (el frontend compara binomios sin importar el orden). Si no es
+  //      factorizable con raíces enteras, SIN nota (comprensión) — NUNCA un número suelto ("3") que
+  //      marcaría mal una factorización correcta. Va antes de la vía lineal/aritmética.
+  if (/factoriz|diferencia de cuadrados/i.test(`${q.texto} ${board || ""}`)) {
+    const fac = computeFactorization(q.texto) || (board ? computeFactorization(board) : null);
+    if (fac) { setResp(fac); return; }
+    delResp(); return;
   }
 
   // 1) Ecuación lineal LIMPIA (en la pizarra o en el propio texto) → solución EXACTA determinista

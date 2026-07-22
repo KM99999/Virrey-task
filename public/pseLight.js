@@ -116,6 +116,20 @@ function polyCanon(s) {
   const ord = [...map.entries()].filter(([, c]) => c !== 0).sort((a, b) => b[0] - a[0]);
   return ord.length ? ord.map(([e, c]) => `${c}x^${e}`).join("+") : "0";
 }
+// Forma CANÓNICA de una FACTORIZACIÓN "c(x - a)(x + b)…": coeficiente líder + conjunto ORDENADO de
+// binomios (x±k). Acepta reordenar los factores y variantes de signo/espacio. Devuelve null si no
+// parece una factorización (producto de binomios), para no interferir con otras comparaciones.
+function factorCanon(s) {
+  const t = String(s).toLowerCase().replace(/\s+/g, "").replace(/[·*]/g, "");
+  const bins = [...t.matchAll(/\(([+-]?\d*)x([+-]\d+)\)/g)];
+  if (!bins.length) return null;
+  const cm = t.match(/^([+-]?\d+)\(/);                 // coeficiente líder antes del primer "("
+  const coef = cm ? Number(cm[1]) : 1;
+  const terms = bins
+    .map((b) => `${b[1] === "" || b[1] === "+" ? "1" : b[1] === "-" ? "-1" : b[1]}x${b[2]}`)
+    .sort();
+  return `${coef}|${terms.join(",")}`;
+}
 
 // Evalúa la respuesta del alumno contra la esperada.
 // Devuelve { known:boolean, correct:boolean }. Si no hay respuesta esperada
@@ -133,6 +147,12 @@ export function checkAnswer(student, expected) {
   // que solo mira el número inicial: "3x" NO es "3", ni "2x" es "3x²".
   if (esMonomio(a) || esMonomio(b)) {
     return { known: true, correct: normSym(a) === normSym(b) };
+  }
+  // Respuesta FACTORIZADA ("(x - 3)(x + 3)"): comparar como PRODUCTO DE BINOMIOS (orden indistinto).
+  // Va antes que el polinomio para que "(x-3)(x+3)" no se intente comparar como polinomio suelto.
+  if (/\)\s*\(/.test(a) || /\)\s*\(/.test(b)) {
+    const fa = factorCanon(a), fb = factorCanon(b);
+    if (fa != null && fb != null) return { known: true, correct: fa === fb };
   }
   // Respuesta POLINÓMICA ("12x³ - 12x + 9"): comparar forma canónica (ordena términos, normaliza
   // exponentes) → acepta reordenar y "x^3"/"x³", y rechaza un polinomio incorrecto/incompleto.
