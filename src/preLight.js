@@ -169,31 +169,44 @@ export function computeDerivative(text) {
   if (!/deriv|d\s*\/\s*dx/.test(t)) return null;
   // Superíndices Unicode → "^n" para un solo parser.
   t = t.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]+/g, (m) => "^" + [...m].map((c) => "⁰¹²³⁴⁵⁶⁷⁸⁹".indexOf(c)).join(""));
-  // La función a derivar es lo que viene DESPUÉS de "derivada/deriva/d/dx".
-  const after = t.split(/deriv\w*|d\s*\/\s*dx/).pop() || "";
-  // Si la función viene como DEFINICIÓN ("f(x) = 7x³", "y = x⁵"), lo que se deriva es el lado DERECHO
-  // del "="; el nombre "f(x)" NO cuenta como una segunda variable. Antes, "f(x) = 7x³" se rechazaba
-  // por tener 2 'x' → la derivada quedaba sin calcular → se calificaba con un número inventado por la IA.
-  const defm = after.match(/(?:[fgh]\s*\(\s*[a-z]\s*\)|\by)\s*=\s*(.+)$/i);
-  const fn = defm ? defm[1] : after;
+  // La función a derivar: se PREFIERE una DEFINICIÓN "f(x) = <expr>" / "y = <expr>" en cualquier parte
+  // del enunciado (lo más fiable, aunque "derivada" aparezca varias veces —"...la derivada de una
+  // constante es 0"— y el nombre "f(x)" NO cuenta como variable). La expresión se corta en el primer
+  // carácter que no sea matemático (así ", usando la regla…" no se cuela). Si no hay definición, se
+  // toma lo que viene tras el ÚLTIMO "derivada/d/dx" ("derivada de x³").
+  const defm = t.match(/(?:[fgh]\s*\(\s*[a-z]\s*\)|\by)\s*=\s*([-+0-9x\^.\s*·]+)/i);
+  const fn = defm ? defm[1] : (t.split(/deriv\w*|d\s*\/\s*dx/).pop() || "");
   // Rechaza funciones NO polinómicas (no se derivan con la regla de la potencia): trigonométricas,
   // logaritmo, raíz, exponencial o cualquier "nombre(" de función. Evita derivar "sen(x)" como si
-  // fuera x (daba "1") y calificar mal. Solo se soportan monomios en potencia de x.
+  // fuera x (daba "1") y calificar mal. Solo se soportan polinomios en x.
   if (/\b(sen|sin|cos|tan|cot|sec|csc|log|ln|exp|ra[ií]z|sqrt)\b|√|e\s*\^|[a-hj-z]\s*\(/i.test(fn)) return null;
-  // Solo monomio en x: exactamente UNA 'x'. Con más de una (o polinomio a+b) devolvemos null.
-  if ((fn.match(/x/g) || []).length !== 1) return null;
-  if (/x[\s\^0-9]*[-+]\s*\d*\s*x?/.test(fn)) return null; // varios términos → no soportado
-  // El signo se captura aparte para no perder el "-" cuando el coeficiente es implícito (-x → -1·x).
-  const m = fn.match(/(-)?\s*(\d+(?:\.\d+)?)?\s*\*?\s*x\s*(?:\^\s*(-?\d+))?/);
-  if (!m) return null;
-  const a = (m[1] ? -1 : 1) * (m[2] != null ? Number(m[2]) : 1);
-  const n = m[3] != null ? Number(m[3]) : 1;
-  if (!Number.isFinite(a) || !Number.isFinite(n)) return null;
-  const coef = a * n, exp = n - 1;
-  if (coef === 0) return "0";
-  if (exp === 0) return String(coef);
-  const c = coef === 1 ? "" : coef === -1 ? "-" : String(coef);
-  return exp === 1 ? `${c}x` : `${c}x${toSuper(String(exp))}`;
+  if (fn.includes("=")) return null; // "x³ = 3x²" es ambiguo → no derivar
+  // Aísla SOLO los caracteres matemáticos (quita conectores "de", "la"… que quedan delante).
+  const s = fn.replace(/[^0-9x+\-*·^.]/gi, "");
+  if (!s || !/x/.test(s)) return null; // sin variable x → no es una función derivable aquí
+  // Tokeniza en monomios con signo ("5x^3", "-6x^2", "9x", "-2") y deriva TÉRMINO A TÉRMINO (regla de
+  // la potencia: a·xⁿ → a·n·xⁿ⁻¹; constante → 0). Si sobra algo que no encaje, no arriesgamos (null).
+  const terms = s.match(/[+-]?(?:\d+(?:\.\d+)?)?[*·]?x(?:\^-?\d+)?|[+-]?\d+(?:\.\d+)?/g);
+  if (!terms || terms.join("").length !== s.length) return null;
+  const map = new Map(); // exponente → coeficiente acumulado de la derivada
+  for (const term of terms) {
+    if (!/x/.test(term)) continue; // constante → su derivada es 0
+    const mm = term.match(/^([+-]?)(\d+(?:\.\d+)?)?[*·]?x(?:\^(-?\d+))?$/);
+    if (!mm) return null;
+    const a = (mm[1] === "-" ? -1 : 1) * (mm[2] != null ? Number(mm[2]) : 1);
+    const n = mm[3] != null ? Number(mm[3]) : 1;
+    if (!Number.isFinite(a) || !Number.isFinite(n)) return null;
+    const coef = a * n, exp = n - 1;
+    if (coef !== 0) map.set(exp, (map.get(exp) || 0) + coef);
+  }
+  const ord = [...map.entries()].filter(([, c]) => c !== 0).sort((x, y) => y[0] - x[0]);
+  if (!ord.length) return "0";
+  return ord.map(([exp, coef], i) => {
+    const abs = Math.abs(coef);
+    const c = abs === 1 && exp !== 0 ? "" : String(abs);
+    const mono = exp === 0 ? String(abs) : exp === 1 ? `${c}x` : `${c}x${toSuper(String(exp))}`;
+    return i === 0 ? (coef < 0 ? "-" : "") + mono : (coef < 0 ? " - " : " + ") + mono;
+  }).join("");
 }
 
 // Deriva una FUNCIÓN escrita en la pizarra/enunciado: "f(x) = x³", "y = 2x³" o un monomio suelto

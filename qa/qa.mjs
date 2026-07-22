@@ -188,7 +188,9 @@ async function unitTests() {
   check("derivada: 3x² → 6x", computeDerivative("deriva 3x^2") === "6x");
   check("derivada: 5x → 5", computeDerivative("derivada de 5x") === "5");
   check("derivada: x → 1", computeDerivative("derivada de x") === "1");
-  check("derivada: polinomio no soportado → null", computeDerivative("derivada de x² + 3x") === null);
+  check("derivada: POLINOMIO derivado término a término (x²+3x → 2x+3)", computeDerivative("derivada de x² + 3x") === "2x + 3");
+  check("derivada: polinomio de grado 4 (3x⁴-6x²+9x-2 → 12x³-12x+9)", computeDerivative("derivada de g(x) = 3x⁴ - 6x² + 9x - 2") === "12x³ - 12x + 9");
+  check("derivada: función NO polinómica (sen) sigue → null", computeDerivative("derivada de sen(x)") === null);
   check("derivada: computeAnswer también la calcula", computeAnswer("¿Cuál es la derivada de x³?") === "3x²");
   check("califica derivada: '2x' es INCORRECTO para 3x²", checkAnswer("2x", "3x²").correct === false);
   check("califica derivada: '3' NO cuela para 3x²", checkAnswer("3", "3x²").correct === false);
@@ -260,13 +262,23 @@ async function unitTests() {
   check("BUG REPORTADO: f(x)=7x³ se califica 21x² (NO el '10' de la IA)", qCoef?.respuesta === "21x²");
   check("BUG REPORTADO: la respuesta CORRECTA '21x²' se acepta", checkAnswer("21x²", qCoef?.respuesta).correct === true);
   check("BUG REPORTADO: '10' (número inventado) se rechaza", checkAnswer("10", qCoef?.respuesta).correct === false);
-  // REGLA DURA: derivada de un POLINOMIO (no soportada) NO se califica con el número de la IA →
-  // queda SIN respuesta (comprensión), nunca un valor inventado que marque mal lo correcto.
-  const derPoli = processLSG({ escena: "d", intencion: "practicar", verificacion_respuesta: "Resultado: 7", modulos: [{ id: "practica", directivas: [
+  // POLINOMIO: ahora SÍ se califica (regla de la potencia término a término). El alumno que responde
+  // bien es aceptado; uno mal, rechazado (antes caía en "comprensión" y ELOGIABA cualquier respuesta).
+  const derPol = processLSG({ escena: "d", intencion: "practicar", verificacion_respuesta: "Resultado: 7", modulos: [{ id: "practica", directivas: [
     { tipo: "hablar", texto: "Deriva este polinomio." },
-    { tipo: "pizarra", contenido: "f(x) = x² + 3x" },
-    { tipo: "preguntar", texto: "¿Cuál es la derivada de f(x) = x² + 3x?" }] }] }, "practicar");
-  check("REGLA DURA: derivada de polinomio NO usa el número de la IA (sin respuesta)", derPoli.pasos.find((d) => d.tipo === "preguntar")?.respuesta === undefined);
+    { tipo: "pizarra", contenido: "f(x) = 3x⁴ - 6x² + 9x - 2" },
+    { tipo: "preguntar", texto: "¿Cuál es la derivada de f(x) = 3x⁴ - 6x² + 9x - 2?" }] }] }, "practicar");
+  const qPol = derPol.pasos.find((d) => d.tipo === "preguntar");
+  check("POLINOMIO: práctica calificada con la derivada real (12x³ - 12x + 9)", qPol?.respuesta === "12x³ - 12x + 9");
+  check("POLINOMIO: respuesta CORRECTA aceptada (reordenada)", checkAnswer("9 - 12x + 12x³", qPol?.respuesta).correct === true);
+  check("POLINOMIO: respuesta INCORRECTA rechazada (ya no elogia cualquier cosa)", checkAnswer("12x³ - 6x + 9", qPol?.respuesta).correct === false);
+  // REGLA DURA: una derivada GENUINAMENTE inderivable (trig/producto) NO se califica con el número de
+  // la IA → queda SIN respuesta (comprensión), nunca un valor inventado que marque mal lo correcto.
+  const derTrig = processLSG({ escena: "d", intencion: "practicar", verificacion_respuesta: "Resultado: 7", modulos: [{ id: "practica", directivas: [
+    { tipo: "hablar", texto: "Deriva esta función." },
+    { tipo: "pizarra", contenido: "f(x) = sen(x)" },
+    { tipo: "preguntar", texto: "¿Cuál es la derivada de f(x) = sen(x)?" }] }] }, "practicar");
+  check("REGLA DURA: derivada inderivable (sen) NO usa el número de la IA (sin respuesta)", derTrig.pasos.find((d) => d.tipo === "preguntar")?.respuesta === undefined);
 
   // NO validar respuestas erróneas como correctas: "3x" NO es "3" (el número inicial coincide, pero
   // la variable lo cambia). Falso positivo reportado por el cliente.

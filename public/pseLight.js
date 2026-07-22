@@ -93,6 +93,29 @@ function normSym(s) {
   r = r.replace(/^([+-]?)1([a-z])/, "$1$2");  // coeficiente 1 implícito: "1x" → "x"
   return r;
 }
+// Forma CANÓNICA de un polinomio en x ("12x³ - 12x + 9" ↔ "9 - 12x + 12x^3"): suma coeficientes por
+// exponente y ordena por exponente descendente. Devuelve null si no es un polinomio limpio en x (así
+// las respuestas con unidades/fracciones siguen por la comparación numérica). Acepta "x^n", "xⁿ" y "xn".
+function polyCanon(s) {
+  let t = String(s).toLowerCase().replace(/\s+/g, "").replace(/[*·]/g, "")
+    .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]/g, (c) => "^" + SUP_A_NUM[c]);   // x² → x^2
+  t = t.replace(/x\^?(\d+)/g, "x^$1").replace(/x(?![\^0-9])/g, "x^1"); // x → x^1, x3 → x^3
+  if (!/x/.test(t)) return null;
+  const terms = t.match(/[+-]?[^+-]+/g);
+  if (!terms) return null;
+  const map = new Map();
+  for (const term of terms) {
+    const sign = term[0] === "-" ? -1 : 1;
+    const body = term.replace(/^[+-]/, "");
+    let m = body.match(/^(\d*\.?\d*)x\^(-?\d+)$/);
+    if (m) { const coef = sign * (m[1] === "" ? 1 : Number(m[1])); map.set(+m[2], (map.get(+m[2]) || 0) + coef); continue; }
+    m = body.match(/^(\d+\.?\d*)$/);
+    if (m) { map.set(0, (map.get(0) || 0) + sign * Number(m[1])); continue; }
+    return null; // término no reconocido → no es polinomio limpio
+  }
+  const ord = [...map.entries()].filter(([, c]) => c !== 0).sort((a, b) => b[0] - a[0]);
+  return ord.length ? ord.map(([e, c]) => `${c}x^${e}`).join("+") : "0";
+}
 
 // Evalúa la respuesta del alumno contra la esperada.
 // Devuelve { known:boolean, correct:boolean }. Si no hay respuesta esperada
@@ -110,6 +133,12 @@ export function checkAnswer(student, expected) {
   // que solo mira el número inicial: "3x" NO es "3", ni "2x" es "3x²".
   if (esMonomio(a) || esMonomio(b)) {
     return { known: true, correct: normSym(a) === normSym(b) };
+  }
+  // Respuesta POLINÓMICA ("12x³ - 12x + 9"): comparar forma canónica (ordena términos, normaliza
+  // exponentes) → acepta reordenar y "x^3"/"x³", y rechaza un polinomio incorrecto/incompleto.
+  if (/[a-z]/.test(a) && /[a-z]/.test(b)) {
+    const ca = polyCanon(a), cb = polyCanon(b);
+    if (ca != null && cb != null) return { known: true, correct: ca === cb };
   }
   // Comparación por VALOR, aceptando fracciones equivalentes (1/2 == 3/6 == 0.5),
   // decimales y respuestas con unidades ("8" == "8 metros/segundo").
