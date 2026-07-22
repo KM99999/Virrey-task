@@ -87,8 +87,11 @@ function esMonomio(s) {
   return /^[+-]?\d*\.?\d*[a-z](?:\^?\d+|[⁰¹²³⁴⁵⁶⁷⁸⁹])?$/.test(s);
 }
 function normSym(s) {
-  return String(s).toLowerCase().replace(/\s+/g, "").replace(/[*·]/g, "").replace(/\^/g, "")
-    .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]/g, (c) => SUP_A_NUM[c]);
+  let r = String(s).toLowerCase().replace(/\s+/g, "").replace(/[*·]/g, "")
+    .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]/g, (c) => SUP_A_NUM[c]).replace(/\^/g, "");
+  r = r.replace(/([a-z])1$/, "$1");          // exponente 1 implícito: "2x1" (2x¹) → "2x"
+  r = r.replace(/^([+-]?)1([a-z])/, "$1$2");  // coeficiente 1 implícito: "1x" → "x"
+  return r;
 }
 
 // Evalúa la respuesta del alumno contra la esperada.
@@ -115,9 +118,17 @@ export function checkAnswer(student, expected) {
   if (Number.isFinite(va) && Number.isFinite(vb)) {
     return { known: true, correct: Math.abs(va - vb) < 1e-9 };
   }
-  // Tolerancia de texto para respuestas cortas: una contiene a la otra
-  // (p.ej. alumno "sumar 7" vs esperado "sumar 7 a ambos lados").
-  if (a.length >= 3 && b.length >= 3 && (a.includes(b) || b.includes(a))) {
+  // Tolerancia de texto para respuestas cortas: una contiene a la otra (p.ej. alumno "sumar 7" vs
+  // esperado "sumar 7 a ambos lados"). PERO el match no puede PARTIR un número: "restar 3" no debe
+  // aceptarse dentro de "restar 30" (daba un falso positivo al quitar los espacios).
+  const contiene = (x, y) => {
+    const i = x.indexOf(y);
+    if (i === -1) return false;
+    if (/\d/.test(y[y.length - 1]) && /\d/.test(x[i + y.length] || "")) return false; // corta un número por la derecha
+    if (/\d/.test(y[0]) && /\d/.test(x[i - 1] || "")) return false;                    // …o por la izquierda
+    return true;
+  };
+  if (a.length >= 3 && b.length >= 3 && (contiene(a, b) || contiene(b, a))) {
     return { known: true, correct: true };
   }
   return { known: true, correct: false };

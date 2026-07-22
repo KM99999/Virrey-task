@@ -238,6 +238,36 @@ async function unitTests() {
   const compPura = processLSG({ escena: "x", intencion: "aprender", modulos: [{ id: "m", directivas: [{ tipo: "hablar", texto: "Las fracciones son partes de un todo." }, { tipo: "preguntar", texto: "¿Entendiste la explicación?" }] }] }, "aprender");
   check("comprensión pura (sin ejercicio): NO recibe respuesta calificable", compPura.pasos.find((d) => d.tipo === "preguntar")?.respuesta === undefined);
 
+  // ── DERIVADA con notación "f(x) = a·xⁿ" en la PREGUNTA (bug reportado: respuesta calificada "10") ──
+  // computeDerivative debe derivar el LADO DERECHO ("f(x)" no es una segunda variable).
+  check("derivada: f(x) = 7x³ → 21x²", computeDerivative("¿Cuál es la derivada de f(x) = 7x³?") === "21x²");
+  check("derivada: f(x) = x⁵ → 5x⁴", computeDerivative("¿Cuál es la derivada de f(x) = x⁵?") === "5x⁴");
+  check("derivada: f(x) = 5x² → 10x", computeDerivative("derivada de f(x) = 5x²") === "10x");
+  check("derivada: y = -2x⁴ → -8x³", computeDerivative("deriva y = -2x⁴") === "-8x³");
+  check("derivada: computeAnswer('f(x)=7x³') = 21x²", computeAnswer("¿Cuál es la derivada de f(x) = 7x³?") === "21x²");
+  // Funciones NO polinómicas → null (antes 'sen(x)' se derivaba como x → '1', calificando mal).
+  check("derivada: sen(x) → null (no se deriva)", computeDerivative("derivada de sen(x)") === null);
+  check("derivada: cos(x) → null", computeDerivative("derivada de cos(x)") === null);
+  check("derivada: ln(x) → null", computeDerivative("derivada de ln(x)") === null);
+  check("derivada: f(x) abstracta (sin '=') → null", computeDerivative("derivada de f(x)") === null);
+  // Escenario EXACTO reportado: la IA calculó mal ("Resultado: 10"); el grader NO debe usar ese número,
+  // debe calificar con la derivada DETERMINISTA (21x²). '21x²' correcto se acepta; '10' se rechaza.
+  const derCoef = processLSG({ escena: "d", intencion: "practicar", verificacion_respuesta: "Resultado: 10", modulos: [{ id: "practica", directivas: [
+    { tipo: "hablar", texto: "Ahora aplica la regla de la potencia tú mismo." },
+    { tipo: "pizarra", contenido: "f(x) = 7x³" },
+    { tipo: "preguntar", texto: "¿Cuál es la derivada de f(x) = 7x³?" }] }] }, "practicar");
+  const qCoef = derCoef.pasos.find((d) => d.tipo === "preguntar");
+  check("BUG REPORTADO: f(x)=7x³ se califica 21x² (NO el '10' de la IA)", qCoef?.respuesta === "21x²");
+  check("BUG REPORTADO: la respuesta CORRECTA '21x²' se acepta", checkAnswer("21x²", qCoef?.respuesta).correct === true);
+  check("BUG REPORTADO: '10' (número inventado) se rechaza", checkAnswer("10", qCoef?.respuesta).correct === false);
+  // REGLA DURA: derivada de un POLINOMIO (no soportada) NO se califica con el número de la IA →
+  // queda SIN respuesta (comprensión), nunca un valor inventado que marque mal lo correcto.
+  const derPoli = processLSG({ escena: "d", intencion: "practicar", verificacion_respuesta: "Resultado: 7", modulos: [{ id: "practica", directivas: [
+    { tipo: "hablar", texto: "Deriva este polinomio." },
+    { tipo: "pizarra", contenido: "f(x) = x² + 3x" },
+    { tipo: "preguntar", texto: "¿Cuál es la derivada de f(x) = x² + 3x?" }] }] }, "practicar");
+  check("REGLA DURA: derivada de polinomio NO usa el número de la IA (sin respuesta)", derPoli.pasos.find((d) => d.tipo === "preguntar")?.respuesta === undefined);
+
   // NO validar respuestas erróneas como correctas: "3x" NO es "3" (el número inicial coincide, pero
   // la variable lo cambia). Falso positivo reportado por el cliente.
   check("checkAnswer: '3x' NO es correcto para esperado '3'", checkAnswer("3x", "3").correct === false);
@@ -309,6 +339,22 @@ async function unitTests() {
   check("calc: velocidad 400 m / 8 s = 50", computeAnswer("Recorre 400 metros en 8 segundos, ¿velocidad?") === "50");
   check("calc: no inventa en pregunta no-matemática", computeAnswer("¿Entendiste la explicación?") === null);
   check("calc: NO evalúa una ecuación como aritmética", computeAnswer("¿Cuánto vale x en 2x - 5 = 7?") === null);
+  // ── Auditoría de calificación: fórmulas que "A por B" cortocircuitaba, y promedio con conteo ──
+  check("calc: perímetro rectángulo 'de 5 por 3' = 16 (no 15/área)", computeAnswer("¿Cuál es el perímetro de un rectángulo de 5 por 3?") === "16");
+  check("calc: área rectángulo 'de 5 por 3' = 15", computeAnswer("¿área de un rectángulo de 5 por 3?") === "15");
+  check("calc: área triángulo 'de 6 por 4' = 12 (base·altura/2)", computeAnswer("¿Cuál es el área de un triángulo de 6 por 4?") === "12");
+  check("calc: 'triángulo rectángulo' se califica como TRIÁNGULO (12, no 24)", computeAnswer("Área de un triángulo rectángulo de catetos 6 y 4") === "12");
+  check("calc: promedio 'estas 3 notas: 4, 6 y 8' = 6 (sin el conteo)", computeAnswer("Calcula el promedio de estas 3 notas: 4, 6 y 8") === "6");
+  check("calc: promedio 'siguientes 5 números: 10,20,30,40,50' = 30", computeAnswer("promedio de los siguientes 5 números: 10,20,30,40,50") === "30");
+  // resultadoFromVerificacion: SIN etiqueta "Resultado:" NO adivina un número suelto del razonamiento.
+  check("verif: usa 'Resultado: 10' cuando está etiquetado", resultadoFromVerificacion("Paso... Resultado: 10") === "10");
+  check("verif: SIN etiqueta → vacío (no raspa el último número)", resultadoFromVerificacion("… es 10, ya que 50 por 20 entre 100") === "");
+  check("verif: dos raíces sin etiqueta → vacío (no toma solo una)", resultadoFromVerificacion("las soluciones son x = 2 y x = 3") === "");
+  // checkAnswer: monomios equivalentes con exponente/coeficiente 1, y containment que no parta números.
+  check("califica: '2x^1' equivale a '2x'", checkAnswer("2x^1", "2x").correct === true);
+  check("califica: '1x' equivale a 'x'", checkAnswer("1x", "x").correct === true);
+  check("califica: 'restar 3' NO cuela dentro de 'restar 30'", checkAnswer("restar 30", "restar 3").correct === false);
+  check("califica: 'sumar 7' sí casa en 'sumar 7 a ambos lados'", checkAnswer("sumar 7 a ambos lados", "sumar 7").correct === true);
   // El modelo se equivoca (7×3=12) → la calculadora lo corrige a 21.
   const mulFix = processLSG({ verificacion_respuesta: "Resultado: 12", escena: "m", intencion: "aprender",
     modulos: [{ id: "ej", directivas: [{ tipo: "hablar", texto: "Multiplicar." },

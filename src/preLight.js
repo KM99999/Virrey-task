@@ -171,11 +171,20 @@ export function computeDerivative(text) {
   t = t.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]+/g, (m) => "^" + [...m].map((c) => "⁰¹²³⁴⁵⁶⁷⁸⁹".indexOf(c)).join(""));
   // La función a derivar es lo que viene DESPUÉS de "derivada/deriva/d/dx".
   const after = t.split(/deriv\w*|d\s*\/\s*dx/).pop() || "";
+  // Si la función viene como DEFINICIÓN ("f(x) = 7x³", "y = x⁵"), lo que se deriva es el lado DERECHO
+  // del "="; el nombre "f(x)" NO cuenta como una segunda variable. Antes, "f(x) = 7x³" se rechazaba
+  // por tener 2 'x' → la derivada quedaba sin calcular → se calificaba con un número inventado por la IA.
+  const defm = after.match(/(?:[fgh]\s*\(\s*[a-z]\s*\)|\by)\s*=\s*(.+)$/i);
+  const fn = defm ? defm[1] : after;
+  // Rechaza funciones NO polinómicas (no se derivan con la regla de la potencia): trigonométricas,
+  // logaritmo, raíz, exponencial o cualquier "nombre(" de función. Evita derivar "sen(x)" como si
+  // fuera x (daba "1") y calificar mal. Solo se soportan monomios en potencia de x.
+  if (/\b(sen|sin|cos|tan|cot|sec|csc|log|ln|exp|ra[ií]z|sqrt)\b|√|e\s*\^|[a-hj-z]\s*\(/i.test(fn)) return null;
   // Solo monomio en x: exactamente UNA 'x'. Con más de una (o polinomio a+b) devolvemos null.
-  if ((after.match(/x/g) || []).length !== 1) return null;
-  if (/x[\s\^0-9]*[-+]\s*\d*\s*x?/.test(after)) return null; // varios términos → no soportado
+  if ((fn.match(/x/g) || []).length !== 1) return null;
+  if (/x[\s\^0-9]*[-+]\s*\d*\s*x?/.test(fn)) return null; // varios términos → no soportado
   // El signo se captura aparte para no perder el "-" cuando el coeficiente es implícito (-x → -1·x).
-  const m = after.match(/(-)?\s*(\d+(?:\.\d+)?)?\s*\*?\s*x\s*(?:\^\s*(-?\d+))?/);
+  const m = fn.match(/(-)?\s*(\d+(?:\.\d+)?)?\s*\*?\s*x\s*(?:\^\s*(-?\d+))?/);
   if (!m) return null;
   const a = (m[1] ? -1 : 1) * (m[2] != null ? Number(m[2]) : 1);
   const n = m[3] != null ? Number(m[3]) : 1;
@@ -240,7 +249,11 @@ export function computeAnswer(text) {
 
   // 1) Expresión aritmética explícita (al menos un operador entre números; admite paréntesis).
   //    Admite un signo negativo INICIAL ("-5 + 3" = -2): se antepone un 0 para el menos unario.
-  const m = norm.match(/-?\s*\(?\s*\d+\.?\d*\s*(?:[-+*/]\s*\(?\s*-?\s*\d+\.?\d*\s*\)?\s*)+/);
+  //    OJO: en un problema de FÓRMULA ("perímetro de un rectángulo de 5 por 3") NO se evalúa la
+  //    aritmética suelta, porque "5 por 3" → "5*3" daría el ÁREA (15) y cortocircuitaría la fórmula
+  //    del perímetro (16). Esos casos los resuelven las ramas de fórmula de abajo.
+  const esFormula = /[aá]rea|per[ií]metro|volumen|velocidad|rapidez|promedio|media\s+aritm/.test(text.toLowerCase());
+  const m = esFormula ? null : norm.match(/-?\s*\(?\s*\d+\.?\d*\s*(?:[-+*/]\s*\(?\s*-?\s*\d+\.?\d*\s*\)?\s*)+/);
   if (m) {
     try {
       let e = m[0].replace(/\s+/g, "");
@@ -273,9 +286,22 @@ export function computeAnswer(text) {
   // Porcentaje: "X% de Y" o "X por ciento de Y" → Y·X/100 (exacto).
   const pc = low.match(/(\d+(?:[.,]\d+)?)\s*(?:%|por\s*ciento)\s*de\s*(\d+(?:[.,]\d+)?)/);
   if (pc) { try { return fmtRat(rdiv(rmul(numTok(pc[1].replace(",", ".")), numTok(pc[2].replace(",", "."))), rat(100))); } catch { /* sigue */ } }
-  // Promedio / media aritmética de una lista de números.
-  if (/promedio|media\s+aritm/.test(low) && nums.length >= 2) {
-    try { let s = numAt(0); for (let i = 1; i < nums.length; i++) s = radd(s, numAt(i)); return fmtRat(rdiv(s, rat(nums.length))); } catch { /* sigue */ }
+  // Promedio / media aritmética de una lista de números. Si la lista viene tras ":" ("promedio de
+  // estas 3 notas: 4, 6 y 8"), se promedian SOLO los valores tras el ":" — así el "3" del conteo NO
+  // se cuela en el promedio (daba (3+4+6+8)/4 en vez de (4+6+8)/3).
+  if (/promedio|media\s+aritm/.test(low)) {
+    let vals = nums;
+    const idx = low.indexOf(":");
+    if (idx !== -1) {
+      // Tras ":" la coma es SEPARADOR de la lista ("10,20,30"), no decimal → se parte por coma/"y".
+      const tras = low.slice(idx + 1).split(/[,;]|\by\b|\band\b/)
+        .map((p) => { const mm = p.match(/-?\d+(?:\.\d+)?/); return mm ? Number(mm[0]) : null; })
+        .filter((x) => x != null && Number.isFinite(x));
+      if (tras.length >= 2) vals = tras;
+    }
+    if (vals.length >= 2) {
+      try { let s = numTok(String(vals[0])); for (let i = 1; i < vals.length; i++) s = radd(s, numTok(String(vals[i]))); return fmtRat(rdiv(s, rat(vals.length))); } catch { /* sigue */ }
+    }
   }
   // Volumen: cubo (lado³) o caja/prisma/ortoedro (largo·ancho·alto).
   if (/volumen/.test(low)) {
@@ -290,11 +316,13 @@ export function computeAnswer(text) {
     try { return fmtRat(rdiv(numTok(dist[1].replace(",", ".")), numTok(time[1].replace(",", ".")))); } catch { /* sigue */ }
   }
   if (/[aá]rea/.test(low)) {
+    // El triángulo se comprueba ANTES que el rectángulo: "triángulo rectángulo" contiene "rectángulo"
+    // y, de comprobarse primero, calificaría con base·altura (rectángulo) en vez de base·altura/2.
+    if (/tri[aá]ngulo/.test(low) && nums.length >= 2) { try { return fmtRat(rdiv(rat(nums[0] * nums[1]), rat(2))); } catch { /* sigue */ } }
     if (/rect[aá]ngulo/.test(low) && nums.length >= 2) return String(nums[0] * nums[1]);
     if (/cuadrado/.test(low) && nums.length >= 1) return String(nums[0] * nums[0]);
-    if (/tri[aá]ngulo/.test(low) && nums.length >= 2) { try { return fmtRat(rdiv(rat(nums[0] * nums[1]), rat(2))); } catch { /* sigue */ } }
   }
-  if (/per[ií]metro/.test(low) && /rect[aá]ngulo/.test(low) && nums.length >= 2) return String(2 * (nums[0] + nums[1]));
+  if (/per[ií]metro/.test(low) && /rect[aá]ngulo/.test(low) && !/tri[aá]ngulo/.test(low) && nums.length >= 2) return String(2 * (nums[0] + nums[1]));
   if (/per[ií]metro/.test(low) && /cuadrado/.test(low) && nums.length >= 1) return String(4 * nums[0]);
   return null;
 }
@@ -917,8 +945,16 @@ export function resultadoFromVerificacion(v) {
     const m = etiqueta[1].match(num);
     if (m) return m[0].replace(/\s+/g, "").replace(",", ".");
   }
-  const todos = v.match(new RegExp(num.source, "g"));
-  return todos ? todos[todos.length - 1].replace(/\s+/g, "").replace(",", ".") : "";
+  // SIN etiqueta "Resultado: X" ya NO se raspa "el último número del texto": eso tomaba números de
+  // razonamiento suelto ("… ya que 50 por 20 entre 100" → "100"; "x = 2 y x = 3" → "3") y calificaba
+  // MAL respuestas correctas. Solo se acepta un cálculo LIMPIO con UNA sola igualdad que termina en un
+  // número ("50 / 5 = 10" → "10"); cualquier otra cosa (varias '=', texto extra) → sin nota (comprensión).
+  const eqs = v.split("=");
+  if (eqs.length === 2 && /^\s*-?[\d.,/\s]+$/.test(eqs[1])) {
+    const m = eqs[1].match(num);
+    if (m) return m[0].replace(/\s+/g, "").replace(",", ".");
+  }
+  return "";
 }
 
 // La respuesta a calificar debe ser el RESULTADO del EJERCICIO de práctica, sea cual sea su
@@ -990,8 +1026,15 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
   //    derivada de x³ (=3x²) se califica MAL y NO se felicita.
   if (/deriv/i.test(q.texto) || (board && /deriv/i.test(board))) {
     const dl = derivadaBoardLimpio();
-    const der = (dl && dl.respuesta) || computeDerivative(q.texto);
+    // computeDerivative(q.texto) ya cubre "derivada de f(x)=7x³"; derivarFuncion es respaldo si la
+    // función viniera solo en la pizarra o con otra redacción.
+    const der = (dl && dl.respuesta) || computeDerivative(q.texto)
+      || derivarFuncion(q.texto) || (board ? derivarFuncion(board) : null);
     if (der) { setResp(der); return; }
+    // REGLA DURA: si la pregunta es una DERIVADA y NO pudimos calcularla de forma determinista
+    // (polinomio, producto, regla de la cadena…), NO la calificamos con el número de la IA (no deriva
+    // de forma fiable). Mejor sin nota (comprensión) que dar por incorrecta una respuesta correcta.
+    if (/deriv/i.test(q.texto)) { delResp(); return; }
   }
 
   // 1) Ecuación lineal LIMPIA (en la pizarra o en el propio texto) → solución EXACTA determinista
