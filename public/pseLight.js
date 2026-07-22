@@ -485,6 +485,13 @@ export function buildHint(question, board, nivel) {
       ? "Regla de la potencia: baja el exponente multiplicando delante y réstale uno al exponente."
       : "Pista: para derivar una potencia, usa la regla de la potencia (baja el exponente y réstale una unidad).";
   }
+  // Factorización / diferencia de cuadrados: guiar con el método correcto (NO con "despejar la letra",
+  // que es de ecuaciones lineales). Se detecta por la palabra o por el producto de binomios "(…)(…)".
+  if (/factoriz|diferencia de cuadrados|binomi/.test(t) || /\)\s*\(/.test(t)) {
+    return nivel >= 2
+      ? "Diferencia de cuadrados: a² - b² = (a - b)(a + b). Halla 'a' (la raíz del primer término) y 'b' (la raíz del segundo) y escribe (a - b)(a + b)."
+      : "Pista: mira si es una diferencia de cuadrados (algo al cuadrado menos algo al cuadrado) y aplica (a - b)(a + b).";
+  }
   // Problemas con FÓRMULA o enunciado verbal (velocidad, área, distancia/tiempo, %, potencia, promedio…).
   if (/velocidad|rapidez|distancia|tiempo|[aá]rea|per[ií]metro|volumen|por ciento|%|al cuadrado|al cubo|elevado|ra[ií]z|promedio|\bmedia\b/.test(t)) {
     return nivel >= 2
@@ -497,8 +504,9 @@ export function buildHint(question, board, nivel) {
       ? "Con el mismo denominador, opera solo los numeradores y mantén el denominador; al final simplifica si puedes."
       : "Pista: fíjate primero en los denominadores antes de sumar o restar.";
   }
-  // Ecuación (variable aislada junto a un número/operador y un "="): guiar con la operación inversa.
-  if (b.includes("=") && /\d[a-z]|\b[a-z]\s*[-+=]|=\s*[a-z]\b/.test(b)) {
+  // Ecuación LINEAL (variable aislada junto a un número/operador y un "="): guiar con la operación
+  // inversa. Se excluyen potencias y productos de binomios (factorización/cuadráticas), que no se despejan así.
+  if (b.includes("=") && !/[²³⁴⁵⁶⁷⁸⁹]|\^|\)\s*\(/.test(b) && /\d[a-z]|\b[a-z]\s*[-+=]|=\s*[a-z]\b/.test(b)) {
     return nivel >= 2
       ? "Para despejar la letra, primero pasa el número que la acompaña al otro lado con la operación inversa (si suma, resta; si resta, suma) y luego divide por el coeficiente."
       : "Pista: usa la operación inversa en ambos lados para dejar la letra sola.";

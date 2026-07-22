@@ -90,6 +90,10 @@ async function unitTests() {
 
   // Ramificación ligera: la PISTA guía el método y NUNCA revela la respuesta (no recibe el valor).
   check("hint: ecuación → operación inversa", /inversa|despejar/.test(buildHint("¿cuánto vale x?", "2x + 5 = 15", 2)));
+  // FACTORIZACIÓN: la pista debe ser del método correcto (diferencia de cuadrados), NO "despejar la
+  // letra" (lineal); y NO se debe adjuntar un ejemplo aritmético suelto ("9 - 4 = 5") por el "-" de x²-9.
+  check("hint: factorización → diferencia de cuadrados (no 'despejar')", /cuadrado|factoriz|\(a - b\)/.test(buildHint("¿Cómo se factoriza x² - 16?", "x² - 9 = (x - 3)(x + 3)", 2)) && !/despejar la letra|coeficiente/.test(buildHint("¿Cómo se factoriza x² - 16?", "x² - 9 = (x - 3)(x + 3)", 2)));
+  check("ramificación: factorización NO adjunta ejemplo aritmético off-topic", otroEjemploResuelto("¿Cómo se factoriza x² - 16?", "x² - 9 = (x - 3)(x + 3)") === null);
   check("hint: fracciones → denominador", /denominador/.test(buildHint("¿2/5 + 1/5?", "2/5 + 1/5", 1)));
   check("hint: problema verbal → fórmula", /f[oó]rmula|operaci/.test(buildHint("¿velocidad?", "Distancia = 200, Tiempo = 25", 1)));
   // Estructuralmente NO puede revelar la respuesta: buildHint no recibe el valor esperado y su

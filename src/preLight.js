@@ -532,6 +532,10 @@ const OPS_ALT = [
   { re: /\+|\bmas\b|suma/, pasos: [{ explica: "Sumar es juntar: 5 y 3 juntos son 8.", escribe: "5 + 3 = 8" }] },
 ];
 export function otroEjemploResuelto(question, board) {
+  // NO adjuntar un ejemplo aritmético/lineal en un tema que NO lo es (factorización, cuadráticas,
+  // derivadas, potencias): el "-" de "x² - 9" haría que OPS_ALT mostrara una resta suelta ("9 - 4 = 5")
+  // fuera de tema. En esos temas no hay "otro ejemplo resuelto" determinista → null (no se adjunta nada).
+  if (/factoriz|diferencia de cuadrados|binomi|cuadr[aá]tic|deriv|[²³⁴⁵⁶⁷⁸⁹]|\^|\)\s*\(/i.test(`${question || ""} ${board || ""}`)) return null;
   // 1) Ecuación lineal → generar una ALTERNA similar y resolverla paso a paso.
   const eqText = (board && solveLinearFromText(board) !== null) ? board
     : (solveLinearFromText(question) !== null ? question : null);
