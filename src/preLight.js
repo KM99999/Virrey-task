@@ -1171,11 +1171,13 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
   // 0.5) FACTORIZACIÓN (diferencia de cuadrados): se calcula la factorización CORRECTA (x²-9 → (x-3)(x+3))
   //      y se califica contra ella (el frontend compara binomios sin importar el orden). Si no es
   //      factorizable con raíces enteras, SIN nota (comprensión) — NUNCA un número suelto ("3") que
-  //      marcaría mal una factorización correcta. Va antes de la vía lineal/aritmética.
-  if (/factoriz|diferencia de cuadrados/i.test(`${q.texto} ${board || ""}`)) {
+  //      marcaría mal una factorización correcta. Se activa para CUALQUIER lección NO lineal que no sea
+  //      de derivadas (aunque la IA no use la palabra "factoriza": p.ej. "¿Cuánto es x² - 16?"), y así
+  //      GATEA los pasos aritméticos 1-3 que darían un número suelto en una lección de factorización.
+  if (temaNoLineal && !esLeccionDerivadas) {
     const fac = computeFactorization(q.texto) || (board ? computeFactorization(board) : null);
     if (fac) { setResp(fac); return; }
-    delResp(); return;
+    delResp(); return; // tema no lineal no calificable → comprensión, NUNCA un número de los pasos 1-3
   }
 
   // 1) Ecuación lineal LIMPIA (en la pizarra o en el propio texto) → solución EXACTA determinista
