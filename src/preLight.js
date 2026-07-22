@@ -1044,8 +1044,14 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
   // ¿El "tablero" es una forma YA RESUELTA ("x = 5")? Entonces NO sirve como EJERCICIO de práctica
   // (revelaría la respuesta). Se detecta para plantear una ecuación NUEVA en su lugar.
   const esResuelta = (b) => typeof b === "string" && /^\s*[a-z]\s*=\s*-?\d+(?:[.,]\d+)?\s*$/i.test(b);
-  // La ecuación ORIGINAL del ejercicio (la primera pizarra que es una ecuación real, no la solución).
-  const ecOriginal = flat.map((d) => d.contenido).find((c) => c && solveLinearFromText(c) !== null && !esResuelta(c));
+  // ¿La lección es de FACTORIZACIÓN / cuadráticas (u otro tema con potencias/binomios)? Entonces NO se
+  // debe convertir la práctica en una ECUACIÓN LINEAL, aunque aparezca una lineal INCIDENTAL al hallar
+  // raíces ("x + 3 = 0"): sería off-topic (una lección de factorizar x²-9 no debe pedir "resuelve x+4=10").
+  // Las derivadas tienen su propia rama (step 0), así que este gate solo desactiva la vía LINEAL.
+  const temaNoLineal = flat.some((d) => /factoriz|diferencia de cuadrados|binomi|cuadr[aá]tic|[²³⁴⁵⁶⁷⁸⁹]|\)\s*\(/i.test(`${d.texto || ""} ${d.contenido || ""}`));
+  // La ecuación ORIGINAL del ejercicio (la primera pizarra que es una ecuación LINEAL real, no la solución).
+  const ecOriginal = temaNoLineal ? undefined
+    : flat.map((d) => d.contenido).find((c) => c && solveLinearFromText(c) !== null && !esResuelta(c));
   // Plantea una ecuación de práctica NUEVA y DISTINTA con su solución, o null. SOLO si la lección tiene
   // una ecuación lineal REAL (ecOriginal); si no (factorización, derivadas, otro tema), devuelve null y
   // NO se inventa una lineal fuera de lugar (evita "e - 2 = 5" en una lección de factorización).
@@ -1080,6 +1086,10 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
   if (presentaResuelta) {
     const np = nuevaPractica();
     if (np) { setPregunta(np.texto, np.resp); return; }
+    // No hay ecuación lineal real para plantear (tema no lineal): en vez de dejar el texto REVELADOR de
+    // la IA ("resuélvelo tú: x = 3"), lo cambiamos por una pregunta de comprensión neutral.
+    q.texto = "¿Entendiste la explicación?";
+    const pp = pasos.find((x) => x.tipo === "preguntar"); if (pp) pp.texto = q.texto;
     delResp(); return;
   }
 
@@ -1089,7 +1099,8 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
   // (evita el defecto: mostrar "f(x)=x³" y dar por buena cualquier respuesta).
   if (/¿?\s*(entendiste|comprendiste|te gustar[ií]a|quieres practicar|alguna duda)/i.test(q.texto)) {
     const dl = derivadaBoardLimpio();
-    const lin = board != null ? solveLinearFromText(board) : null;
+    // En un tema NO lineal (factorización/cuadráticas) NO se convierte en ecuación lineal (off-topic).
+    const lin = (board != null && !temaNoLineal) ? solveLinearFromText(board) : null;
     if (dl) { setPregunta(`Ahora deriva tú: ${dl.ejercicio}. ¿Cuál es la derivada?`, dl.respuesta); return; }
     if (lin !== null) {
       // Si el tablero es la SOLUCIÓN ("x = 5"), NO lo uses como ejercicio (revelaría la respuesta):
@@ -1127,9 +1138,10 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
   // 1) Ecuación lineal LIMPIA (en la pizarra o en el propio texto) → solución EXACTA determinista
   //    (p.ej. "x-4=7" → 11); evita copiar la respuesta del ejemplo.
   // Un tablero YA RESUELTO ("x = 5") no debe usarse como verdad-base (revelaría/repetiría la solución).
-  let eqSol = (board != null && !esResuelta(board)) ? solveLinearFromText(board) : null;
-  if (eqSol === null) eqSol = solveLinearFromText(q.texto);
-  if (eqSol === null) {
+  // En un tema NO lineal (factorización/cuadráticas) NO se califica con una lineal incidental (off-topic).
+  let eqSol = (board != null && !esResuelta(board) && !temaNoLineal) ? solveLinearFromText(board) : null;
+  if (eqSol === null && !temaNoLineal) eqSol = solveLinearFromText(q.texto);
+  if (eqSol === null && !temaNoLineal) {
     // La ecuación puede venir EMBEBIDA en la pregunta ("…: 3x = 12. ¿Cuánto vale x?"): el "." tras el
     // número impide resolver el texto completo. Se extrae la ecuación limpia y se resuelve aparte.
     const emb = q.texto.match(/-?\d*\s*[a-z]\s*(?:[-+]\s*\d+)?\s*=\s*-?\d+(?:[.,]\d+)?/i);
