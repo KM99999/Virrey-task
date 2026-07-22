@@ -1026,6 +1026,19 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
     if (p) p.texto = texto;
   };
 
+  // La PREGUNTA presenta como ejercicio una ecuación YA RESUELTA ("resuélvelo tú: x = 5. ¿Cuánto vale?"):
+  // la incógnita SOLA (sin coeficiente) igualada a un número es la SOLUCIÓN, no un ejercicio → revelaría
+  // la respuesta. (La IA a veces genera este texto directamente, no solo la rama genérica.) Se detecta
+  // una "letra = número" con la letra aislada (precedida de inicio/espacio/":"; así "3x = 12" NO cuela)
+  // y se reemplaza por una ecuación NUEVA y distinta. Va PRIMERO para atrapar cualquier redacción.
+  const presentaResuelta = /(?:^|[\s:(])[a-z]\s*=\s*-?\d+(?:[.,]\d+)?(?=$|[\s.?!¿)])/i.test(q.texto)
+    && /resu[eé]lv|resuelv|cu[aá]nto\s+vale|calcul|hall|despej|valor\s+de/i.test(q.texto);
+  if (presentaResuelta) {
+    const np = nuevaPractica();
+    if (np) { setPregunta(np.texto, np.resp); return; }
+    delResp(); return;
+  }
+
   // Pregunta GENÉRICA de comprensión ("¿entendiste?", "¿te gustaría practicar?"): normalmente no se
   // califica con un número. PERO si hay un EJERCICIO calificable en la pizarra (una derivada de
   // potencia, una ecuación lineal…), calificamos ESE ejercicio en vez de elogiar por participar
@@ -1072,6 +1085,12 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
   // Un tablero YA RESUELTO ("x = 5") no debe usarse como verdad-base (revelaría/repetiría la solución).
   let eqSol = (board != null && !esResuelta(board)) ? solveLinearFromText(board) : null;
   if (eqSol === null) eqSol = solveLinearFromText(q.texto);
+  if (eqSol === null) {
+    // La ecuación puede venir EMBEBIDA en la pregunta ("…: 3x = 12. ¿Cuánto vale x?"): el "." tras el
+    // número impide resolver el texto completo. Se extrae la ecuación limpia y se resuelve aparte.
+    const emb = q.texto.match(/-?\d*\s*[a-z]\s*(?:[-+]\s*\d+)?\s*=\s*-?\d+(?:[.,]\d+)?/i);
+    if (emb && !esResuelta(emb[0])) eqSol = solveLinearFromText(emb[0]);
+  }
   if (eqSol !== null) { setResp(eqSol); return; }
 
   // 2) CÁLCULO DETERMINISTA de la respuesta (aritmética exacta / fórmulas). Es la verdad-base:
