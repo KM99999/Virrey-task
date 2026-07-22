@@ -121,13 +121,22 @@ function polyCanon(s) {
 // parece una factorización (producto de binomios), para no interferir con otras comparaciones.
 function factorCanon(s) {
   const t = String(s).toLowerCase().replace(/\s+/g, "").replace(/[·*]/g, "");
-  const bins = [...t.matchAll(/\(([+-]?\d*)x([+-]\d+)\)/g)];
+  const bins = [...t.matchAll(/\(([+-]?\d*)([a-z])([+-]\d+)\)/g)];
   if (!bins.length) return null;
   const cm = t.match(/^([+-]?\d+)\(/);                 // coeficiente líder antes del primer "("
-  const coef = cm ? Number(cm[1]) : 1;
-  const terms = bins
-    .map((b) => `${b[1] === "" || b[1] === "+" ? "1" : b[1] === "-" ? "-1" : b[1]}x${b[2]}`)
-    .sort();
+  let coef = cm ? Number(cm[1]) : 1;
+  const gcd = (a, b) => { a = Math.abs(a); b = Math.abs(b); while (b) { [a, b] = [b, a % b]; } return a || 1; };
+  const terms = [];
+  for (const b of bins) {
+    let a = b[1] === "" || b[1] === "+" ? 1 : b[1] === "-" ? -1 : Number(b[1]);
+    const v = b[2];
+    let k = Number(b[3]);
+    // Saca el factor común del binomio para que (2x-4)(2x+4) == 4(x-2)(x+2): (2x-4) → 2(x-2).
+    const g = gcd(a, k);
+    a /= g; k /= g; coef *= g;
+    terms.push(`${a}${v}${k >= 0 ? "+" : ""}${k}`);
+  }
+  terms.sort();
   return `${coef}|${terms.join(",")}`;
 }
 

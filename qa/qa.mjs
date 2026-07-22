@@ -99,6 +99,9 @@ async function unitTests() {
   check("factorización: x² - 9 → (x - 3)(x + 3)", computeFactorization("¿factorización de x² - 9?") === "(x - 3)(x + 3)");
   check("factorización: x² - 16 → (x - 4)(x + 4)", computeFactorization("x² - 16") === "(x - 4)(x + 4)");
   check("factorización: 2x² - 8 → 2(x - 2)(x + 2)", computeFactorization("2x² - 8") === "2(x - 2)(x + 2)");
+  check("factorización: 4x² - 25 (ambos cuadrados) → (2x - 5)(2x + 5)", computeFactorization("4x² - 25") === "(2x - 5)(2x + 5)");
+  check("factorización: 4y² - 25 (variable y) → (2y - 5)(2y + 5)", computeFactorization("4y² - 25") === "(2y - 5)(2y + 5)");
+  check("factorización: califica (2x-4)(2x+4) == 4(x-2)(x+2)", checkAnswer("(2x-4)(2x+4)", "4(x-2)(x+2)").correct === true);
   check("factorización: x² - 7 (no cuadrado perfecto) → null", computeFactorization("x² - 7") === null);
   check("factorización: x² + 9 (suma, no factoriza) → null", computeFactorization("x² + 9") === null);
   const factPractica = processLSG({ escena: "f", intencion: "aprender", modulos: [

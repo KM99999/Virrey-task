@@ -221,17 +221,26 @@ export function computeDerivative(text) {
 export function computeFactorization(text) {
   if (typeof text !== "string") return null;
   const t = text.toLowerCase().replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]+/g, (m) => "^" + [...m].map((c) => "⁰¹²³⁴⁵⁶⁷⁸⁹".indexOf(c)).join(""));
-  // "c x^2 - d": coeficiente opcional, variable x al cuadrado, RESTA (diferencia), un número positivo.
-  const m = t.match(/(\d*)\s*\*?\s*x\s*\^\s*2\s*-\s*(\d+)/);
+  // "c v^2 - d": coeficiente opcional, variable (una letra), al cuadrado, RESTA (diferencia), nº positivo.
+  const m = t.match(/(\d*)\s*\*?\s*([a-z])\s*\^\s*2\s*-\s*(\d+)/);
   if (!m) return null;
   const c = m[1] === "" ? 1 : Number(m[1]);
-  const d = Number(m[2]);
-  if (!Number.isFinite(c) || !Number.isFinite(d) || c <= 0 || d <= 0) return null;
-  if (d % c !== 0) return null;                 // c·x² - d = c·(x² - d/c); requiere d/c entero
-  const a = Math.sqrt(d / c);
-  if (!Number.isInteger(a)) return null;         // raíz no entera → no factorizable así
-  const coef = c === 1 ? "" : String(c);
-  return `${coef}(x - ${a})(x + ${a})`;
+  const v = m[2];
+  const d = Number(m[3]);
+  if (!(c > 0) || !(d > 0)) return null;
+  const isSq = (n) => Number.isInteger(Math.sqrt(n));
+  const vc = (k) => (k === 1 ? "" : String(k)); // coeficiente visible ante la variable
+  // Caso 1: AMBOS son cuadrados perfectos → (√c·v - √d)(√c·v + √d). Cubre "x² - 9" y "4x² - 25".
+  if (isSq(c) && isSq(d)) {
+    const sc = Math.sqrt(c), sd = Math.sqrt(d);
+    return `(${vc(sc)}${v} - ${sd})(${vc(sc)}${v} + ${sd})`;
+  }
+  // Caso 2: factor común c con d/c cuadrado perfecto → c(v - a)(v + a). Cubre "2x² - 8" → "2(x - 2)(x + 2)".
+  if (d % c === 0 && isSq(d / c)) {
+    const a = Math.sqrt(d / c);
+    return `${c === 1 ? "" : String(c)}(${v} - ${a})(${v} + ${a})`;
+  }
+  return null; // no es diferencia de cuadrados factorizable con raíces enteras → sin nota (no se arriesga)
 }
 
 // Deriva una FUNCIÓN escrita en la pizarra/enunciado: "f(x) = x³", "y = 2x³" o un monomio suelto
