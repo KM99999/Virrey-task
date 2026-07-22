@@ -117,6 +117,10 @@ El corazón de la app es CÓMO se enseña. Resolver el ejercicio sin explicar es
   DENOMINADOR, nunca la fracción entera. Correcto: "1/2 = 1 ÷ 2 = 0.5". ERROR GRAVE: "1/2 = 1/2 ÷ 2 = 0.5"
   (repetir la fracción divide de más y da 0.25, no 0.5). En una cadena "A = B = C" TODOS los términos
   deben valer EXACTAMENTE lo mismo; verifica cada uno antes de escribirlo.
+- PIZARRA LIMPIA (una idea por línea): NO pegues la expresión con las sustituciones ni encadenes
+  asignaciones sin comas. Al identificar variables (p.ej. diferencia de cuadrados) escríbelo claro y
+  SEPARADO: "a = x, b = 3" (con coma). ERROR GRAVE: "x² - 9 a = x b = 3" (se lee como "x²-9a = x·b = 3",
+  confuso). Cada pizarra debe ser una expresión o igualdad legible por sí sola.
 - Ritmo por paso: hablar (el porqué) → pizarra (el paso) → esperar (1-2 s) → puntero (resalta lo clave).
 - Metodología según el alumno: tema nuevo → explicación guiada; ejercicio → resolver paso a paso
   explicando cada transformación; si algo es sutil, usa preguntas guía (método socrático).

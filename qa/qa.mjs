@@ -111,6 +111,13 @@ async function unitTests() {
   check("factorización: práctica calificada con (x - 4)(x + 4), NO un número", qFa?.respuesta === "(x - 4)(x + 4)");
   check("factorización: alumno '(x+4)(x-4)' (reordenado) es CORRECTO", checkAnswer("(x+4)(x-4)", qFa?.respuesta).correct === true);
   check("factorización: alumno '(x-2)(x+2)' es INCORRECTO", checkAnswer("(x-2)(x+2)", qFa?.respuesta).correct === false);
+  // Pizarra garabateada: sustituciones pegadas sin comas ("x² - 9 a = x b = 3") se separan; no se toca
+  // contenido legítimo (ecuaciones con coeficiente, ya-limpio con comas).
+  const sub = (c) => processLSG({ escena: "s", intencion: "explicar", directivas: [{ tipo: "hablar", texto: "x" }, { tipo: "pizarra", accion: "escribir", contenido: c }] }, "explicar", "factoriza").pasos.find((p) => p.tipo === "pizarra").contenido;
+  check("pizarra: 'x² - 9 a = x b = 3' → separa a comas", sub("x² - 9 a = x b = 3") === "x² - 9, a = x, b = 3");
+  check("pizarra: 'a = x, b = 3' (ya limpio) intacto", sub("a = x, b = 3") === "a = x, b = 3");
+  check("pizarra: '3x = 12' (ecuación) intacto", sub("3x = 12") === "3x = 12");
+  check("pizarra: 'x² - 9 = (x - 3)(x + 3)' intacto", sub("x² - 9 = (x - 3)(x + 3)") === "x² - 9 = (x - 3)(x + 3)");
   check("hint: fracciones → denominador", /denominador/.test(buildHint("¿2/5 + 1/5?", "2/5 + 1/5", 1)));
   check("hint: problema verbal → fórmula", /f[oó]rmula|operaci/.test(buildHint("¿velocidad?", "Distancia = 200, Tiempo = 25", 1)));
   // Estructuralmente NO puede revelar la respuesta: buildHint no recibe el valor esperado y su

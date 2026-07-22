@@ -876,7 +876,7 @@ function sanitizeDirectiva(raw, warnings, context) {
         return null;
       }
       // Validación matemática integral: corrige operaciones erróneas escritas en la PIZARRA.
-      const fixP = corregirIgualdades(sanitizeMath(str(raw.contenido)));
+      const fixP = corregirIgualdades(limpiarSustituciones(sanitizeMath(str(raw.contenido))));
       if (fixP.correcciones) warnings.push(`Corregida(s) ${fixP.correcciones} operación(es) errónea(s) en "pizarra" (${context}).`);
       d.contenido = fixP.texto;
       break;
@@ -1231,6 +1231,18 @@ function str(v) {
 const SUPER = { "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵",
   "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹", "-": "⁻", "n": "ⁿ", "i": "ⁱ" };
 const toSuper = (e) => [...e].map((c) => SUPER[c] || c).join("");
+
+// Separa SUSTITUCIONES pegadas en una pizarra. La IA a veces escribe la identificación de variables
+// sin comas y pegada a la expresión: "x² - 9 a = x b = 3" (se lee como "x²-9a = x·b = 3", confuso).
+// Cuando hay DOS O MÁS asignaciones de una sola letra ("a = …", "b = …") se inserta ", " antes de cada
+// una que venga tras un valor (dígito/letra/paréntesis/superíndice), NO tras un separador (":", ","):
+//   "x² - 9 a = x b = 3"  →  "x² - 9, a = x, b = 3"   ·   "Aquí: a = x, b = 3" (ya limpio) → intacto.
+function limpiarSustituciones(s) {
+  if (typeof s !== "string") return s;
+  const asignaciones = (s.match(/\b[a-z]\s*=/gi) || []).length;
+  if (asignaciones < 2) return s;                    // patrón de sustitución (a=…, b=…) → solo entonces
+  return s.replace(/([0-9a-z²³⁴⁵⁶⁷⁸⁹)])\s+([a-z]\s*=)/gi, "$1, $2");
+}
 
 // Limpia notación LaTeX / signos de dólar que la IA pueda deslizar, y la convierte
 // a texto plano legible (la pizarra y el TTS no renderizan LaTeX). Ej.:
