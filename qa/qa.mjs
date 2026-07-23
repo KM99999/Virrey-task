@@ -223,6 +223,15 @@ async function unitTests() {
   // solveLinearSteps NO debe "resolver" el resto lineal de una CUADRÁTICA (x²+2x=15 → 2x=15 → 7.5 falso).
   check("solveLinearSteps: cuadrática 'x² + 2x = 15' → null (no la trata como lineal)", solveLinearSteps("resuelve x² + 2x = 15") === null);
   check("demo: cuadrática concreta 'x² + 2x = 15' → NO demo_resuelto (lineal falso)", mockLSG("resuelve x² + 2x = 15", "resolver").escena !== "demo_resuelto");
+  // PIZARRA: el conector "o"/"o," entre dos igualdades (soluciones de una cuadrática) → coma limpia.
+  const pizO = (c) => processLSG({ escena: "x", intencion: "resolver", directivas: [
+    { tipo: "pizarra", accion: "escribir", contenido: c },
+    { tipo: "preguntar", texto: "¿Entendiste?" }] }, "resolver").pasos.find((p) => p.tipo === "pizarra").contenido;
+  check("pizarra: 'x + 2 = 0 o x + 3 = 0' → coma", pizO("x + 2 = 0 o x + 3 = 0") === "x + 2 = 0, x + 3 = 0");
+  check("pizarra: 'x = -2 o, x = -3' → coma (sin 'o,')", pizO("x = -2 o, x = -3") === "x = -2, x = -3");
+  check("pizarra: 'x = -3 o x = -4' → coma", pizO("x = -3 o x = -4") === "x = -3, x = -4");
+  check("pizarra: NO toca 'o' de una frase sin 2 igualdades", pizO("multipliquen 6 o sumen 5") === "multipliquen 6 o sumen 5");
+  check("pizarra: ecuación normal con un solo '=' intacta", pizO("2x + 5 = 15") === "2x + 5 = 15");
   check("hint: fracciones → denominador", /denominador/.test(buildHint("¿2/5 + 1/5?", "2/5 + 1/5", 1)));
   check("hint: problema verbal → fórmula", /f[oó]rmula|operaci/.test(buildHint("¿velocidad?", "Distancia = 200, Tiempo = 25", 1)));
   // Estructuralmente NO puede revelar la respuesta: buildHint no recibe el valor esperado y su

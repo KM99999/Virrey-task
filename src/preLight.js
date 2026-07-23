@@ -908,7 +908,9 @@ function sanitizeDirectiva(raw, warnings, context) {
       // Validación matemática integral: corrige operaciones erróneas escritas en la PIZARRA.
       const fixP = corregirIgualdades(limpiarSustituciones(sanitizeMath(str(raw.contenido))));
       if (fixP.correcciones) warnings.push(`Corregida(s) ${fixP.correcciones} operación(es) errónea(s) en "pizarra" (${context}).`);
-      d.contenido = fixP.texto;
+      // El conector "o"/"o," entre dos igualdades en la pizarra se normaliza a coma ("x = -2 o, x = -3"
+      // → "x = -2, x = -3"): la pizarra separa las soluciones con "," de forma consistente.
+      d.contenido = separarSolucionesConComa(fixP.texto);
       break;
     case "puntero":
       d.accion = str(raw.accion) || "resaltar";
@@ -1326,6 +1328,22 @@ function limpiarSustituciones(s) {
   const asignaciones = (s.match(/\b[a-z]\s*=/gi) || []).length;
   if (asignaciones < 2) return s;                    // patrón de sustitución (a=…, b=…) → solo entonces
   return s.replace(/([0-9a-z²³⁴⁵⁶⁷⁸⁹)])\s+([a-z]\s*=)/gi, "$1, $2");
+}
+
+// Normaliza el conector "o" (o "o,") entre DOS igualdades/soluciones EN LA PIZARRA a una COMA limpia:
+//   "x + 2 = 0 o x + 3 = 0"  →  "x + 2 = 0, x + 3 = 0"
+//   "x = -2 o, x = -3"        →  "x = -2, x = -3"
+// La pizarra nunca debe mostrar un "o," desprolijo (queja del cliente en cuadráticas). Solo actúa si la
+// línea tiene ≥2 "=" (une dos igualdades) → NO toca un "o" legítimo de una frase ("multipliquen 6 o
+// sumen 5", 0-1 "="). Se aplica SOLO a la pizarra; en el HABLA "o"/"y" es lenguaje natural y se conserva.
+function separarSolucionesConComa(s) {
+  if (typeof s !== "string") return s;
+  if ((s.match(/=/g) || []).length < 2) return s;
+  return s
+    .replace(/\s*,?\s*\bo\b\s*,?\s*/gi, ", ") // " o " / " o, " / ", o " → ", "
+    .replace(/\s*,\s*,\s*/g, ", ")            // colapsa comas dobles que pudieran quedar
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
 }
 
 // Limpia notación LaTeX / signos de dólar que la IA pueda deslizar, y la convierte
