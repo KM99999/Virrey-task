@@ -291,7 +291,10 @@ function detectarTema(query) {
   if (/\b(multiplica|multiplicar|multiplicacion|producto|tablas? de multiplicar)\b/.test(n)) return "multiplicacion";
   if (/\b(divide|dividir|division|divisiones|cociente|repartir)\b/.test(n)) return "division";
   if (/\b(fraccion|fracciones|numerador|denominador)\b/.test(n)) return "fraccion";
-  if (/\b(ecuacion|ecuaciones|despejar|incognita|primer grado|lineal|lineales)\b/.test(n)) return "ecuacion";
+  // Solo ecuaciones de PRIMER GRADO. "cuadráticas/segundo grado/cúbicas/polinómicas" NO son "ecuacion"
+  // lineal → cae a mockGenerico (mensaje honesto "la IA lo explicará"), nunca una lección lineal falsa.
+  if (/\b(ecuacion|ecuaciones|despejar|incognita|primer grado|lineal|lineales)\b/.test(n)
+    && !/cuadrat|segundo grado|c[uú]bic|bicuadr|polinom|tercer grado/.test(n)) return "ecuacion";
   return null;
 }
 
@@ -666,9 +669,14 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   // 4) ECUACIÓN LINEAL. Una ecuación lineal concreta ("2x + 5 = 15") o el tema genérico ("ecuación lineal").
   //    Se usa la ecuación LIMPIA (sol.original), no la frase entera ("Resuelve 2x + 5 = 15"), para que la
   //    práctica se elija DISTINTA de verdad (si no, "2x + 5 = 15" del preset parecía distinta de la frase).
+  //    IMPORTANTE: solo ecuaciones de PRIMER GRADO. Si la consulta pide CUADRÁTICAS / segundo grado /
+  //    cúbicas / polinómicas / sistemas / inecuaciones (o trae una potencia x²), NO es la lección lineal
+  //    determinista → null (que lo enseñe Gemini, Nivel 2/3). Antes "ecuaciones cuadráticas" casaba con
+  //    "ecuaciones" y daba una lección lineal (2x+5=15) — defecto reportado por el cliente.
+  const noLineal = /cuadrat|segundo grado|2do grado|2\.?\s*grado|c[uú]bic|tercer grado|bicuadr|polinom|sistema|inecuaci|desigualdad|[a-z]\s*(?:\^\s*[2-9]|[²³⁴⁵⁶⁷⁸⁹])/.test(n);
   const solBase = solveLinearSteps(base);
   const instLin = solBase ? solBase.original : null;
-  if (instLin || /\becuaci[oó]n(?:es)?\b|\blineal(?:es)?\b/.test(n)) {
+  if (!noLineal && (instLin || /\becuaci[oó]n(?:es)?\b|\blineal(?:es)?\b|primer grado/.test(n))) {
     return commonRet("lineal", linealResueltaLSG({ evitar: previo, instancia: instLin, seguimiento: esSeg }));
   }
 

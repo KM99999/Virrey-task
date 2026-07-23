@@ -9,7 +9,7 @@
 // contengan LaTeX ni "$". Imprime un veredicto final APROBADO / RECHAZADO.
 
 import { classifyIntent } from "../src/classifier.js";
-import { processLSG, solveLinearFromText, solveFractionFromText, resultadoFromVerificacion, computeAnswer, corregirIgualdades, otroEjemploResuelto, processStepByStep, computeDerivative, monomioLimpio, computeFactorization } from "../src/preLight.js";
+import { processLSG, solveLinearFromText, solveLinearSteps, solveFractionFromText, resultadoFromVerificacion, computeAnswer, corregirIgualdades, otroEjemploResuelto, processStepByStep, computeDerivative, monomioLimpio, computeFactorization } from "../src/preLight.js";
 import { mockLSG, fraccionResueltaLSG, leccionBotonLSG } from "../src/lsgPrompt.js";
 import { generateLSG } from "../src/geminiClient.js";
 import { checkAnswer, flattenLSG, PSELight, buildHint } from "../public/pseLight.js";
@@ -208,6 +208,21 @@ async function unitTests() {
   check("botón: 'factoriza x² + 5x + 6' (trinomio) → null (Gemini)", leccionBotonLSG({ query: "factoriza x² + 5x + 6" }) === null);
   check("botón: saludo → null", leccionBotonLSG({ query: "hola cómo estás" }) === null);
   check("botón: tema libre ('teorema de Pitágoras') → null", leccionBotonLSG({ query: "explícame el teorema de Pitágoras" }) === null);
+  // NO CAPTURAR CUADRÁTICAS/GRADO SUPERIOR como si fueran lineales (defecto del cliente: "ecuaciones
+  // cuadráticas" daba 2x+5=15). Deben ir a Gemini (Nivel 2/3), no al generador lineal determinista.
+  check("botón: 'ecuaciones cuadráticas' → null (NO lineal; lo enseña Gemini)", leccionBotonLSG({ query: "Enséñame ecuaciones cuadráticas" }) === null);
+  check("botón: 'ecuación de segundo grado' → null", leccionBotonLSG({ query: "resuélveme una ecuación de segundo grado" }) === null);
+  check("botón: 'ecuaciones cúbicas' → null", leccionBotonLSG({ query: "enséñame ecuaciones cúbicas" }) === null);
+  check("botón: 'sistema de ecuaciones' → null", leccionBotonLSG({ query: "enséñame un sistema de ecuaciones" }) === null);
+  check("botón: 'resuelve x² + 2x = 15' (cuadrática concreta) → null", leccionBotonLSG({ query: "resuelve x² + 2x = 15" }) === null);
+  // pero las de PRIMER GRADO siguen siendo deterministas.
+  check("botón: 'ecuaciones de primer grado' → lineal (sigue determinista)", leccionBotonLSG({ query: "enséñame ecuaciones de primer grado" })?.tema === "lineal");
+  check("botón: 'ecuaciones lineales' → lineal", leccionBotonLSG({ query: "enséñame ecuaciones lineales" })?.tema === "lineal");
+  // Demo (Gemini caído): cuadráticas NO fingen lección lineal → mensaje honesto (demo_generico).
+  check("demo: 'ecuaciones cuadráticas' → demo_generico (no lineal falso)", mockLSG("Enséñame ecuaciones cuadráticas", "aprender").escena === "demo_generico");
+  // solveLinearSteps NO debe "resolver" el resto lineal de una CUADRÁTICA (x²+2x=15 → 2x=15 → 7.5 falso).
+  check("solveLinearSteps: cuadrática 'x² + 2x = 15' → null (no la trata como lineal)", solveLinearSteps("resuelve x² + 2x = 15") === null);
+  check("demo: cuadrática concreta 'x² + 2x = 15' → NO demo_resuelto (lineal falso)", mockLSG("resuelve x² + 2x = 15", "resolver").escena !== "demo_resuelto");
   check("hint: fracciones → denominador", /denominador/.test(buildHint("¿2/5 + 1/5?", "2/5 + 1/5", 1)));
   check("hint: problema verbal → fórmula", /f[oó]rmula|operaci/.test(buildHint("¿velocidad?", "Distancia = 200, Tiempo = 25", 1)));
   // Estructuralmente NO puede revelar la respuesta: buildHint no recibe el valor esperado y su

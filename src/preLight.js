@@ -387,6 +387,10 @@ export function computeAnswer(text) {
 export function solveLinearSteps(text) {
   if (typeof text !== "string") return null;
   const t = text.toLowerCase();
+  // Una ecuación LINEAL no tiene POTENCIAS ni PRODUCTOS de binomios. Sin este guard, una CUADRÁTICA
+  // ("x² + 2x = 15") "resolvía" su resto lineal ("2x = 15" → 7.5), dando una solución FALSA a una
+  // cuadrática (visible en modo demo). Mismo criterio que solveLinearFromText.
+  if (/[²³⁴⁵⁶⁷⁸⁹]|\^|x\s*[*·]\s*x|\)\s*\(/i.test(text)) return null;
   const m = t.match(
     /((?:[+-]\s*)?(?:\d*[a-z]|\d+(?:\.\d+)?)(?:\s*[+-]\s*(?:\d*[a-z]|\d+(?:\.\d+)?))*)\s*=\s*(-?\d+(?:\.\d+)?)(?![a-z0-9.])/
   );
