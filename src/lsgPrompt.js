@@ -465,37 +465,39 @@ function mockOperacion({ a, b, r, tema }, intent) {
   ] };
 }
 
-// EJERCICIO DE FRACCIONES RESUELTO (determinista): formula una suma de fracciones y la RESUELVE paso a
-// paso (numeradores se suman, denominador se mantiene, y se simplifica si hace falta). Rota entre un
-// conjunto para que "otro ejemplo" presente una fracción DISTINTA (se le pasa la anterior en `evitar`).
-// Sin pregunta de práctica: es una DEMOSTRACIÓN (el sistema encuentra la solución); PRE Light cerrará
-// con "¿Entendiste la explicación?". Aritmética garantizada (no depende del modelo).
+// EJERCICIO DE FRACCIONES: (1) FORMULA una suma de fracciones y la RESUELVE paso a paso (el sistema
+// encuentra la solución), y (2) plantea DESPUÉS un problema de PRÁCTICA con OTRA fracción DISTINTA para
+// que el ALUMNO lo responda (calificable: correcto → lección completada; incorrecto → pista + reintento).
+// Rota por una lista para que cada "otro ejemplo" (se pasa la fracción resuelta anterior en `evitar`)
+// presente un resuelto y una práctica NUEVOS. Aritmética garantizada (no depende del modelo).
 export function fraccionResueltaLSG(evitar) {
   const SUMAS = [[2, 3, 6], [1, 2, 4], [1, 3, 5], [2, 5, 8], [3, 4, 9], [1, 4, 7], [2, 3, 10], [1, 5, 11]];
   const gcd = (a, b) => { a = Math.abs(a); b = Math.abs(b); while (b) { [a, b] = [b, a % b]; } return a || 1; };
+  const simplif = (n1, n2, den) => { const s = n1 + n2, g = gcd(s, den); return { suma: s, g, final: g > 1 ? `${s / g}/${den / g}` : `${s}/${den}`, simp: g > 1 ? `${s / g}/${den / g}` : null }; };
   const ev = typeof evitar === "string" ? evitar.replace(/\s+/g, "") : "";
-  // Rota al SIGUIENTE de la lista tras la fracción anterior (no solo alterna entre las dos primeras).
+  // Rota al SIGUIENTE de la lista tras la fracción anterior; la práctica usa la siguiente (distinta).
   const evIdx = SUMAS.findIndex(([a, b, c]) => `${a}/${c}+${b}/${c}` === ev);
-  const [n1, n2, d] = SUMAS[(evIdx + 1) % SUMAS.length];
-  const suma = n1 + n2;
-  const g = gcd(suma, d);
-  const simp = g > 1 ? `${suma / g}/${d / g}` : null;
-  const final = simp || `${suma}/${d}`;
+  const [a1, a2, ad] = SUMAS[(evIdx + 1) % SUMAS.length];  // ejemplo RESUELTO (lo resuelve el sistema)
+  const [b1, b2, bd] = SUMAS[(evIdx + 2) % SUMAS.length];  // PRÁCTICA (la resuelve el alumno) — distinta
+  const A = simplif(a1, a2, ad), B = simplif(b1, b2, bd);
   const dir = [
     { tipo: "avatar", accion: "sonreir" },
-    { tipo: "hablar", texto: `Vamos a resolver juntos esta suma de fracciones: ${n1}/${d} + ${n2}/${d}. Fíjate que las dos tienen el mismo número de abajo, el denominador ${d}.` },
-    { tipo: "pizarra", accion: "escribir", contenido: `${n1}/${d} + ${n2}/${d}` },
+    { tipo: "hablar", texto: `Vamos a resolver juntos esta suma de fracciones: ${a1}/${ad} + ${a2}/${ad}. Fíjate que las dos tienen el mismo número de abajo, el denominador ${ad}.` },
+    { tipo: "pizarra", accion: "escribir", contenido: `${a1}/${ad} + ${a2}/${ad}` },
     { tipo: "esperar", segundos: 1 },
-    { tipo: "hablar", texto: `Con el mismo denominador, solo se suman los números de arriba (los numeradores): ${n1} + ${n2} = ${suma}. El denominador ${d} se queda igual.` },
-    { tipo: "pizarra", accion: "escribir", contenido: `${n1}/${d} + ${n2}/${d} = (${n1} + ${n2})/${d} = ${suma}/${d}` },
+    { tipo: "hablar", texto: `Con el mismo denominador, solo se suman los números de arriba (los numeradores): ${a1} + ${a2} = ${A.suma}. El denominador ${ad} se queda igual.` },
+    { tipo: "pizarra", accion: "escribir", contenido: `${a1}/${ad} + ${a2}/${ad} = (${a1} + ${a2})/${ad} = ${A.suma}/${ad}` },
     { tipo: "esperar", segundos: 1 },
   ];
-  if (simp) {
-    dir.push({ tipo: "hablar", texto: `Y se puede simplificar: ${suma} y ${d} se dividen entre ${g}, así que ${suma}/${d} = ${simp}.` });
-    dir.push({ tipo: "pizarra", accion: "escribir", contenido: `${suma}/${d} = ${simp}` });
+  if (A.simp) {
+    dir.push({ tipo: "hablar", texto: `Y se puede simplificar: ${A.suma} y ${ad} se dividen entre ${A.g}, así que ${A.suma}/${ad} = ${A.simp}.` });
+    dir.push({ tipo: "pizarra", accion: "escribir", contenido: `${A.suma}/${ad} = ${A.simp}` });
   }
-  dir.push({ tipo: "hablar", texto: `¡Y listo! ${n1}/${d} + ${n2}/${d} = ${final}. Si quieres ver otro ejemplo, escribe "otro ejemplo".` });
-  return { escena: "fraccion_resuelta", intencion: "resolver", duracion_estimada: 45, _mock: true, directivas: dir };
+  dir.push({ tipo: "hablar", texto: `¡Y listo! ${a1}/${ad} + ${a2}/${ad} = ${A.final}. Ahora te toca a ti con otra suma parecida.` });
+  // PRÁCTICA: otra fracción DISTINTA que resuelve el alumno (calificable).
+  dir.push({ tipo: "pizarra", accion: "escribir", contenido: `${b1}/${bd} + ${b2}/${bd} = ?` });
+  dir.push({ tipo: "preguntar", texto: `¿Cuánto es ${b1}/${bd} + ${b2}/${bd}? Escríbelo en su forma más simple.`, respuesta: B.final, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" });
+  return { escena: "fraccion_resuelta", intencion: "resolver", duracion_estimada: 60, _mock: true, directivas: dir };
 }
 
 // Fracciones (mismo denominador).

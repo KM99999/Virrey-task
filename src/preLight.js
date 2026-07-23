@@ -765,9 +765,9 @@ export function processLSG(rawLsg, intent, mensaje = "") {
 
   // Garantizar EXACTAMENTE una pregunta en toda la lección (la IA a veces genera
   // varias "preguntar" casi idénticas → dos cajas de respuesta). Si no hay ninguna,
-  // se añade una de cierre. EXCEPCIÓN: el ejemplo de fracciones RESUELTO es una DEMOSTRACIÓN sin
-  // práctica (invita a escribir "otro ejemplo"); no se le añade una pregunta de comprensión que
-  // termine en "reproduce la lección" (callejón sin salida) — debe terminar en la solución + invitación.
+  // se añade una de cierre. EXCEPCIÓN: el ejercicio de fracciones (escena "fraccion_resuelta") ya trae
+  // SU propia estructura fija (ejemplo resuelto + UNA práctica calificable); no se toca aquí para no
+  // añadir/duplicar preguntas ni una comprensión "reproduce la lección".
   if (rawLsg.escena !== "fraccion_resuelta") {
     enforceSingleQuestion(lsg, pasos, counter, intent);
   }

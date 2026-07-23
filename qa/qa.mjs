@@ -139,7 +139,13 @@ async function unitTests() {
   const board2 = processLSG(fraccionResueltaLSG(f1), "resolver", "otro ejemplo").pasos.filter((p) => p.tipo === "pizarra").map((p) => p.contenido);
   check("fracción resuelta: 'otro ejemplo' es una fracción DISTINTA", (board2[0] || "").replace(/\s/g, "") !== f1);
   check("fracción resuelta: la solución del board es correcta", corregirIgualdades(board1.find((c) => /=/.test(c)) || "").correcciones === 0);
-  check("fracción resuelta: NO añade pregunta de comprensión (termina en la solución + invitación)", !fr1.some((p) => p.tipo === "preguntar") && /otro ejemplo/i.test(fr1[fr1.length - 1]?.texto || ""));
+  // Tras el ejemplo resuelto viene UNA práctica calificable con OTRA fracción distinta (la resuelve el
+  // alumno): correcto → completa; incorrecto → pista + reintento.
+  const qFr = fr1.find((p) => p.tipo === "preguntar");
+  const fracPract = (qFr?.texto || "").match(/\d+\/\d+\s*\+\s*\d+\/\d+/);
+  check("fracción resuelta: hay UNA práctica para el alumno (calificable)", fr1.filter((p) => p.tipo === "preguntar").length === 1 && /^\d+\/\d+$/.test(String(qFr?.respuesta || "")));
+  check("fracción resuelta: la práctica usa OTRA fracción (≠ la resuelta)", !!fracPract && fracPract[0].replace(/\s/g, "") !== (board1[0] || "").replace(/\s/g, ""));
+  check("fracción resuelta: la práctica se califica bien (respuesta correcta → correcto)", checkAnswer(qFr?.respuesta, qFr?.respuesta).correct === true);
   check("hint: fracciones → denominador", /denominador/.test(buildHint("¿2/5 + 1/5?", "2/5 + 1/5", 1)));
   check("hint: problema verbal → fórmula", /f[oó]rmula|operaci/.test(buildHint("¿velocidad?", "Distancia = 200, Tiempo = 25", 1)));
   // Estructuralmente NO puede revelar la respuesta: buildHint no recibe el valor esperado y su
