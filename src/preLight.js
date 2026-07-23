@@ -1243,6 +1243,16 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
   if (temaNoLineal && !esLeccionDerivadas) {
     const fac = computeFactorization(q.texto) || (board ? computeFactorization(board) : null);
     if (fac) { setResp(fac); return; }
+    // La práctica NO es factorizable. Si el ENUNCIADO DE LA PREGUNTA es una ecuación LINEAL OFF-TOPIC
+    // (p.ej. cerrar una lección de CUADRÁTICAS con "¿Cuánto es 3x + 5 = 14?"), NO la mostramos: sería un
+    // ejercicio de otro tema. Se reemplaza por una pregunta de comprensión. Una práctica ON-TOPIC
+    // (cuadrática/factorización, con x²) NO es lineal → se conserva (solo se le quita la nota; no se puede
+    // calificar deterministamente). Se mira SOLO el texto de la pregunta (el board suele ser la SOLUCIÓN
+    // "x = -2, x = -5", que solveLinearFromText leería como lineal por error).
+    if (solveLinearFromText(q.texto) !== null) {
+      q.texto = "¿Entendiste la explicación?";
+      const pp = pasos.find((x) => x.tipo === "preguntar"); if (pp) pp.texto = q.texto;
+    }
     delResp(); return; // tema no lineal no calificable → comprensión, NUNCA un número de los pasos 1-3
   }
 

@@ -232,6 +232,23 @@ async function unitTests() {
   check("pizarra: 'x = -3 o x = -4' → coma", pizO("x = -3 o x = -4") === "x = -3, x = -4");
   check("pizarra: NO toca 'o' de una frase sin 2 igualdades", pizO("multipliquen 6 o sumen 5") === "multipliquen 6 o sumen 5");
   check("pizarra: ecuación normal con un solo '=' intacta", pizO("2x + 5 = 15") === "2x + 5 = 15");
+  // CUADRÁTICA (Gemini) que cierra con una práctica LINEAL off-topic ("3x + 5 = 14") → se reemplaza por
+  // una comprensión (no se muestra un ejercicio de OTRO tema al final de una lección de cuadráticas).
+  const quadDir = [
+    { tipo: "hablar", texto: "Vamos a resolver la ecuación cuadrática x² + 7x + 10 = 0." },
+    { tipo: "pizarra", accion: "escribir", contenido: "x² + 7x + 10 = 0" },
+    { tipo: "pizarra", accion: "escribir", contenido: "(x + 2)(x + 5) = 0" },
+    { tipo: "pizarra", accion: "escribir", contenido: "x = -2, x = -5" },
+  ];
+  const quadLin = processLSG({ escena: "q", intencion: "resolver", directivas: [...quadDir,
+    { tipo: "preguntar", texto: "¿Cuánto es 3x + 5 = 14?" }] }, "resolver");
+  const qql = quadLin.pasos.find((p) => p.tipo === "preguntar");
+  check("cuadrática: práctica LINEAL off-topic ('3x + 5 = 14') → comprensión", !/3x\s*\+\s*5\s*=\s*14/.test(qql.texto) && !(qql.respuesta && String(qql.respuesta).trim()));
+  // Una práctica ON-TOPIC (cuadrática, con x²) se conserva (no se reemplaza; solo queda sin nota).
+  const quadQuad = processLSG({ escena: "q", intencion: "resolver", directivas: [...quadDir,
+    { tipo: "preguntar", texto: "¿Cuál es la solución de x² + 3x + 2 = 0?" }] }, "resolver");
+  const qqq = quadQuad.pasos.find((p) => p.tipo === "preguntar");
+  check("cuadrática: práctica cuadrática on-topic se conserva (no se reemplaza)", /x²|x\^2/.test(qqq.texto));
   check("hint: fracciones → denominador", /denominador/.test(buildHint("¿2/5 + 1/5?", "2/5 + 1/5", 1)));
   check("hint: problema verbal → fórmula", /f[oó]rmula|operaci/.test(buildHint("¿velocidad?", "Distancia = 200, Tiempo = 25", 1)));
   // Estructuralmente NO puede revelar la respuesta: buildHint no recibe el valor esperado y su
