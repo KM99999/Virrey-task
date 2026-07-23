@@ -118,6 +118,17 @@ async function unitTests() {
   check("pizarra: 'a = x, b = 3' (ya limpio) intacto", sub("a = x, b = 3") === "a = x, b = 3");
   check("pizarra: '3x = 12' (ecuación) intacto", sub("3x = 12") === "3x = 12");
   check("pizarra: 'x² - 9 = (x - 3)(x + 3)' intacto", sub("x² - 9 = (x - 3)(x + 3)") === "x² - 9 = (x - 3)(x + 3)");
+  // FRACCIÓN: la práctica NO debe repetir el ejemplo (revelaría la respuesta). "2/5 + 1/5" en ejemplo
+  // Y en práctica → se reemplaza por otra suma distinta; una práctica YA distinta se deja intacta.
+  const fracRep = processLSG({ escena: "fr", intencion: "aprender", modulos: [
+    { id: "ej", directivas: [{ tipo: "hablar", texto: "Suma de fracciones." }, { tipo: "pizarra", accion: "escribir", contenido: "2/5 + 1/5 = 3/5" }] },
+    { id: "p", directivas: [{ tipo: "pizarra", accion: "escribir", contenido: "2/5 + 1/5 = ?" }, { tipo: "preguntar", texto: "¿Cuánto es 2/5 + 1/5 = ?" }] }] }, "aprender", "fracciones").pasos.find((d) => d.tipo === "preguntar");
+  check("fracción: práctica repetida se reemplaza por otra distinta", !/2\/5\s*\+\s*1\/5/.test(fracRep?.texto || "") && /\d\/\d/.test(fracRep?.texto || ""));
+  check("fracción: la nueva práctica tiene respuesta válida", /^\d+\/\d+$/.test(String(fracRep?.respuesta || "")));
+  const fracDist = processLSG({ escena: "fr", intencion: "aprender", modulos: [
+    { id: "ej", directivas: [{ tipo: "pizarra", accion: "escribir", contenido: "2/5 + 1/5 = 3/5" }] },
+    { id: "p", directivas: [{ tipo: "pizarra", accion: "escribir", contenido: "3/7 + 2/7 = ?" }, { tipo: "preguntar", texto: "¿Cuánto es 3/7 + 2/7?" }] }] }, "aprender", "fracciones").pasos.find((d) => d.tipo === "preguntar");
+  check("fracción: práctica YA distinta NO se toca (3/7 + 2/7)", /3\/7\s*\+\s*2\/7/.test(fracDist?.texto || "") && fracDist?.respuesta === "5/7");
   check("hint: fracciones → denominador", /denominador/.test(buildHint("¿2/5 + 1/5?", "2/5 + 1/5", 1)));
   check("hint: problema verbal → fórmula", /f[oó]rmula|operaci/.test(buildHint("¿velocidad?", "Distancia = 200, Tiempo = 25", 1)));
   // Estructuralmente NO puede revelar la respuesta: buildHint no recibe el valor esperado y su

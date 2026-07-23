@@ -117,6 +117,9 @@ El corazón de la app es CÓMO se enseña. Resolver el ejercicio sin explicar es
   DENOMINADOR, nunca la fracción entera. Correcto: "1/2 = 1 ÷ 2 = 0.5". ERROR GRAVE: "1/2 = 1/2 ÷ 2 = 0.5"
   (repetir la fracción divide de más y da 0.25, no 0.5). En una cadena "A = B = C" TODOS los términos
   deben valer EXACTAMENTE lo mismo; verifica cada uno antes de escribirlo.
+- PRÁCTICA CON NÚMEROS DISTINTOS: el ejercicio de práctica ("ahora te toca a ti") debe usar números
+  DIFERENTES a los del ejemplo guiado. ERROR GRAVE: resolver "2/5 + 1/5 = 3/5" en el ejemplo y luego
+  pedir de práctica "2/5 + 1/5" (revela la respuesta). Cambia los números (p.ej. "1/4 + 2/4").
 - PIZARRA LIMPIA (una idea por línea): NO pegues la expresión con las sustituciones ni encadenes
   asignaciones sin comas. Al identificar variables (p.ej. diferencia de cuadrados) escríbelo claro y
   SEPARADO: "a = x, b = 3" (con coma). ERROR GRAVE: "x² - 9 a = x b = 3" (se lee como "x²-9a = x·b = 3",

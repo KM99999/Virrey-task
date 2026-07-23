@@ -1051,6 +1051,22 @@ export function resultadoFromVerificacion(v) {
 //      autoritativa (evita que se copie la del ejemplo, p.ej. "x = 2").
 //   2) Si no, y la IA no dejó "respuesta" para una pregunta de CÁLCULO, usamos el resultado que
 //      ella misma calculó en "verificacion_respuesta" (velocidad, área, fracciones, etc.).
+// Genera una SUMA DE FRACCIONES de práctica DISTINTA de la dada (para no repetir el ejemplo en la
+// práctica, que revelaría la respuesta). Devuelve { ejercicio, respuesta } con el resultado en forma
+// más simple, o null. Los presets están ya en su forma más simple (numerador y denominador coprimos).
+function otraFraccionPractica(evitar) {
+  const nrm = (s) => String(s).replace(/\s+/g, "");
+  const OPCIONES = [
+    { ejercicio: "1/4 + 2/4", respuesta: "3/4" },
+    { ejercicio: "2/7 + 4/7", respuesta: "6/7" },
+    { ejercicio: "3/8 + 2/8", respuesta: "5/8" },
+    { ejercicio: "1/9 + 7/9", respuesta: "8/9" },
+    { ejercicio: "2/11 + 5/11", respuesta: "7/11" },
+  ];
+  const ev = nrm(evitar);
+  return OPCIONES.find((o) => nrm(o.ejercicio) !== ev) || null;
+}
+
 //   3) En cualquier otro caso, no tocamos nada (respuesta previa o pregunta de comprensión).
 function fixPracticeAnswer(lsg, pasos, verificacion) {
   const flat = [];
@@ -1178,6 +1194,26 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
     const fac = computeFactorization(q.texto) || (board ? computeFactorization(board) : null);
     if (fac) { setResp(fac); return; }
     delResp(); return; // tema no lineal no calificable → comprensión, NUNCA un número de los pasos 1-3
+  }
+
+  // 0.6) FRACCIÓN repetida: si la práctica usa la MISMA suma de fracciones que un ejemplo ya resuelto
+  //      en la pizarra ("2/5 + 1/5" en el ejemplo Y en la práctica), REVELA la respuesta → se reemplaza
+  //      por otra suma de fracciones DISTINTA con su resultado.
+  {
+    const reFrac = /\d+\s*\/\s*\d+\s*[+\-]\s*\d+\s*\/\s*\d+/;
+    const fracQ = (q.texto.match(reFrac) || [])[0];
+    if (fracQ) {
+      const nrm = (s) => String(s).replace(/\s+/g, "");
+      // Solo cuentan como "ejemplo" las pizarras RESUELTAS ("… = 3/5"), no el enunciado de la práctica
+      // ("… = ?"): así una práctica que YA es distinta del ejemplo no se toca.
+      const reResuelta = /(\d+\s*\/\s*\d+\s*[+\-]\s*\d+\s*\/\s*\d+)\s*=\s*\(?\s*\d/;
+      const ejemplos = flat.slice(0, qIdx).filter((dd) => dd.tipo === "pizarra")
+        .map((dd) => (String(dd.contenido || "").match(reResuelta) || [])[1]).filter(Boolean).map(nrm);
+      if (ejemplos.includes(nrm(fracQ))) {
+        const alt = otraFraccionPractica(fracQ);
+        if (alt) { setPregunta(`Ahora te toca a ti: ¿cuánto es ${alt.ejercicio}? Dalo en su forma más simple.`, alt.respuesta); return; }
+      }
+    }
   }
 
   // 1) Ecuación lineal LIMPIA (en la pizarra o en el propio texto) → solución EXACTA determinista
