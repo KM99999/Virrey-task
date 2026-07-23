@@ -267,6 +267,16 @@ async function unitTests() {
     { tipo: "preguntar", texto: "¿Cuál es la derivada de f(x)?" }] }] }, "practicar");
   check("derivada f(x)=x³: respuesta calificable 3x² (no '1')", derFn.pasos.find((d) => d.tipo === "preguntar")?.respuesta === "3x²");
   check("derivada f(x)=x³: '2x' es INCORRECTO", checkAnswer("2x", derFn.pasos.find((d) => d.tipo === "preguntar")?.respuesta).correct === false);
+  // Función en una pizarra ("f(x) = 5x²") y "f'(x) = ?" en OTRA: se busca la función en TODAS las
+  // pizarras (no solo la inmediata) → se califica 10x (antes caía en comprensión "compara con la pizarra").
+  const derSep = processLSG({ escena: "d", intencion: "explicar", directivas: [
+    { tipo: "hablar", texto: "Ahora practica con la regla de la potencia." },
+    { tipo: "pizarra", contenido: "f(x) = 5x²" },
+    { tipo: "pizarra", contenido: "f'(x) = ?" },
+    { tipo: "preguntar", texto: "¿Cuál es la derivada de f(x)?" }] }, "explicar");
+  const qDerSep = derSep.pasos.find((d) => d.tipo === "preguntar");
+  check("derivada: función en pizarra aparte (f(x)=5x², f'(x)=?) → califica 10x", qDerSep?.respuesta === "10x");
+  check("derivada: '10x' correcto y '5x' incorrecto (pizarra aparte)", checkAnswer("10x", qDerSep?.respuesta).correct === true && checkAnswer("5x", qDerSep?.respuesta).correct === false);
   // Práctica de derivada SIN pregunta explícita: se promueve a pregunta calificable (no genérica).
   const derSinQ = processLSG({ escena: "d", intencion: "practicar", modulos: [
     { id: "recordatorio", directivas: [{ tipo: "hablar", texto: "Vamos a practicar con derivadas de potencias." }] },

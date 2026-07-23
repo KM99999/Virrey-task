@@ -1114,12 +1114,19 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
     const sol = nueva ? solveLinearSteps(nueva) : null;
     return sol ? { texto: `Ahora resuélvelo tú: ${nueva}. ¿Cuánto vale ${sol.varName}?`, resp: sol.answer } : null;
   };
-  // Deriva un MONOMIO LIMPIO del tablero (rechaza pasos intermedios garabateados como
-  // "f'(x) ≈ 3·(2x²⁻¹)" y fórmulas con 'n"): devuelve { ejercicio, respuesta } o null.
+  // Deriva un MONOMIO LIMPIO del tablero: busca en TODAS las pizarras anteriores a la pregunta (no solo
+  // la inmediata) una función derivable "f(x) = a·xⁿ". Cubre el caso en que la función está en una línea
+  // ("f(x) = 5x²") y el tablero inmediato es otra ("f'(x) = ?") → antes no se calificaba (→ comprensión).
+  // Rechaza pasos garabateados (f'(x), ≈, exponentes compuestos) vía monomioLimpio.
   const derivadaBoardLimpio = () => {
-    const m = monomioLimpio(board);
-    const der = m ? computeDerivative("derivada de " + m) : null;
-    return der ? { ejercicio: m, respuesta: der } : null;
+    for (let i = qIdx - 1; i >= 0; i--) {
+      if (flat[i].tipo !== "pizarra") continue;
+      const m = monomioLimpio(flat[i].contenido);
+      if (!m) continue;
+      const der = computeDerivative("derivada de " + m);
+      if (der) return { ejercicio: m, respuesta: der };
+    }
+    return null;
   };
   const esLeccionDerivadas = flat.some((d) => /deriv/i.test(d.texto || "") || /deriv/i.test(d.contenido || ""));
   // Reescribe la pregunta (texto + respuesta) para calificar el ejercicio del tablero.
