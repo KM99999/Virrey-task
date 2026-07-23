@@ -1178,16 +1178,14 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
     return;
   }
 
-  // 0) DERIVADA: si la pregunta pide derivar y la función está en la PIZARRA ("f(x) = x³"), derivamos
-  //    la función del tablero (regla de la potencia). Va PRIMERO porque, si no, computeAnswer(q.texto)
-  //    sobre "¿la derivada de f(x)?" parsearía "f(x)" y devolvería "1" (incorrecto). Así "2x" a la
-  //    derivada de x³ (=3x²) se califica MAL y NO se felicita.
+  // 0) DERIVADA: se deriva la función que pide la pregunta. PRIORIDAD: primero la EXPRESIÓN de la
+  //    PREGUNTA ("derivada de 2x³" → 6x²) — así una función de EJEMPLO en el tablero NO se confunde con
+  //    la que se pregunta; solo si la pregunta es GENÉRICA ("¿la derivada de f(x)?", que da null) se
+  //    busca la función en la pizarra (derivadaBoardLimpio recorre todas las pizarras).
   if (/deriv/i.test(q.texto) || (board && /deriv/i.test(board))) {
-    const dl = derivadaBoardLimpio();
-    // computeDerivative(q.texto) ya cubre "derivada de f(x)=7x³"; derivarFuncion es respaldo si la
-    // función viniera solo en la pizarra o con otra redacción.
-    const der = (dl && dl.respuesta) || computeDerivative(q.texto)
-      || derivarFuncion(q.texto) || (board ? derivarFuncion(board) : null);
+    const der = computeDerivative(q.texto) || derivarFuncion(q.texto)
+      || (() => { const dl = derivadaBoardLimpio(); return dl && dl.respuesta; })()
+      || (board ? derivarFuncion(board) : null);
     if (der) { setResp(der); return; }
     // REGLA DURA: si la pregunta es una DERIVADA y NO pudimos calcularla de forma determinista
     // (polinomio, producto, regla de la cadena…), NO la calificamos con el número de la IA (no deriva

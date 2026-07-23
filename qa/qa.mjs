@@ -277,6 +277,14 @@ async function unitTests() {
   const qDerSep = derSep.pasos.find((d) => d.tipo === "preguntar");
   check("derivada: función en pizarra aparte (f(x)=5x², f'(x)=?) → califica 10x", qDerSep?.respuesta === "10x");
   check("derivada: '10x' correcto y '5x' incorrecto (pizarra aparte)", checkAnswer("10x", qDerSep?.respuesta).correct === true && checkAnswer("5x", qDerSep?.respuesta).correct === false);
+  // PRIORIDAD: la EXPRESIÓN de la pregunta manda sobre un monomio de EJEMPLO en el tablero. "derivada
+  // de 2x³" → 6x² (no 3x² de un ejemplo "x³" que hubiera en la pizarra).
+  const derPri = processLSG({ escena: "d", intencion: "explicar", directivas: [
+    { tipo: "hablar", texto: "Ejemplo y práctica." },
+    { tipo: "pizarra", contenido: "Ejemplo: x³" },
+    { tipo: "pizarra", contenido: "2x³" },
+    { tipo: "preguntar", texto: "¿Cuál es la derivada de 2x³?" }] }, "explicar").pasos.find((d) => d.tipo === "preguntar");
+  check("derivada: la pregunta (2x³→6x²) manda sobre el ejemplo del tablero (x³)", derPri?.respuesta === "6x²");
   // Práctica de derivada SIN pregunta explícita: se promueve a pregunta calificable (no genérica).
   const derSinQ = processLSG({ escena: "d", intencion: "practicar", modulos: [
     { id: "recordatorio", directivas: [{ tipo: "hablar", texto: "Vamos a practicar con derivadas de potencias." }] },
