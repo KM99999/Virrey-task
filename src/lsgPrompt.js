@@ -465,6 +465,39 @@ function mockOperacion({ a, b, r, tema }, intent) {
   ] };
 }
 
+// EJERCICIO DE FRACCIONES RESUELTO (determinista): formula una suma de fracciones y la RESUELVE paso a
+// paso (numeradores se suman, denominador se mantiene, y se simplifica si hace falta). Rota entre un
+// conjunto para que "otro ejemplo" presente una fracción DISTINTA (se le pasa la anterior en `evitar`).
+// Sin pregunta de práctica: es una DEMOSTRACIÓN (el sistema encuentra la solución); PRE Light cerrará
+// con "¿Entendiste la explicación?". Aritmética garantizada (no depende del modelo).
+export function fraccionResueltaLSG(evitar) {
+  const SUMAS = [[2, 3, 6], [1, 2, 4], [1, 3, 5], [2, 5, 8], [3, 4, 9], [1, 4, 7], [2, 3, 10], [1, 5, 11]];
+  const gcd = (a, b) => { a = Math.abs(a); b = Math.abs(b); while (b) { [a, b] = [b, a % b]; } return a || 1; };
+  const ev = typeof evitar === "string" ? evitar.replace(/\s+/g, "") : "";
+  // Rota al SIGUIENTE de la lista tras la fracción anterior (no solo alterna entre las dos primeras).
+  const evIdx = SUMAS.findIndex(([a, b, c]) => `${a}/${c}+${b}/${c}` === ev);
+  const [n1, n2, d] = SUMAS[(evIdx + 1) % SUMAS.length];
+  const suma = n1 + n2;
+  const g = gcd(suma, d);
+  const simp = g > 1 ? `${suma / g}/${d / g}` : null;
+  const final = simp || `${suma}/${d}`;
+  const dir = [
+    { tipo: "avatar", accion: "sonreir" },
+    { tipo: "hablar", texto: `Vamos a resolver juntos esta suma de fracciones: ${n1}/${d} + ${n2}/${d}. Fíjate que las dos tienen el mismo número de abajo, el denominador ${d}.` },
+    { tipo: "pizarra", accion: "escribir", contenido: `${n1}/${d} + ${n2}/${d}` },
+    { tipo: "esperar", segundos: 1 },
+    { tipo: "hablar", texto: `Con el mismo denominador, solo se suman los números de arriba (los numeradores): ${n1} + ${n2} = ${suma}. El denominador ${d} se queda igual.` },
+    { tipo: "pizarra", accion: "escribir", contenido: `${n1}/${d} + ${n2}/${d} = (${n1} + ${n2})/${d} = ${suma}/${d}` },
+    { tipo: "esperar", segundos: 1 },
+  ];
+  if (simp) {
+    dir.push({ tipo: "hablar", texto: `Y se puede simplificar: ${suma} y ${d} se dividen entre ${g}, así que ${suma}/${d} = ${simp}.` });
+    dir.push({ tipo: "pizarra", accion: "escribir", contenido: `${suma}/${d} = ${simp}` });
+  }
+  dir.push({ tipo: "hablar", texto: `¡Y listo! ${n1}/${d} + ${n2}/${d} = ${final}. Si quieres ver otro ejemplo, escribe "otro ejemplo".` });
+  return { escena: "fraccion_resuelta", intencion: "resolver", duracion_estimada: 45, _mock: true, directivas: dir };
+}
+
 // Fracciones (mismo denominador).
 function mockFraccion(intent, reexplain) {
   const ejercicio = preg("¿Cuánto es 2/6 + 3/6? Escribe la fracción (por ejemplo: 5/6).", "5/6");

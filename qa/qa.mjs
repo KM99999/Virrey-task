@@ -10,7 +10,7 @@
 
 import { classifyIntent } from "../src/classifier.js";
 import { processLSG, solveLinearFromText, solveFractionFromText, resultadoFromVerificacion, computeAnswer, corregirIgualdades, otroEjemploResuelto, processStepByStep, computeDerivative, monomioLimpio, computeFactorization } from "../src/preLight.js";
-import { mockLSG } from "../src/lsgPrompt.js";
+import { mockLSG, fraccionResueltaLSG } from "../src/lsgPrompt.js";
 import { generateLSG } from "../src/geminiClient.js";
 import { checkAnswer, flattenLSG, PSELight, buildHint } from "../public/pseLight.js";
 import { normalizeForSpeech, chunkForSpeech } from "../public/tts.js";
@@ -129,6 +129,16 @@ async function unitTests() {
     { id: "ej", directivas: [{ tipo: "pizarra", accion: "escribir", contenido: "2/5 + 1/5 = 3/5" }] },
     { id: "p", directivas: [{ tipo: "pizarra", accion: "escribir", contenido: "3/7 + 2/7 = ?" }, { tipo: "preguntar", texto: "¿Cuánto es 3/7 + 2/7?" }] }] }, "aprender", "fracciones").pasos.find((d) => d.tipo === "preguntar");
   check("fracción: práctica YA distinta NO se toca (3/7 + 2/7)", /3\/7\s*\+\s*2\/7/.test(fracDist?.texto || "") && fracDist?.respuesta === "5/7");
+  // "Ejercicio de fracciones": FORMULA una suma de fracciones y la RESUELVE (worked), y "otro ejemplo"
+  // presenta una DISTINTA (rota por la lista, evitando la anterior).
+  const fr1 = processLSG(fraccionResueltaLSG(""), "resolver", "ejercicio de fracciones").pasos;
+  const board1 = fr1.filter((p) => p.tipo === "pizarra").map((p) => p.contenido);
+  check("fracción resuelta: formula la suma", /\d+\/\d+\s*\+\s*\d+\/\d+/.test(board1[0] || ""));
+  check("fracción resuelta: MUESTRA la solución (= resultado)", board1.some((c) => /\d+\/\d+\s*\+\s*\d+\/\d+\s*=.*\d+\/\d+/.test(c)));
+  const f1 = (board1[0] || "").replace(/\s/g, "");
+  const board2 = processLSG(fraccionResueltaLSG(f1), "resolver", "otro ejemplo").pasos.filter((p) => p.tipo === "pizarra").map((p) => p.contenido);
+  check("fracción resuelta: 'otro ejemplo' es una fracción DISTINTA", (board2[0] || "").replace(/\s/g, "") !== f1);
+  check("fracción resuelta: la solución del board es correcta", corregirIgualdades(board1.find((c) => /=/.test(c)) || "").correcciones === 0);
   check("hint: fracciones → denominador", /denominador/.test(buildHint("¿2/5 + 1/5?", "2/5 + 1/5", 1)));
   check("hint: problema verbal → fórmula", /f[oó]rmula|operaci/.test(buildHint("¿velocidad?", "Distancia = 200, Tiempo = 25", 1)));
   // Estructuralmente NO puede revelar la respuesta: buildHint no recibe el valor esperado y su

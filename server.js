@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import { classifyIntent } from "./src/classifier.js";
 import { generateLSG } from "./src/geminiClient.js";
 import { processLSG, processStepByStep } from "./src/preLight.js";
-import { mockLSG } from "./src/lsgPrompt.js";
+import { mockLSG, fraccionResueltaLSG } from "./src/lsgPrompt.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -106,6 +106,22 @@ app.post("/api/query", async (req, res) => {
         });
       }
       // sin ejercicio utilizable → cae a "reexplicar" (re-enseñar el tema activo).
+    }
+
+    // 0.1) EJERCICIO DE FRACCIONES RESUELTO (determinista): el botón "Ejercicio de fracciones" —o pedir
+    //      "otro ejemplo" justo después— debe FORMULAR una suma de fracciones y RESOLVERLA paso a paso
+    //      (el sistema encuentra la solución), y en cada "otro ejemplo" presentar una DISTINTA. Se hace
+    //      con contenido determinista (aritmética garantizada, 0 coste de IA, siempre diferente).
+    const esFraccionResuelta = (/\b(ejercicio|ejemplo)s?\s+de\s+fracci/i.test(query) && !/\d\s*\/\s*\d/.test(query))
+      || (!!contexto && /\d+\s*\/\s*\d+\s*[+\-]\s*\d+\s*\/\s*\d+/.test(previo)); // "otro ejemplo" tras una fracción resuelta
+    if (esFraccionResuelta) {
+      const evitar = (previo.match(/\d+\s*\/\s*\d+\s*[+\-]\s*\d+\s*\/\s*\d+/) || [])[0] || "";
+      const { lsg, pasos, warnings } = processLSG(fraccionResueltaLSG(evitar), "resolver", query);
+      return res.json({
+        query, reexplicacion: !!contexto, intencion: "resolver", confianza: 1,
+        fuente_ia: "local", modelo: "fraccion-resuelta",
+        lsg, pasos, advertencias: warnings, tokens: null, cache_activo: false,
+      });
     }
 
     // Seguimiento del tema activo (mantiene el TEMA anterior; no es un tema nuevo).
