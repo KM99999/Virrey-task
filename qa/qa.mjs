@@ -139,6 +139,7 @@ async function unitTests() {
   const board2 = processLSG(fraccionResueltaLSG(f1), "resolver", "otro ejemplo").pasos.filter((p) => p.tipo === "pizarra").map((p) => p.contenido);
   check("fracción resuelta: 'otro ejemplo' es una fracción DISTINTA", (board2[0] || "").replace(/\s/g, "") !== f1);
   check("fracción resuelta: la solución del board es correcta", corregirIgualdades(board1.find((c) => /=/.test(c)) || "").correcciones === 0);
+  check("fracción resuelta: NO añade pregunta de comprensión (termina en la solución + invitación)", !fr1.some((p) => p.tipo === "preguntar") && /otro ejemplo/i.test(fr1[fr1.length - 1]?.texto || ""));
   check("hint: fracciones → denominador", /denominador/.test(buildHint("¿2/5 + 1/5?", "2/5 + 1/5", 1)));
   check("hint: problema verbal → fórmula", /f[oó]rmula|operaci/.test(buildHint("¿velocidad?", "Distancia = 200, Tiempo = 25", 1)));
   // Estructuralmente NO puede revelar la respuesta: buildHint no recibe el valor esperado y su

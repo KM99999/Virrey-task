@@ -765,8 +765,12 @@ export function processLSG(rawLsg, intent, mensaje = "") {
 
   // Garantizar EXACTAMENTE una pregunta en toda la lección (la IA a veces genera
   // varias "preguntar" casi idénticas → dos cajas de respuesta). Si no hay ninguna,
-  // se añade una de cierre.
-  enforceSingleQuestion(lsg, pasos, counter, intent);
+  // se añade una de cierre. EXCEPCIÓN: el ejemplo de fracciones RESUELTO es una DEMOSTRACIÓN sin
+  // práctica (invita a escribir "otro ejemplo"); no se le añade una pregunta de comprensión que
+  // termine en "reproduce la lección" (callejón sin salida) — debe terminar en la solución + invitación.
+  if (rawLsg.escena !== "fraccion_resuelta") {
+    enforceSingleQuestion(lsg, pasos, counter, intent);
+  }
 
   // Calificación correcta: la respuesta de la pregunta debe ser la del EJERCICIO DE PRÁCTICA
   // escrito en la pizarra (p.ej. "x - 4 = 7" → 11), NO la solución del ejemplo (p.ej. "x = 2").
