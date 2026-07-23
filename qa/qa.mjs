@@ -324,6 +324,13 @@ async function unitTests() {
   const qRes = resGen.pasos.find((d) => d.tipo === "preguntar");
   check("resolver: la práctica NO revela la solución (x = 5)", !/tú:\s*x\s*=\s*5/i.test(qRes?.texto || ""));
   check("resolver: la práctica plantea una ecuación NUEVA con respuesta válida", /resuélvelo tú:\s*.+=.+¿/i.test(qRes?.texto || "") && /^-?\d+(?:[.,]\d+)?$/.test(String(qRes?.respuesta || "")));
+  // La práctica NUEVA tiene su PROPIA pizarra (para que el reintento no re-muestre "x = 5" ni el ejemplo
+  // alterno se genere de la forma resuelta). El board inmediato a la pregunta = la ecuación de la práctica.
+  const eqPr = (qRes?.texto.match(/\d*x\s*[-+]?\s*\d*\s*=\s*\d+/) || [])[0] || "";
+  const pasR = resGen.pasos; const qiR = pasR.indexOf(qRes);
+  let boardR = null; for (let k = qiR - 1; k >= 0; k--) { if (pasR[k].tipo === "pizarra") { boardR = pasR[k].contenido; break; } }
+  check("resolver: la práctica tiene su propia pizarra (board ≠ 'x = 5')", !!boardR && boardR.replace(/\s/g, "") === eqPr.replace(/\s/g, ""));
+  check("resolver: el ejemplo alterno es DISTINTO de la práctica", (qRes?.otro_ejemplo?.original || "").replace(/\s/g, "") !== eqPr.replace(/\s/g, ""));
   // PODA de relleno: la IA a veces deja una cola de esperar/puntero (se vieron 41 tras la pregunta) que
   // hace avanzar el cronograma sin contenido. PRE Light debe recortarla → la lección termina en contenido.
   const inflada = { escena: "d", intencion: "aprender", directivas: [

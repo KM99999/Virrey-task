@@ -546,12 +546,16 @@ export function corregirIgualdades(texto) {
 // Ante un error, además de la pista, se muestra OTRO ejemplo PARECIDO resuelto paso a paso.
 // Devuelve { intro, original?, pasos:[{explica,escribe}], cierre } o null si no aplica.
 function altEquationFrom(eqText) {
-  const v = "x"; // variable ESTÁNDAR: nunca tomar una letra suelta del texto (daba "e" de "En…",
-                 // confusa con el número e). El ejercicio de práctica siempre usa "x".
-  const t = String(eqText).toLowerCase();
-  if (/[2-9]\s*[a-z]|\d\d\s*[a-z]/.test(t)) return `3${v} = 12`;  // coeficiente → v = 4
-  if (t.includes("-")) return `${v} - 2 = 5`;                     // resta → v = 7
-  return `${v} + 4 = 10`;                                         // suma → v = 6
+  // Variable ESTÁNDAR "x" (nunca una letra suelta del texto, daba "e" de "En…", confusa con el nº e).
+  const t = String(eqText).toLowerCase().replace(/\s+/g, "");
+  const tieneCoef = /[2-9]x|\d\dx/.test(t);
+  const tieneResta = t.includes("-") && !tieneCoef;
+  // Varios candidatos por tipo; se devuelve el PRIMERO DISTINTO de la ecuación de entrada, para que la
+  // práctica y su ejemplo alterno (ambos usan esta función) NO salgan idénticos.
+  const cands = tieneCoef ? ["2x = 6", "3x = 12", "4x = 8", "2x = 10"]
+    : tieneResta ? ["x - 2 = 5", "x - 3 = 4", "x - 1 = 6"]
+    : ["x + 4 = 10", "x + 3 = 8", "x + 2 = 7"];
+  return cands.find((c) => c.replace(/\s+/g, "") !== t) || cands[0];
 }
 const OPS_ALT = [
   { re: /÷|\bdividid|entre\b/, pasos: [{ explica: "Dividir es repartir en partes iguales: 12 entre 4 son 3, porque 3 × 4 = 12.", escribe: "12 ÷ 4 = 3" }] },
@@ -1112,8 +1116,21 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
     if (!ecOriginal) return null;
     const nueva = altEquationFrom(ecOriginal);
     const sol = nueva ? solveLinearSteps(nueva) : null;
-    return sol ? { texto: `Ahora resuélvelo tú: ${nueva}. ¿Cuánto vale ${sol.varName}?`, resp: sol.answer } : null;
+    return sol ? { texto: `Ahora resuélvelo tú: ${nueva}. ¿Cuánto vale ${sol.varName}?`, resp: sol.answer, ecuacion: nueva } : null;
   };
+  // Inserta una pizarra con el EJERCICIO de la práctica justo antes de la pregunta. Necesario cuando la
+  // práctica es una ecuación NUEVA ("3x = 12") que solo iba en el TEXTO: sin este board, el frontend
+  // re-mostraría la última pizarra ("x = 5", la solución original) como "el ejercicio" en el reintento,
+  // y el ejemplo alterno se generaría de esa forma resuelta. Con el board, todo apunta a la práctica.
+  const insertarBoardPractica = (contenido) => {
+    const nb = { tipo: "pizarra", accion: "escribir", contenido };
+    if (Array.isArray(lsg.modulos)) { for (const m of lsg.modulos) { const i = m.directivas.indexOf(q); if (i >= 0) { m.directivas.splice(i, 0, nb); break; } } }
+    else if (Array.isArray(lsg.directivas)) { const i = lsg.directivas.indexOf(q); if (i >= 0) lsg.directivas.splice(i, 0, nb); }
+    const pi = pasos.findIndex((x) => x.tipo === "preguntar");
+    if (pi >= 0) pasos.splice(pi, 0, { ...nb });
+  };
+  // Pone una práctica NUEVA (texto + respuesta) Y su board, de una sola vez.
+  const ponerPractica = (np) => { if (np.ecuacion) insertarBoardPractica(np.ecuacion); setPregunta(np.texto, np.resp); };
   // Deriva un MONOMIO LIMPIO del tablero: busca en TODAS las pizarras anteriores a la pregunta (no solo
   // la inmediata) una función derivable "f(x) = a·xⁿ". Cubre el caso en que la función está en una línea
   // ("f(x) = 5x²") y el tablero inmediato es otra ("f'(x) = ?") → antes no se calificaba (→ comprensión).
@@ -1145,7 +1162,7 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
     && /resu[eé]lv|resuelv|cu[aá]nto\s+vale|calcul|hall|despej|valor\s+de/i.test(q.texto);
   if (presentaResuelta) {
     const np = nuevaPractica();
-    if (np) { setPregunta(np.texto, np.resp); return; }
+    if (np) { ponerPractica(np); return; }
     // No hay ecuación lineal real para plantear (tema no lineal): en vez de dejar el texto REVELADOR de
     // la IA ("resuélvelo tú: x = 3"), lo cambiamos por una pregunta de comprensión neutral.
     q.texto = "¿Entendiste la explicación?";
@@ -1165,7 +1182,7 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
     if (lin !== null) {
       // Si el tablero es la SOLUCIÓN ("x = 5"), NO lo uses como ejercicio (revelaría la respuesta):
       // plantea una ecuación NUEVA y distinta de la ya resuelta.
-      if (esResuelta(board)) { const np = nuevaPractica(); if (np) { setPregunta(np.texto, np.resp); return; } delResp(); return; }
+      if (esResuelta(board)) { const np = nuevaPractica(); if (np) { ponerPractica(np); return; } delResp(); return; }
       setPregunta(`Ahora resuélvelo tú: ${board}. ¿Cuánto vale?`, lin); return;
     }
     // Lección de derivadas sin ejercicio limpio en la pizarra → plantea uno SIMPLE y limpio.
