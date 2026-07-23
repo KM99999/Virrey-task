@@ -18,6 +18,13 @@ const TIPOS_VALIDOS = new Set([
   "avatar", "hablar", "esperar", "pizarra", "puntero", "preguntar",
 ]);
 
+// Escenas DETERMINISTAS de los 4 botones (lección de "Tu consulta"): su ejemplo resuelto y su
+// práctica calificable ya vienen CORRECTOS y auto-contenidos desde el generador. Se marcan como
+// CONFIABLES para SALTARSE los "fixers" heurísticos de práctica (fixPracticeAnswer, enforceSingleQuestion),
+// que se diseñaron para reparar la salida imperfecta de Gemini. Al no aplicarlos, cada botón queda
+// AISLADO: cambiar la lógica de reparación de un tema no puede alterar los otros tres.
+const ESCENAS_CONFIABLES = new Set(["lineal_resuelta", "derivada_resuelta", "factorizacion_resuelta", "fraccion_resuelta"]);
+
 // Etiquetas de control válidas para si_correcto / si_incorrecto.
 const CONTROL_LABELS = new Set(["continuar", "felicitar", "mostrar_otro_ejemplo"]);
 function normLabel(v, fallback) {
@@ -767,20 +774,27 @@ export function processLSG(rawLsg, intent, mensaje = "") {
   // (a veces la IA "cita" la consulta como si fuera parte de la lección, p.ej. «dame otro ejemplo").»).
   dropEchoedHablar(lsg, mensaje);
 
+  // ¿Es una escena determinista de botón (ejemplo + práctica ya CORRECTOS y auto-contenidos)? Entonces
+  // se SALTAN los "fixers" de práctica (enforceSingleQuestion, fixPracticeAnswer): reparan la salida de
+  // Gemini y aquí no hay nada que reparar. Así cada botón queda aislado (no se estorban entre sí).
+  const escenaConfiable = ESCENAS_CONFIABLES.has(rawLsg.escena);
+
   // Garantizar EXACTAMENTE una pregunta en toda la lección (la IA a veces genera
   // varias "preguntar" casi idénticas → dos cajas de respuesta). Si no hay ninguna,
-  // se añade una de cierre. EXCEPCIÓN: el ejercicio de fracciones (escena "fraccion_resuelta") ya trae
-  // SU propia estructura fija (ejemplo resuelto + UNA práctica calificable); no se toca aquí para no
-  // añadir/duplicar preguntas ni una comprensión "reproduce la lección".
-  if (rawLsg.escena !== "fraccion_resuelta") {
+  // se añade una de cierre. EXCEPCIÓN: las escenas confiables ya traen SU propia estructura fija
+  // (ejemplo resuelto + UNA práctica calificable); no se tocan aquí.
+  if (!escenaConfiable) {
     enforceSingleQuestion(lsg, pasos, counter, intent);
   }
 
   // Calificación correcta: la respuesta de la pregunta debe ser la del EJERCICIO DE PRÁCTICA
   // escrito en la pizarra (p.ej. "x - 4 = 7" → 11), NO la solución del ejemplo (p.ej. "x = 2").
   // Como red de seguridad, si la IA no rellenó "respuesta", usamos el RESULTADO que ella misma
-  // calculó en su borrador "verificacion_respuesta" (funciona para cualquier redacción).
-  fixPracticeAnswer(lsg, pasos, rawLsg.verificacion_respuesta);
+  // calculó en su borrador "verificacion_respuesta" (funciona para cualquier redacción). En una escena
+  // confiable la respuesta ya viene calculada y verificada → no se toca.
+  if (!escenaConfiable) {
+    fixPracticeAnswer(lsg, pasos, rawLsg.verificacion_respuesta);
+  }
 
   // Ramificación ligera: adjunta un ejemplo alternativo RESUELTO para mostrarlo si el alumno falla.
   attachAltExample(lsg, pasos);

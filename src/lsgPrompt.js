@@ -2,7 +2,7 @@
 // devolverlo. El LSG es la salida estructurada que el PRE Light valida y que en
 // la Fase 2 el PSE Light reproducirá sincronizando voz + revelación visual.
 
-import { solveLinearSteps } from "./preLight.js";
+import { solveLinearSteps, computeDerivative, computeFactorization, monomioLimpio } from "./preLight.js";
 //
 // Dos formas según la intención:
 //   - resolver / explicar → escena SECUENCIAL con `directivas: [...]`
@@ -498,6 +498,181 @@ export function fraccionResueltaLSG(evitar) {
   dir.push({ tipo: "pizarra", accion: "escribir", contenido: `${b1}/${bd} + ${b2}/${bd} = ?` });
   dir.push({ tipo: "preguntar", texto: `¿Cuánto es ${b1}/${bd} + ${b2}/${bd}? Escríbelo en su forma más simple.`, respuesta: B.final, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" });
   return { escena: "fraccion_resuelta", intencion: "resolver", duracion_estimada: 60, _mock: true, directivas: dir };
+}
+
+// ════════ LECCIONES DE BOTÓN DETERMINISTAS (los 4 chips de "Tu consulta") ════════
+// Los cuatro botones (ecuación lineal, derivadas, factorización, fracciones) comparten AHORA
+// EXACTAMENTE el mismo flujo, cada uno con su propio generador AISLADO (aritmética garantizada,
+// 0 coste de IA): (1) un EJEMPLO resuelto paso a paso explicando el porqué; (2) una PRÁCTICA
+// DISTINTA y calificable para que el alumno la responda. Al pedir "otro ejemplo" se rota a un
+// ejemplo/práctica NUEVOS (evitando el anterior). Al ser funciones separadas, tocar una NO afecta
+// a las otras (antes compartían los "fixers" heurísticos de processLSG y por eso se estorbaban).
+const ESCENAS_BOTON = new Set(["lineal_resuelta", "derivada_resuelta", "factorizacion_resuelta", "fraccion_resuelta"]);
+export function esEscenaBoton(escena) { return ESCENAS_BOTON.has(escena); }
+
+const normBoton = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+// Forma compacta y comparable de una expresión (sin espacios, superíndices → ^n) para rotar sin repetir.
+const canonExpr = (s) => String(s || "").toLowerCase()
+  .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]/g, (c) => "^" + "⁰¹²³⁴⁵⁶⁷⁸⁹".indexOf(c))
+  .replace(/\s+/g, "");
+// Rota una lista buscando el índice MÁS ALTO cuya forma canónica aparece en `evitarRaw` (lo ya
+// mostrado, p.ej. el resumen de la lección previa) y devuelve los índices del EJEMPLO (idx+1) y la
+// PRÁCTICA (idx+2). Si no encuentra nada, empieza en 0/1. Así cada "otro ejemplo" avanza sin repetir.
+function rotarBoton(lista, evitarRaw) {
+  const hay = canonExpr(evitarRaw);
+  let last = -1;
+  for (let i = 0; i < lista.length; i++) if (hay.includes(canonExpr(lista[i]))) last = i;
+  const n = lista.length;
+  return { ejemplo: lista[(last + 1) % n], practica: lista[(last + 2) % n] };
+}
+// Elige ejemplo + práctica: en la PRIMERA pulsación (sin seguimiento) usa la instancia dada por el
+// botón (o el primer elemento) y una práctica distinta; en "otro ejemplo" (seguimiento) rota con `evitar`.
+function elegirBoton(lista, { evitar, instancia, seguimiento }) {
+  if (!seguimiento && instancia) {
+    const practica = lista.find((x) => canonExpr(x) !== canonExpr(instancia)) || lista[0];
+    return { ejemplo: instancia, practica };
+  }
+  if (!seguimiento) return { ejemplo: lista[0], practica: lista[1] };
+  return rotarBoton(lista, evitar);
+}
+
+// ── 1) ECUACIÓN LINEAL: resuelve una ecuación paso a paso + práctica de otra distinta. ──
+const LINEALES = ["2x + 5 = 15", "3x + 2 = 14", "4x - 3 = 9", "2x - 1 = 7", "5x + 5 = 20", "3x - 6 = 6", "6x + 2 = 20", "4x + 8 = 16"];
+export function linealResueltaLSG(opts = {}) {
+  const { ejemplo, practica } = elegirBoton(LINEALES, opts);
+  const sol = solveLinearSteps(ejemplo) || solveLinearSteps(LINEALES[0]);
+  const solP = solveLinearSteps(practica) || solveLinearSteps(LINEALES[1]);
+  const dir = [
+    { tipo: "avatar", accion: "sonreir" },
+    { tipo: "hablar", texto: `Vamos a resolver ${sol.original} paso a paso. La meta es dejar la ${sol.varName} sola en un lado del igual.` },
+    { tipo: "pizarra", accion: "escribir", contenido: sol.original },
+    { tipo: "esperar", segundos: 1 },
+  ];
+  for (const s of sol.steps) {
+    dir.push({ tipo: "hablar", texto: s.explica });
+    dir.push({ tipo: "pizarra", accion: "escribir", contenido: s.escribe });
+  }
+  dir.push({ tipo: "hablar", texto: `Comprobado: ${sol.varName} = ${sol.answer}. Ahora te toca a ti con otra ecuación parecida.` });
+  dir.push({ tipo: "pizarra", accion: "escribir", contenido: solP.original });
+  dir.push({ tipo: "preguntar", texto: `¿Cuánto vale ${solP.varName} en ${solP.original}? Escribe solo el número.`, respuesta: solP.answer, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" });
+  return { escena: "lineal_resuelta", intencion: "resolver", duracion_estimada: 70, _mock: true, directivas: dir };
+}
+
+// ── 2) DERIVADAS: deriva un monomio con la regla de la potencia + práctica de otro distinto. ──
+const DERIVADAS = ["x²", "2x³", "3x²", "x⁴", "5x²", "4x³", "2x⁴", "x³"];
+function partesMonomio(m) {
+  const s = canonExpr(m).replace(/\*/g, "");
+  const mm = s.match(/^([+-]?\d*)x(?:\^(\d+))?$/);
+  if (!mm) return null;
+  const a = mm[1] === "" || mm[1] === "+" ? 1 : mm[1] === "-" ? -1 : Number(mm[1]);
+  const n = mm[2] != null ? Number(mm[2]) : 1;
+  return { a, n };
+}
+export function derivadaResueltaLSG(opts = {}) {
+  const { ejemplo, practica } = elegirBoton(DERIVADAS, opts);
+  const derE = computeDerivative("derivada de " + ejemplo) || "0";
+  const derP = computeDerivative("derivada de " + practica) || "0";
+  const pm = partesMonomio(ejemplo);
+  const explica = pm && pm.n > 1
+    ? `Regla de la potencia: bajamos el exponente ${pm.n} multiplicando delante, y al exponente le restamos 1. Aquí ${pm.a === 1 ? "" : pm.a + "·"}${pm.n} = ${pm.a * pm.n}, y el nuevo exponente es ${pm.n - 1}.`
+    : `La derivada de una recta ${ejemplo} es su pendiente, ${derE}.`;
+  const dir = [
+    { tipo: "avatar", accion: "sonreir" },
+    { tipo: "hablar", texto: `Vamos a derivar ${ejemplo}. Derivar mide qué tan rápido cambia una función. Para una potencia usamos la regla de la potencia: la derivada de xⁿ es n·xⁿ⁻¹.` },
+    { tipo: "pizarra", accion: "escribir", contenido: ejemplo },
+    { tipo: "esperar", segundos: 1 },
+    { tipo: "hablar", texto: explica },
+    { tipo: "pizarra", accion: "escribir", contenido: `derivada de ${ejemplo} = ${derE}` },
+    { tipo: "hablar", texto: `Así, la derivada de ${ejemplo} es ${derE}. Ahora te toca a ti.` },
+    { tipo: "pizarra", accion: "escribir", contenido: practica },
+    { tipo: "preguntar", texto: `¿Cuál es la derivada de ${practica}?`, respuesta: derP, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
+  ];
+  return { escena: "derivada_resuelta", intencion: "resolver", duracion_estimada: 65, _mock: true, directivas: dir };
+}
+
+// ── 3) FACTORIZACIÓN (diferencia de cuadrados): factoriza x² - N + práctica de otra distinta. ──
+const FACTORIZ = ["x² - 9", "x² - 16", "x² - 25", "x² - 4", "x² - 36", "x² - 49", "x² - 1", "x² - 64"];
+const raizDe = (expr) => { const m = canonExpr(expr).match(/-(\d+)$/); return m ? Math.sqrt(Number(m[1])) : NaN; };
+export function factorizacionResueltaLSG(opts = {}) {
+  let { ejemplo, practica } = elegirBoton(FACTORIZ, opts);
+  // Si la instancia del botón no es una diferencia de cuadrados factorizable, cae al primer preset.
+  if (!computeFactorization(ejemplo)) ejemplo = FACTORIZ[0];
+  if (!computeFactorization(practica) || canonExpr(practica) === canonExpr(ejemplo)) {
+    practica = FACTORIZ.find((x) => computeFactorization(x) && canonExpr(x) !== canonExpr(ejemplo)) || FACTORIZ[1];
+  }
+  const facE = computeFactorization(ejemplo);
+  const facP = computeFactorization(practica);
+  const r = raizDe(ejemplo), nE = r * r;
+  const dir = [
+    { tipo: "avatar", accion: "sonreir" },
+    { tipo: "hablar", texto: `Vamos a factorizar ${ejemplo}. Es una "diferencia de cuadrados": un cuadrado menos otro cuadrado. La regla es a² - b² = (a - b)(a + b).` },
+    { tipo: "pizarra", accion: "escribir", contenido: ejemplo },
+    { tipo: "esperar", segundos: 1 },
+    { tipo: "hablar", texto: `Aquí a = x y b = ${r}, porque ${r} × ${r} = ${nE}. Aplicamos la regla.` },
+    { tipo: "pizarra", accion: "escribir", contenido: `${ejemplo} = ${facE}` },
+    { tipo: "hablar", texto: `Así, ${ejemplo} se factoriza como ${facE}. Ahora te toca a ti con otra parecida.` },
+    { tipo: "pizarra", accion: "escribir", contenido: practica },
+    { tipo: "preguntar", texto: `¿Cómo se factoriza ${practica}? Escríbelo como (x - a)(x + a).`, respuesta: facP, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
+  ];
+  return { escena: "factorizacion_resuelta", intencion: "resolver", duracion_estimada: 65, _mock: true, directivas: dir };
+}
+
+// ── Detección del tema y despacho al generador correcto ──
+// Extrae de un texto una función/monomio simple ("derivada de 5x²" → "5x²"), o null.
+function extraerMonomio(texto) {
+  const m = String(texto).match(/[+-]?\d{0,3}\s*x\s*(?:\^\s*\d+|[⁰¹²³⁴⁵⁶⁷⁸⁹])?/i);
+  return m ? monomioLimpio(m[0].replace(/\s+/g, "")) : null;
+}
+// Extrae una diferencia de cuadrados factorizable ("...factoriza x² - 9..." → "x² - 9"), o null.
+function extraerDifCuadrados(texto) {
+  const m = String(texto).match(/[a-z]\s*(?:\^\s*2|[²])\s*-\s*\d+/i);
+  return m && computeFactorization(m[0]) ? m[0] : null;
+}
+
+// Devuelve el LSG determinista de uno de los 4 botones, o null si la consulta no es de ninguno de
+// ellos (→ el servidor sigue el flujo normal con Gemini para temas libres/avanzados, Nivel 3).
+//   { query, seguimiento, contexto, currentTopic, previo }
+export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", currentTopic = "", previo = "" } = {}) {
+  const SEG_OTRO = new Set(["continuacion", "practicar", "resolver_otro"]);
+  const esSeg = SEG_OTRO.has(seguimiento);
+  // En "otro ejemplo" el tema es el ACTIVO (contexto); en una pulsación nueva, la propia consulta.
+  const base = (esSeg && (contexto || currentTopic)) ? (contexto || currentTopic) : query;
+  const n = normBoton(base);
+  const commonRet = (tema, lsg) => ({ tema, escena: lsg.escena, intencion: "resolver", modelo: `${tema}-resuelto`, lsg });
+
+  // 1) DERIVADAS. Si nombra una función NO polinómica (trig, log, raíz, eˣ) → null (lo hace Gemini, Nivel 3).
+  if (/deriv/.test(n)) {
+    if (/\b(sen|sin|cos|tan|cot|sec|csc|log|ln|exp|ra[ií]z|sqrt)\b|√|e\s*\^/.test(n)) return null;
+    const instancia = extraerMonomio(base);
+    return commonRet("derivada", derivadaResueltaLSG({ evitar: previo, instancia, seguimiento: esSeg }));
+  }
+
+  // 2) FACTORIZACIÓN (diferencia de cuadrados). Con una expresión concreta NO factorizable así
+  //    (trinomio, etc.) → null (Gemini). Genérica ("factorizar") o una diferencia de cuadrados → determinista.
+  if (/factoriz|diferencia de cuadrados/.test(n)) {
+    const instancia = extraerDifCuadrados(base);
+    // Hay una expresión con x² pero NO es diferencia de cuadrados factorizable → que lo intente Gemini.
+    if (!instancia && /[a-z]\s*(?:\^\s*2|[²])/i.test(base) && !/factoriz/.test(n)) return null;
+    if (!instancia && /[a-z]\s*(?:\^\s*2|[²])\s*[+]/i.test(base)) return null; // trinomio "x² + 5x + 6"
+    return commonRet("factorizacion", factorizacionResueltaLSG({ evitar: previo, instancia, seguimiento: esSeg }));
+  }
+
+  // 3) FRACCIONES (botón "ejercicio/ejemplo de fracciones", sin una fracción concreta en el texto).
+  if (/fracc/.test(n) && !/\d\s*\/\s*\d/.test(base)) {
+    const evitarFrac = (String(previo).match(/\d+\s*\/\s*\d+\s*[+\-]\s*\d+\s*\/\s*\d+/) || [])[0] || "";
+    return commonRet("fraccion", fraccionResueltaLSG(evitarFrac));
+  }
+
+  // 4) ECUACIÓN LINEAL. Una ecuación lineal concreta ("2x + 5 = 15") o el tema genérico ("ecuación lineal").
+  //    Se usa la ecuación LIMPIA (sol.original), no la frase entera ("Resuelve 2x + 5 = 15"), para que la
+  //    práctica se elija DISTINTA de verdad (si no, "2x + 5 = 15" del preset parecía distinta de la frase).
+  const solBase = solveLinearSteps(base);
+  const instLin = solBase ? solBase.original : null;
+  if (instLin || /\becuaci[oó]n(?:es)?\b|\blineal(?:es)?\b/.test(n)) {
+    return commonRet("lineal", linealResueltaLSG({ evitar: previo, instancia: instLin, seguimiento: esSeg }));
+  }
+
+  return null; // no es ninguno de los 4 botones → flujo normal (Gemini)
 }
 
 // Fracciones (mismo denominador).

@@ -10,7 +10,7 @@
 
 import { classifyIntent } from "../src/classifier.js";
 import { processLSG, solveLinearFromText, solveFractionFromText, resultadoFromVerificacion, computeAnswer, corregirIgualdades, otroEjemploResuelto, processStepByStep, computeDerivative, monomioLimpio, computeFactorization } from "../src/preLight.js";
-import { mockLSG, fraccionResueltaLSG } from "../src/lsgPrompt.js";
+import { mockLSG, fraccionResueltaLSG, leccionBotonLSG } from "../src/lsgPrompt.js";
 import { generateLSG } from "../src/geminiClient.js";
 import { checkAnswer, flattenLSG, PSELight, buildHint } from "../public/pseLight.js";
 import { normalizeForSpeech, chunkForSpeech } from "../public/tts.js";
@@ -146,6 +146,67 @@ async function unitTests() {
   check("fracción resuelta: hay UNA práctica para el alumno (calificable)", fr1.filter((p) => p.tipo === "preguntar").length === 1 && /^\d+\/\d+$/.test(String(qFr?.respuesta || "")));
   check("fracción resuelta: la práctica usa OTRA fracción (≠ la resuelta)", !!fracPract && fracPract[0].replace(/\s/g, "") !== (board1[0] || "").replace(/\s/g, ""));
   check("fracción resuelta: la práctica se califica bien (respuesta correcta → correcto)", checkAnswer(qFr?.respuesta, qFr?.respuesta).correct === true);
+
+  // ── LOS 4 BOTONES ("Tu consulta"): flujo UNIFICADO y DETERMINISTA (ejemplo resuelto + práctica
+  //    calificable + otro-ejemplo distinto). Cada uno pasa por su propio generador AISLADO; se prueban
+  //    todos con la MISMA batería para garantizar que los cuatro funcionan igual (y no se estorban).
+  const correrBoton = (body) => {
+    const b = leccionBotonLSG(body);
+    if (!b) return null;
+    const { lsg, pasos } = processLSG(b.lsg, b.intencion, body.query || "");
+    const flat = flattenLSG(lsg);
+    const q = flat.find((d) => d.tipo === "preguntar");
+    const qi = flat.indexOf(q);
+    let board = ""; for (let i = qi - 1; i >= 0; i--) if (flat[i].tipo === "pizarra") { board = flat[i].contenido; break; }
+    const pizarras = flat.filter((d) => d.tipo === "pizarra").map((d) => d.contenido);
+    const hablar2 = flat.filter((d) => d.tipo === "hablar").slice(0, 2).map((d) => d.texto).join(" ");
+    return { tema: b.tema, modelo: b.modelo, intencion: b.intencion, lsg, flat, q, board, pizarras, hablar2,
+      nPreg: flat.filter((d) => d.tipo === "preguntar").length };
+  };
+  const bateriaBoton = (label, body, expTema) => {
+    const r = correrBoton(body);
+    check(`botón [${label}]: despacha al tema ${expTema}`, !!r && r.tema === expTema, r ? `tema=${r.tema}` : "null");
+    if (!r) return null;
+    check(`botón [${label}]: determinista (modelo *-resuelto)`, /-resuelto$/.test(r.modelo), r.modelo);
+    check(`botón [${label}]: intención resolver`, r.intencion === "resolver", r.intencion);
+    check(`botón [${label}]: EXACTAMENTE una práctica calificable`, r.nPreg === 1 && !!(r.q && String(r.q.respuesta || "").trim()), `nPreg=${r.nPreg} resp=${r.q?.respuesta}`);
+    check(`botón [${label}]: la respuesta se califica bien contra sí misma`, !!r.q && checkAnswer(r.q.respuesta, r.q.respuesta).correct === true);
+    check(`botón [${label}]: el enunciado de la práctica coincide con el board`, !!r.board && (r.q.texto.replace(/\s+/g, " ").includes(r.board.replace(/\s+/g, " ").replace(/\s*=\s*\?$/, "").trim()) || r.q.texto.includes(r.board)), `board=${r.board}`);
+    return r;
+  };
+  // 1) Ecuación lineal (botón "Resuelve 2x + 5 = 15").
+  const bLin = bateriaBoton("lineal", { query: "Resuelve 2x + 5 = 15" }, "lineal");
+  check("botón lineal: el EJEMPLO es la ecuación del botón (2x + 5 = 15)", !!bLin && bLin.pizarras.some((p) => p.includes("2x + 5 = 15")));
+  check("botón lineal: la PRÁCTICA es DISTINTA del ejemplo", !!bLin && !bLin.q.texto.includes("2x + 5 = 15"));
+  // 2) Derivadas (botón "Enséñame derivadas").
+  const bDer = bateriaBoton("derivadas", { query: "Enséñame derivadas" }, "derivada");
+  check("botón derivadas: la respuesta es la derivada correcta (monomio)", !!bDer && /^[+-]?\d*x?[²³⁰¹⁴⁵⁶⁷⁸⁹]?$|^\d+$/.test((bDer.q.respuesta || "").replace(/\s/g, "")));
+  check("botón derivadas: el ejemplo muestra 'derivada de … = …'", !!bDer && bDer.pizarras.some((p) => /derivada de .* = /.test(p)));
+  // 3) Factorización (botón "Explícame por qué se factoriza x² - 9").
+  const bFac = bateriaBoton("factorización", { query: "Explícame por qué se factoriza x² - 9" }, "factorizacion");
+  check("botón factorización: el ejemplo x²-9 = (x-3)(x+3)", !!bFac && bFac.pizarras.some((p) => p.replace(/\s/g, "").includes("x²-9=(x-3)(x+3)")));
+  check("botón factorización: la respuesta es un producto de binomios", !!bFac && /\)\s*\(/.test(bFac.q.respuesta || ""));
+  // 4) Fracciones (botón "Dame un ejercicio de fracciones").
+  const bFr = bateriaBoton("fracciones", { query: "Dame un ejercicio de fracciones" }, "fraccion");
+  check("botón fracciones: la respuesta es una fracción", !!bFr && /^\d+\/\d+$|^\d+$/.test((bFr.q.respuesta || "").replace(/\s/g, "")));
+  // FOLLOW-UP "otro ejemplo": debe rotar a un ejemplo/práctica NUEVOS (no repetir), en los 4 temas.
+  for (const [label, contexto, expTema] of [
+    ["lineal", "Resuelve 2x + 5 = 15", "lineal"],
+    ["derivadas", "Enséñame derivadas", "derivada"],
+    ["factorización", "Explícame por qué se factoriza x² - 9", "factorizacion"],
+    ["fracciones", "Dame un ejercicio de fracciones", "fraccion"],
+  ]) {
+    const first = correrBoton({ query: contexto });
+    const otro = correrBoton({ query: "dame otro ejemplo", seguimiento: "continuacion", contexto, previo: first.hablar2 });
+    check(`botón [${label}] 'otro ejemplo': mismo tema (${expTema})`, !!otro && otro.tema === expTema);
+    check(`botón [${label}] 'otro ejemplo': ejemplo NUEVO (no repite el primero)`, !!otro && otro.hablar2 !== first.hablar2);
+    check(`botón [${label}] 'otro ejemplo': sigue siendo calificable`, !!otro && otro.nPreg === 1 && !!String(otro.q.respuesta || "").trim());
+  }
+  // AISLAMIENTO / NO-CAPTURA: temas libres o avanzados NO se capturan (→ Gemini, Nivel 3).
+  check("botón: 'derivada de sen(x)' → null (Gemini, no monomio)", leccionBotonLSG({ query: "derivada de sen(x)" }) === null);
+  check("botón: 'factoriza x² + 5x + 6' (trinomio) → null (Gemini)", leccionBotonLSG({ query: "factoriza x² + 5x + 6" }) === null);
+  check("botón: saludo → null", leccionBotonLSG({ query: "hola cómo estás" }) === null);
+  check("botón: tema libre ('teorema de Pitágoras') → null", leccionBotonLSG({ query: "explícame el teorema de Pitágoras" }) === null);
   check("hint: fracciones → denominador", /denominador/.test(buildHint("¿2/5 + 1/5?", "2/5 + 1/5", 1)));
   check("hint: problema verbal → fórmula", /f[oó]rmula|operaci/.test(buildHint("¿velocidad?", "Distancia = 200, Tiempo = 25", 1)));
   // Estructuralmente NO puede revelar la respuesta: buildHint no recibe el valor esperado y su
@@ -654,20 +715,45 @@ async function liveGate(q, intentEsperada, minHablar) {
   }
 }
 
-async function liveTests() {
-  // Cada consulta se corre varias veces (QA_REPS, por defecto 2) para cazar fallos
-  // INTERMITENTES: una lección puede salir bien una vez y sin explicaciones la otra.
-  const REPS = Number(process.env.QA_REPS || 1); // ojo: cada lección consume créditos de Gemini
-  console.log(`\n[2] Producción real — ${BASE}  (x${REPS} cada consulta)`);
-  const cases = [
-    ["desarrolla 2x + x = 12", "resolver", 3],
-    ["enséñame ecuaciones de primer grado", "aprender", 3],
-    ["¿por qué se factoriza x² - 9?", "explicar", 2],
-    ["dame un ejercicio de fracciones", "practicar", 2],
-  ];
-  for (const [q, intent, minH] of cases) {
-    for (let r = 0; r < REPS; r++) await liveGate(q, intent, minH);
+// Comprueba EN PRODUCCIÓN una lección de BOTÓN determinista (los 4 chips): debe venir del contenido
+// local (fuente=local, modelo *-resuelto), con UNA práctica calificable y respuesta correcta. Así se
+// confirma que el despliegue sirve el flujo unificado de los 4 botones (no depende de la cuota de Gemini).
+async function liveBoton(q) {
+  console.log(`\n   · Botón: "${q}"`);
+  const d = await fetchLesson(q);
+  if (!d) { check(`[${q}] responde 200`, false, "sin respuesta tras 4 intentos"); return; }
+  check(`[${q}] determinista (fuente=local)`, d.fuente_ia === "local", `fue ${d.fuente_ia} (${d.modelo})`);
+  check(`[${q}] modelo *-resuelto`, /-resuelto$/.test(d.modelo || ""), `modelo=${d.modelo}`);
+  check(`[${q}] intención = resolver`, d.intencion === "resolver", `fue ${d.intencion}`);
+  const p = d.pasos || [];
+  const preg = p.filter((x) => x.tipo === "preguntar");
+  check(`[${q}] una sola práctica calificable`, preg.length === 1 && !!(preg[0] && String(preg[0].respuesta || "").trim()), `preguntas=${preg.length} resp=${preg[0]?.respuesta}`);
+  const all = p.map((x) => `${x.texto || ""} ${x.contenido || ""}`).join(" ");
+  check(`[${q}] sin signos "$"`, !all.includes("$"));
+  check(`[${q}] sin LaTeX (\\comando)`, !/\\[a-zA-Z]+/.test(all));
+  if (preg[0]) {
+    const real = refSolve(preg[0].texto);
+    if (real !== null && preg[0].respuesta) check(`[${q}] respuesta correcta (${real})`, checkAnswer(preg[0].respuesta, real).correct, `sistema=${preg[0].respuesta}`);
   }
+}
+
+async function liveTests() {
+  // Cada consulta se corre varias veces (QA_REPS, por defecto 1) para cazar fallos INTERMITENTES.
+  const REPS = Number(process.env.QA_REPS || 1); // ojo: cada lección con IA consume créditos de Gemini
+  console.log(`\n[2] Producción real — ${BASE}  (x${REPS} cada consulta)`);
+  // Los 4 BOTONES de "Tu consulta": flujo unificado y determinista (mismo comportamiento en los 4).
+  const botones = [
+    "Resuelve 2x + 5 = 15",
+    "Enséñame derivadas",
+    "Explícame por qué se factoriza x² - 9",
+    "Dame un ejercicio de fracciones",
+  ];
+  for (const q of botones) {
+    for (let r = 0; r < REPS; r++) await liveBoton(q);
+  }
+  // Tema LIBRE (no es de los 4 botones): confirma que la vía Gemini (Nivel 2/3) sigue viva. Si Gemini
+  // está sin cuota (429), liveGate lo avisa y omite las validaciones dependientes de la IA (no falla).
+  for (let r = 0; r < REPS; r++) await liveGate("enséñame a multiplicar", "aprender", 3);
 }
 
 // ---------- Ejecutar ----------
