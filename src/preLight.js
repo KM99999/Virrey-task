@@ -797,7 +797,11 @@ export function processLSG(rawLsg, intent, mensaje = "") {
   }
 
   // Ramificación ligera: adjunta un ejemplo alternativo RESUELTO para mostrarlo si el alumno falla.
-  attachAltExample(lsg, pasos);
+  // NO en las escenas confiables (los 4 botones): ahí el ejemplo alterno determinista (p.ej. "2x = 6")
+  // ensuciaba la pizarra Y podía REVELAR la respuesta (su solución coincidía con la de la práctica).
+  // El flujo del botón es limpio: fallo → pista del método (buildHint) + reintento; otro ejemplo SOLO
+  // si el alumno lo pide (seguimiento "otro ejemplo" → nueva lección rotada).
+  if (!escenaConfiable) attachAltExample(lsg, pasos);
 
   // Poda de RELLENO descontrolado: la IA a veces emite una cola de "esperar"/"puntero" (se han visto 41
   // pausas seguidas TRAS la pregunta) que hace avanzar el cronograma sin contenido. Se recorta aquí.

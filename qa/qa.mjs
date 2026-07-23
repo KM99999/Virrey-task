@@ -171,6 +171,7 @@ async function unitTests() {
     check(`botón [${label}]: intención resolver`, r.intencion === "resolver", r.intencion);
     check(`botón [${label}]: EXACTAMENTE una práctica calificable`, r.nPreg === 1 && !!(r.q && String(r.q.respuesta || "").trim()), `nPreg=${r.nPreg} resp=${r.q?.respuesta}`);
     check(`botón [${label}]: la respuesta se califica bien contra sí misma`, !!r.q && checkAnswer(r.q.respuesta, r.q.respuesta).correct === true);
+    check(`botón [${label}]: NO adjunta ejemplo alterno (no ensucia/revela al fallar)`, !!r.q && !r.q.otro_ejemplo);
     check(`botón [${label}]: el enunciado de la práctica coincide con el board`, !!r.board && (r.q.texto.replace(/\s+/g, " ").includes(r.board.replace(/\s+/g, " ").replace(/\s*=\s*\?$/, "").trim()) || r.q.texto.includes(r.board)), `board=${r.board}`);
     return r;
   };
