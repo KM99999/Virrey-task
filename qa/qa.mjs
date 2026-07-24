@@ -297,6 +297,18 @@ async function unitTests() {
   check("integral: '2 + 2 = 5' → 4", corregirIgualdades("2 + 2 = 5").texto === "2 + 2 = 4");
   check("integral: '5² = 20' → 25", corregirIgualdades("5² = 20").texto === "5² = 25");
   check("integral: NO toca ecuación algebraica '2x + 5 = 15'", corregirIgualdades("2x + 5 = 15").texto === "2x + 5 = 15");
+  // VARIABLE con subíndice (x1, x2 de una cuadrática): NO es una igualdad numérica; el dígito de "x1"
+  // no debe leerse como el 1 de "1 = 1/2". Antes "x1 = 1/2" se corrompía dejando solo "x1".
+  check("integral: NO corrompe 'x1 = 1/2' (variable con subíndice)", corregirIgualdades("x1 = 1/2").texto === "x1 = 1/2" && corregirIgualdades("x1 = 1/2").correcciones === 0);
+  check("integral: NO corrompe 'x2 = -3'", corregirIgualdades("x2 = -3").texto === "x2 = -3");
+  check("integral: NO corrompe 'x1 = 2/4' (subíndice + fracción)", corregirIgualdades("x1 = 2/4").texto === "x1 = 2/4");
+  const subLSG = processLSG({ escena: "q", intencion: "resolver", directivas: [
+    { tipo: "hablar", texto: "Con la fórmula cuadrática obtenemos las soluciones." },
+    { tipo: "pizarra", accion: "escribir", contenido: "x1 = 1/2" },
+    { tipo: "pizarra", accion: "escribir", contenido: "x2 = -3" },
+    { tipo: "preguntar", texto: "¿Entendiste?" }] }, "resolver");
+  const subPiz = subLSG.pasos.filter((p) => p.tipo === "pizarra").map((p) => p.contenido);
+  check("cuadrática: las soluciones x1/x2 se muestran completas (no colapsan a 'x1'/'x2')", subPiz.includes("x1 = 1/2") && subPiz.includes("x2 = -3"));
   check("integral: NO toca operación correcta '20 ÷ 5 = 4'", corregirIgualdades("20 ÷ 5 = 4").texto === "20 ÷ 5 = 4");
   // CADENA de igualdad completa "A = B = C": TODOS los términos deben valer lo mismo. Antes se
   // comparaban pares sueltos y una igualdad cierta por casualidad ("1/2 = 1/2") tapaba un tramo falso.

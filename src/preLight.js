@@ -502,6 +502,10 @@ export function corregirIgualdades(texto) {
     // donde el regex podría capturar solo el trozo "5 = 15".
     const antes = texto.slice(0, offset).replace(/\s+$/, "");
     if (/[+\-*\/×÷·]$/.test(antes)) return run;
+    // El dígito INICIAL va PEGADO a una letra: es una VARIABLE con subíndice ("x1", "x2", "a2"), NO una
+    // igualdad numérica. Sin este guard, "x1 = 1/2" se leía como "1 = 1/2" → se "corregía" y colapsaba,
+    // dejando solo "x1" (defecto en soluciones de cuadráticas x₁/x₂).
+    if (/[a-zA-Z]/.test(texto[offset - 1] || "")) return run;
     const sig = texto[offset + run.length] || "";
     if (/[a-zA-Z(]/.test(sig)) return run;
     const before = correcciones;
