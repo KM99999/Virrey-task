@@ -203,6 +203,41 @@ async function unitTests() {
     check(`botón [${label}] 'otro ejemplo': ejemplo NUEVO (no repite el primero)`, !!otro && otro.hablar2 !== first.hablar2);
     check(`botón [${label}] 'otro ejemplo': sigue siendo calificable`, !!otro && otro.nPreg === 1 && !!String(otro.q.respuesta || "").trim());
   }
+  // ── NIVELES DE DIFICULTAD en los 4 temas: "más difícil" debe dar un ejercicio DE VERDAD más difícil
+  //    (antes caía a una lista trivial y devolvía "2x = 6", MÁS FÁCIL que el propio ejemplo).
+  const nivelBoton = (contexto, seg) => correrBoton({ query: seg === "mas_dificil" ? "presentar un problema más difícil" : "algo más fácil", seguimiento: seg, contexto, previo: "" });
+  const TEMAS_NIVEL = [
+    ["lineal", "Resuelve 2x + 5 = 15"],
+    ["derivada", "Enséñame derivadas"],
+    ["factorizacion", "Explícame por qué se factoriza x² - 9"],
+    ["fraccion", "Dame un ejercicio de fracciones"],
+  ];
+  for (const [tema, contexto] of TEMAS_NIVEL) {
+    for (const seg of ["mas_facil", "mas_dificil"]) {
+      const r = nivelBoton(contexto, seg);
+      check(`nivel [${tema}/${seg}]: mantiene el tema y es determinista`, !!r && r.tema === tema, r ? r.tema : "null");
+      if (!r) continue;
+      check(`nivel [${tema}/${seg}]: práctica calificable con respuesta`, r.nPreg === 1 && !!String(r.q.respuesta || "").trim());
+      check(`nivel [${tema}/${seg}]: la respuesta se califica bien`, checkAnswer(r.q.respuesta, r.q.respuesta).correct === true);
+    }
+    // El ejercicio DIFÍCIL debe ser DISTINTO del normal (no repetir la misma lista trivial).
+    const normal = correrBoton({ query: contexto });
+    const dificil = nivelBoton(contexto, "mas_dificil");
+    check(`nivel [${tema}]: 'más difícil' NO repite el ejercicio del nivel normal`, !!dificil && dificil.pizarras[0] !== normal.pizarras[0], `normal=${normal.pizarras[0]} dificil=${dificil?.pizarras[0]}`);
+  }
+  // Las respuestas DIFÍCILES son matemáticamente correctas (verificación independiente).
+  const dLin = nivelBoton("Resuelve 2x + 5 = 15", "mas_dificil");
+  check("nivel lineal difícil: agrupa términos ('4x + 3x - 5 = 30') y la respuesta es correcta", /\dx\s*[+-]\s*\dx/.test(dLin.pizarras[0]) && dLin.q.respuesta === refSolve(dLin.q.texto));
+  const dDer = nivelBoton("Enséñame derivadas", "mas_dificil");
+  check("nivel derivadas difícil: es un POLINOMIO (varios términos)", /[+-]/.test(dDer.pizarras[0].replace(/^\s*-/, "")));
+  check("nivel derivadas difícil: derivada correcta ('2x³ + 5x' → '6x² + 5')", checkAnswer(dDer.q.respuesta, computeDerivative("derivada de " + dDer.board)).correct === true);
+  const dFac = nivelBoton("Explícame por qué se factoriza x² - 9", "mas_dificil");
+  check("nivel factorización difícil: lleva COEFICIENTE en x² (4x² - 25…)", /^\s*\d+x²/.test(dFac.pizarras[0]));
+  check("nivel factorización difícil: factorización correcta", dFac.q.respuesta === computeFactorization(dFac.board));
+  const dFr = nivelBoton("Dame un ejercicio de fracciones", "mas_dificil");
+  check("nivel fracciones difícil: denominadores DISTINTOS", (() => { const m = dFr.pizarras[0].match(/(\d+)\/(\d+)\s*\+\s*(\d+)\/(\d+)/); return !!m && m[2] !== m[4]; })());
+  check("nivel fracciones difícil: suma con común denominador correcta", dFr.q.respuesta === solveFractionFromText(dFr.board));
+
   // AISLAMIENTO / NO-CAPTURA: temas libres o avanzados NO se capturan (→ Gemini, Nivel 3).
   check("botón: 'derivada de sen(x)' → null (Gemini, no monomio)", leccionBotonLSG({ query: "derivada de sen(x)" }) === null);
   check("botón: 'factoriza x² + 5x + 6' (trinomio) → null (Gemini)", leccionBotonLSG({ query: "factoriza x² + 5x + 6" }) === null);

@@ -473,33 +473,80 @@ function mockOperacion({ a, b, r, tema }, intent) {
 // que el ALUMNO lo responda (calificable: correcto → lección completada; incorrecto → pista + reintento).
 // Rota por una lista para que cada "otro ejemplo" (se pasa la fracción resuelta anterior en `evitar`)
 // presente un resuelto y una práctica NUEVOS. Aritmética garantizada (no depende del modelo).
-export function fraccionResueltaLSG(evitar) {
-  const SUMAS = [[2, 3, 6], [1, 2, 4], [1, 3, 5], [2, 5, 8], [3, 4, 9], [1, 4, 7], [2, 3, 10], [1, 5, 11]];
+// FÁCIL/NORMAL: mismo denominador (se suman los numeradores). DIFÍCIL: denominadores DISTINTOS, que
+// obliga a buscar el mínimo común denominador y convertir ambas fracciones antes de sumar.
+//   [n1, n2, den]      → n1/den + n2/den            (mismo denominador)
+//   [n1, d1, n2, d2]   → n1/d1  + n2/d2             (denominadores distintos)
+const FRACCIONES = {
+  facil: [[1, 2, 4], [1, 3, 5], [2, 3, 6], [1, 5, 7], [1, 2, 8], [2, 3, 8]],
+  normal: [[2, 3, 6], [1, 2, 4], [1, 3, 5], [2, 5, 8], [3, 4, 9], [1, 4, 7], [2, 3, 10], [1, 5, 11]],
+  dificil: [[1, 2, 1, 3], [1, 4, 1, 6], [2, 3, 1, 4], [3, 5, 1, 2], [1, 3, 2, 5], [3, 4, 1, 6]],
+};
+const textoFrac = (e) => (e.length === 3 ? `${e[0]}/${e[2]} + ${e[1]}/${e[2]}` : `${e[0]}/${e[1]} + ${e[2]}/${e[3]}`);
+// Acepta un string (compatibilidad: `fraccionResueltaLSG(evitar)`) o { evitar, nivel }.
+export function fraccionResueltaLSG(opts) {
+  const o = typeof opts === "string" ? { evitar: opts } : (opts || {});
+  const nivel = NIVELES.includes(o.nivel) ? o.nivel : "normal";
+  const evitar = typeof o.evitar === "string" ? o.evitar : "";
   const gcd = (a, b) => { a = Math.abs(a); b = Math.abs(b); while (b) { [a, b] = [b, a % b]; } return a || 1; };
-  const simplif = (n1, n2, den) => { const s = n1 + n2, g = gcd(s, den); return { suma: s, g, final: g > 1 ? `${s / g}/${den / g}` : `${s}/${den}`, simp: g > 1 ? `${s / g}/${den / g}` : null }; };
-  const ev = typeof evitar === "string" ? evitar.replace(/\s+/g, "") : "";
-  // Rota al SIGUIENTE de la lista tras la fracción anterior; la práctica usa la siguiente (distinta).
-  const evIdx = SUMAS.findIndex(([a, b, c]) => `${a}/${c}+${b}/${c}` === ev);
-  const [a1, a2, ad] = SUMAS[(evIdx + 1) % SUMAS.length];  // ejemplo RESUELTO (lo resuelve el sistema)
-  const [b1, b2, bd] = SUMAS[(evIdx + 2) % SUMAS.length];  // PRÁCTICA (la resuelve el alumno) — distinta
-  const A = simplif(a1, a2, ad), B = simplif(b1, b2, bd);
-  const dir = [
-    { tipo: "avatar", accion: "sonreir" },
-    { tipo: "hablar", texto: `Vamos a resolver juntos esta suma de fracciones: ${a1}/${ad} + ${a2}/${ad}. Fíjate que las dos tienen el mismo número de abajo, el denominador ${ad}.` },
-    { tipo: "pizarra", accion: "escribir", contenido: `${a1}/${ad} + ${a2}/${ad}` },
-    { tipo: "esperar", segundos: 1 },
-    { tipo: "hablar", texto: `Con el mismo denominador, solo se suman los números de arriba (los numeradores): ${a1} + ${a2} = ${A.suma}. El denominador ${ad} se queda igual.` },
-    { tipo: "pizarra", accion: "escribir", contenido: `${a1}/${ad} + ${a2}/${ad} = (${a1} + ${a2})/${ad} = ${A.suma}/${ad}` },
-    { tipo: "esperar", segundos: 1 },
-  ];
-  if (A.simp) {
-    dir.push({ tipo: "hablar", texto: `Y se puede simplificar: ${A.suma} y ${ad} se dividen entre ${A.g}, así que ${A.suma}/${ad} = ${A.simp}.` });
-    dir.push({ tipo: "pizarra", accion: "escribir", contenido: `${A.suma}/${ad} = ${A.simp}` });
+  const fmt = (n, d) => (d === 1 ? String(n) : `${n}/${d}`);
+  // Mismo denominador: se suman numeradores y se simplifica.
+  const mismoDen = (e) => {
+    const [n1, n2, d] = e, s = n1 + n2, g = gcd(s, d);
+    return { texto: textoFrac(e), n1, n2, d, suma: s, g, final: fmt(s / g, d / g), simp: g > 1 ? fmt(s / g, d / g) : null };
+  };
+  // Distinto denominador: mínimo común múltiplo, se convierte cada fracción y se suma.
+  const distintoDen = (e) => {
+    const [n1, d1, n2, d2] = e;
+    const L = (d1 * d2) / gcd(d1, d2);
+    const a = n1 * (L / d1), b = n2 * (L / d2), s = a + b, g = gcd(s, L);
+    return { texto: textoFrac(e), n1, d1, n2, d2, L, a, b, suma: s, g, final: fmt(s / g, L / g), simp: g > 1 ? fmt(s / g, L / g) : null };
+  };
+  const lista = FRACCIONES[nivel];
+  // Rota a la SIGUIENTE tras la ya mostrada; la práctica usa la siguiente (siempre distinta).
+  const hay = canonExpr(evitar);
+  let last = -1;
+  for (let i = 0; i < lista.length; i++) if (hay.includes(canonExpr(textoFrac(lista[i])))) last = i;
+  const eA = lista[(last + 1) % lista.length], eB = lista[(last + 2) % lista.length];
+  const dificil = nivel === "dificil";
+  const A = dificil ? distintoDen(eA) : mismoDen(eA);
+  const B = dificil ? distintoDen(eB) : mismoDen(eB);
+
+  const dir = [{ tipo: "avatar", accion: "sonreir" }];
+  if (!dificil) {
+    dir.push(
+      { tipo: "hablar", texto: `Vamos a resolver juntos esta suma de fracciones: ${A.texto}. Fíjate que las dos tienen el mismo número de abajo, el denominador ${A.d}.` },
+      { tipo: "pizarra", accion: "escribir", contenido: A.texto },
+      { tipo: "esperar", segundos: 1 },
+      { tipo: "hablar", texto: `Con el mismo denominador, solo se suman los números de arriba (los numeradores): ${A.n1} + ${A.n2} = ${A.suma}. El denominador ${A.d} se queda igual.` },
+      { tipo: "pizarra", accion: "escribir", contenido: `${A.texto} = (${A.n1} + ${A.n2})/${A.d} = ${A.suma}/${A.d}` },
+      { tipo: "esperar", segundos: 1 },
+    );
+    if (A.simp) {
+      dir.push({ tipo: "hablar", texto: `Y se puede simplificar: ${A.suma} y ${A.d} se dividen entre ${A.g}, así que ${A.suma}/${A.d} = ${A.simp}.` });
+      dir.push({ tipo: "pizarra", accion: "escribir", contenido: `${A.suma}/${A.d} = ${A.simp}` });
+    }
+  } else {
+    dir.push(
+      { tipo: "hablar", texto: `Vamos a resolver ${A.texto}. Aquí los denominadores son DISTINTOS (${A.d1} y ${A.d2}), así que no podemos sumar todavía: primero hay que igualarlos.` },
+      { tipo: "pizarra", accion: "escribir", contenido: A.texto },
+      { tipo: "esperar", segundos: 1 },
+      { tipo: "hablar", texto: `Buscamos el mínimo común denominador de ${A.d1} y ${A.d2}: es ${A.L}. Convertimos cada fracción a denominador ${A.L} multiplicando arriba y abajo por lo mismo.` },
+      { tipo: "pizarra", accion: "escribir", contenido: `${A.n1}/${A.d1} = ${A.a}/${A.L}` },
+      { tipo: "pizarra", accion: "escribir", contenido: `${A.n2}/${A.d2} = ${A.b}/${A.L}` },
+      { tipo: "esperar", segundos: 1 },
+      { tipo: "hablar", texto: `Ahora que las dos tienen el mismo denominador, sumamos los numeradores: ${A.a} + ${A.b} = ${A.suma}.` },
+      { tipo: "pizarra", accion: "escribir", contenido: `${A.a}/${A.L} + ${A.b}/${A.L} = ${A.suma}/${A.L}` },
+    );
+    if (A.simp) {
+      dir.push({ tipo: "hablar", texto: `Y se simplifica: ${A.suma} y ${A.L} se dividen entre ${A.g}, así que ${A.suma}/${A.L} = ${A.simp}.` });
+      dir.push({ tipo: "pizarra", accion: "escribir", contenido: `${A.suma}/${A.L} = ${A.simp}` });
+    }
   }
-  dir.push({ tipo: "hablar", texto: `¡Y listo! ${a1}/${ad} + ${a2}/${ad} = ${A.final}. Ahora te toca a ti con otra suma parecida.` });
+  dir.push({ tipo: "hablar", texto: `¡Y listo! ${A.texto} = ${A.final}. Ahora te toca a ti con otra suma parecida.` });
   // PRÁCTICA: otra fracción DISTINTA que resuelve el alumno (calificable).
-  dir.push({ tipo: "pizarra", accion: "escribir", contenido: `${b1}/${bd} + ${b2}/${bd} = ?` });
-  dir.push({ tipo: "preguntar", texto: `¿Cuánto es ${b1}/${bd} + ${b2}/${bd}? Escríbelo en su forma más simple.`, respuesta: B.final, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" });
+  dir.push({ tipo: "pizarra", accion: "escribir", contenido: `${B.texto} = ?` });
+  dir.push({ tipo: "preguntar", texto: `¿Cuánto es ${B.texto}? Escríbelo en su forma más simple.`, respuesta: B.final, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" });
   return { escena: "fraccion_resuelta", intencion: "resolver", duracion_estimada: 60, _mock: true, directivas: dir };
 }
 
@@ -528,9 +575,17 @@ function rotarBoton(lista, evitarRaw) {
   const n = lista.length;
   return { ejemplo: lista[(last + 1) % n], practica: lista[(last + 2) % n] };
 }
-// Elige ejemplo + práctica: en la PRIMERA pulsación (sin seguimiento) usa la instancia dada por el
-// botón (o el primer elemento) y una práctica distinta; en "otro ejemplo" (seguimiento) rota con `evitar`.
-function elegirBoton(lista, { evitar, instancia, seguimiento }) {
+// NIVELES de dificultad. Cada tema tiene TRES listas reales (fácil / normal / difícil), no una sola:
+// al pedir "algo más difícil" el ejercicio debe ser DE VERDAD más difícil (antes se caía siempre en la
+// misma lista trivial —"2x = 6"— y pedir "más difícil" devolvía un ejercicio MÁS FÁCIL que el ejemplo).
+const NIVELES = ["facil", "normal", "dificil"];
+const listaNivel = (listas, nivel) => listas[NIVELES.includes(nivel) ? nivel : "normal"];
+
+// Elige ejemplo + práctica DENTRO del nivel pedido: en la PRIMERA pulsación (sin seguimiento) usa la
+// instancia dada por el botón (o el primer elemento) y una práctica distinta; en un seguimiento
+// ("otro ejemplo", "más fácil", "más difícil") rota dentro de la lista de ESE nivel con `evitar`.
+function elegirBoton(listas, { evitar, instancia, seguimiento, nivel } = {}) {
+  const lista = listaNivel(listas, nivel);
   if (!seguimiento && instancia) {
     const practica = lista.find((x) => canonExpr(x) !== canonExpr(instancia)) || lista[0];
     return { ejemplo: instancia, practica };
@@ -540,11 +595,18 @@ function elegirBoton(lista, { evitar, instancia, seguimiento }) {
 }
 
 // ── 1) ECUACIÓN LINEAL: resuelve una ecuación paso a paso + práctica de otra distinta. ──
-const LINEALES = ["2x + 5 = 15", "3x + 2 = 14", "4x - 3 = 9", "2x - 1 = 7", "5x + 5 = 20", "3x - 6 = 6", "6x + 2 = 20", "4x + 8 = 16"];
+// FÁCIL: un solo paso (coeficiente 1). NORMAL: coeficiente + término independiente (dos pasos).
+// DIFÍCIL: varios términos en x que hay que AGRUPAR primero, y números mayores (tres pasos).
+const LINEALES = {
+  facil: ["x + 3 = 8", "x + 5 = 12", "x - 2 = 6", "x + 7 = 10", "x - 4 = 5", "x + 2 = 9"],
+  normal: ["2x + 5 = 15", "3x + 2 = 14", "4x - 3 = 9", "2x - 1 = 7", "5x + 5 = 20", "3x - 6 = 6", "6x + 2 = 20", "4x + 8 = 16"],
+  dificil: ["4x + 3x - 5 = 30", "5x - 2x + 7 = 25", "9x + 14 = 86", "7x - 12 = 30", "6x + 5x - 8 = 25", "8x - 3x + 4 = 39"],
+};
 export function linealResueltaLSG(opts = {}) {
   const { ejemplo, practica } = elegirBoton(LINEALES, opts);
-  const sol = solveLinearSteps(ejemplo) || solveLinearSteps(LINEALES[0]);
-  const solP = solveLinearSteps(practica) || solveLinearSteps(LINEALES[1]);
+  const lista = listaNivel(LINEALES, opts.nivel);
+  const sol = solveLinearSteps(ejemplo) || solveLinearSteps(lista[0]);
+  const solP = solveLinearSteps(practica) || solveLinearSteps(lista[1]);
   const dir = [
     { tipo: "avatar", accion: "sonreir" },
     { tipo: "hablar", texto: `Vamos a resolver ${sol.original} paso a paso. La meta es dejar la ${sol.varName} sola en un lado del igual.` },
@@ -562,7 +624,13 @@ export function linealResueltaLSG(opts = {}) {
 }
 
 // ── 2) DERIVADAS: deriva un monomio con la regla de la potencia + práctica de otro distinto. ──
-const DERIVADAS = ["x²", "2x³", "3x²", "x⁴", "5x²", "4x³", "2x⁴", "x³"];
+// FÁCIL: rectas y potencias pequeñas (derivada constante o inmediata). NORMAL: monomios con
+// coeficiente y exponente. DIFÍCIL: POLINOMIOS de varios términos (hay que derivar término a término).
+const DERIVADAS = {
+  facil: ["2x", "3x", "x²", "5x", "x³", "4x"],
+  normal: ["x²", "2x³", "3x²", "x⁴", "5x²", "4x³", "2x⁴", "x³"],
+  dificil: ["3x⁴ - 2x²", "2x³ + 5x", "4x³ - 3x² + 2x", "5x⁴ + 2x³", "x⁴ - 6x² + 9x", "3x⁵ - 4x²"],
+};
 function partesMonomio(m) {
   const s = canonExpr(m).replace(/\*/g, "");
   const mm = s.match(/^([+-]?\d*)x(?:\^(\d+))?$/);
@@ -576,9 +644,13 @@ export function derivadaResueltaLSG(opts = {}) {
   const derE = computeDerivative("derivada de " + ejemplo) || "0";
   const derP = computeDerivative("derivada de " + practica) || "0";
   const pm = partesMonomio(ejemplo);
-  const explica = pm && pm.n > 1
-    ? `Regla de la potencia: bajamos el exponente ${pm.n} multiplicando delante, y al exponente le restamos 1. Aquí ${pm.a === 1 ? "" : pm.a + "·"}${pm.n} = ${pm.a * pm.n}, y el nuevo exponente es ${pm.n - 1}.`
-    : `La derivada de una recta ${ejemplo} es su pendiente, ${derE}.`;
+  // Un POLINOMIO (varios términos) no tiene un único exponente que "bajar": se deriva TÉRMINO A TÉRMINO.
+  // Sin esta rama, un ejemplo difícil ("3x⁴ - 2x²") se explicaba como si fuera una recta (texto sin sentido).
+  const explica = !pm
+    ? `Es un polinomio de varios términos, así que lo derivamos TÉRMINO A TÉRMINO: a cada uno le aplicamos la regla de la potencia (bajamos su exponente multiplicando delante y le restamos 1). Los números solos desaparecen, porque una constante no cambia.`
+    : pm.n > 1
+      ? `Regla de la potencia: bajamos el exponente ${pm.n} multiplicando delante, y al exponente le restamos 1. Aquí ${pm.a === 1 ? "" : pm.a + "·"}${pm.n} = ${pm.a * pm.n}, y el nuevo exponente es ${pm.n - 1}.`
+      : `La derivada de una recta ${ejemplo} es su pendiente, ${derE}.`;
   const dir = [
     { tipo: "avatar", accion: "sonreir" },
     { tipo: "hablar", texto: `Vamos a derivar ${ejemplo}. Derivar mide qué tan rápido cambia una función. Para una potencia usamos la regla de la potencia: la derivada de xⁿ es n·xⁿ⁻¹.` },
@@ -594,28 +666,52 @@ export function derivadaResueltaLSG(opts = {}) {
 }
 
 // ── 3) FACTORIZACIÓN (diferencia de cuadrados): factoriza x² - N + práctica de otra distinta. ──
-const FACTORIZ = ["x² - 9", "x² - 16", "x² - 25", "x² - 4", "x² - 36", "x² - 49", "x² - 1", "x² - 64"];
-const raizDe = (expr) => { const m = canonExpr(expr).match(/-(\d+)$/); return m ? Math.sqrt(Number(m[1])) : NaN; };
+// FÁCIL: cuadrados pequeños (x² - 4). NORMAL: x² - N. DIFÍCIL: con COEFICIENTE en x² — o bien ambos son
+// cuadrados (4x² - 25 → (2x-5)(2x+5)) o bien hay que sacar FACTOR COMÚN primero (2x² - 8 → 2(x-2)(x+2)).
+const FACTORIZ = {
+  facil: ["x² - 1", "x² - 4", "x² - 9", "x² - 16"],
+  normal: ["x² - 9", "x² - 16", "x² - 25", "x² - 4", "x² - 36", "x² - 49", "x² - 1", "x² - 64"],
+  dificil: ["4x² - 25", "9x² - 16", "2x² - 8", "3x² - 27", "16x² - 9", "5x² - 45"],
+};
+// Explicación CORRECTA de la identificación de a y b según el caso (con coeficiente, a NO es "x").
+// Antes se decía siempre "a = x y b = √N", falso para "4x² - 25" (a = 2x) y para "2x² - 8" (factor común).
+function explicaDifCuadrados(expr) {
+  const m = canonExpr(expr).match(/^(\d*)x\^2-(\d+)$/);
+  if (!m) return null;
+  const c = m[1] === "" ? 1 : Number(m[1]);
+  const d = Number(m[2]);
+  const isSq = (n) => Number.isInteger(Math.sqrt(n));
+  if (isSq(c) && isSq(d)) {
+    const sc = Math.sqrt(c), sd = Math.sqrt(d);
+    const aTxt = sc === 1 ? "x" : `${sc}x`;
+    return `Aquí a = ${aTxt} y b = ${sd}, porque ${aTxt} × ${aTxt} = ${c === 1 ? "x²" : `${c}x²`} y ${sd} × ${sd} = ${d}. Aplicamos la regla.`;
+  }
+  if (d % c === 0 && isSq(d / c)) {
+    const b = Math.sqrt(d / c);
+    return `Primero sacamos el factor común ${c}: queda ${c}(x² - ${d / c}). Dentro del paréntesis, a = x y b = ${b}, porque ${b} × ${b} = ${d / c}. Aplicamos la regla.`;
+  }
+  return null;
+}
 export function factorizacionResueltaLSG(opts = {}) {
   let { ejemplo, practica } = elegirBoton(FACTORIZ, opts);
+  const lista = listaNivel(FACTORIZ, opts.nivel);
   // Si la instancia del botón no es una diferencia de cuadrados factorizable, cae al primer preset.
-  if (!computeFactorization(ejemplo)) ejemplo = FACTORIZ[0];
+  if (!computeFactorization(ejemplo)) ejemplo = lista[0];
   if (!computeFactorization(practica) || canonExpr(practica) === canonExpr(ejemplo)) {
-    practica = FACTORIZ.find((x) => computeFactorization(x) && canonExpr(x) !== canonExpr(ejemplo)) || FACTORIZ[1];
+    practica = lista.find((x) => computeFactorization(x) && canonExpr(x) !== canonExpr(ejemplo)) || lista[1];
   }
   const facE = computeFactorization(ejemplo);
   const facP = computeFactorization(practica);
-  const r = raizDe(ejemplo), nE = r * r;
   const dir = [
     { tipo: "avatar", accion: "sonreir" },
     { tipo: "hablar", texto: `Vamos a factorizar ${ejemplo}. Es una "diferencia de cuadrados": un cuadrado menos otro cuadrado. La regla es a² - b² = (a - b)(a + b).` },
     { tipo: "pizarra", accion: "escribir", contenido: ejemplo },
     { tipo: "esperar", segundos: 1 },
-    { tipo: "hablar", texto: `Aquí a = x y b = ${r}, porque ${r} × ${r} = ${nE}. Aplicamos la regla.` },
+    { tipo: "hablar", texto: explicaDifCuadrados(ejemplo) || "Identificamos a y b (las raíces de cada cuadrado) y aplicamos la regla." },
     { tipo: "pizarra", accion: "escribir", contenido: `${ejemplo} = ${facE}` },
     { tipo: "hablar", texto: `Así, ${ejemplo} se factoriza como ${facE}. Ahora te toca a ti con otra parecida.` },
     { tipo: "pizarra", accion: "escribir", contenido: practica },
-    { tipo: "preguntar", texto: `¿Cómo se factoriza ${practica}? Escríbelo como (x - a)(x + a).`, respuesta: facP, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
+    { tipo: "preguntar", texto: `¿Cómo se factoriza ${practica}? Escríbelo como producto de dos paréntesis.`, respuesta: facP, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
   ];
   return { escena: "factorizacion_resuelta", intencion: "resolver", duracion_estimada: 65, _mock: true, directivas: dir };
 }
@@ -637,8 +733,12 @@ function extraerDifCuadrados(texto) {
 //   { query, seguimiento, contexto, currentTopic, previo }
 export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", currentTopic = "", previo = "" } = {}) {
   const SEG_OTRO = new Set(["continuacion", "practicar", "resolver_otro"]);
-  const esSeg = SEG_OTRO.has(seguimiento);
-  // En "otro ejemplo" el tema es el ACTIVO (contexto); en una pulsación nueva, la propia consulta.
+  // "más fácil"/"más difícil" son seguimientos de NIVEL del tema activo: se mantiene el tema y se cambia
+  // la lista de ejercicios a la del nivel pedido (antes caían a Gemini y devolvían algo trivial).
+  const SEG_NIVEL = { mas_facil: "facil", mas_dificil: "dificil" };
+  const nivel = SEG_NIVEL[seguimiento] || "normal";
+  const esSeg = SEG_OTRO.has(seguimiento) || !!SEG_NIVEL[seguimiento];
+  // En un seguimiento el tema es el ACTIVO (contexto); en una pulsación nueva, la propia consulta.
   const base = (esSeg && (contexto || currentTopic)) ? (contexto || currentTopic) : query;
   const n = normBoton(base);
   const commonRet = (tema, lsg) => ({ tema, escena: lsg.escena, intencion: "resolver", modelo: `${tema}-resuelto`, lsg });
@@ -647,7 +747,7 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   if (/deriv/.test(n)) {
     if (/\b(sen|sin|cos|tan|cot|sec|csc|log|ln|exp|ra[ií]z|sqrt)\b|√|e\s*\^/.test(n)) return null;
     const instancia = extraerMonomio(base);
-    return commonRet("derivada", derivadaResueltaLSG({ evitar: previo, instancia, seguimiento: esSeg }));
+    return commonRet("derivada", derivadaResueltaLSG({ evitar: previo, instancia, seguimiento: esSeg, nivel }));
   }
 
   // 2) FACTORIZACIÓN (diferencia de cuadrados). Con una expresión concreta NO factorizable así
@@ -657,13 +757,13 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
     // Hay una expresión con x² pero NO es diferencia de cuadrados factorizable → que lo intente Gemini.
     if (!instancia && /[a-z]\s*(?:\^\s*2|[²])/i.test(base) && !/factoriz/.test(n)) return null;
     if (!instancia && /[a-z]\s*(?:\^\s*2|[²])\s*[+]/i.test(base)) return null; // trinomio "x² + 5x + 6"
-    return commonRet("factorizacion", factorizacionResueltaLSG({ evitar: previo, instancia, seguimiento: esSeg }));
+    return commonRet("factorizacion", factorizacionResueltaLSG({ evitar: previo, instancia, seguimiento: esSeg, nivel }));
   }
 
   // 3) FRACCIONES (botón "ejercicio/ejemplo de fracciones", sin una fracción concreta en el texto).
   if (/fracc/.test(n) && !/\d\s*\/\s*\d/.test(base)) {
     const evitarFrac = (String(previo).match(/\d+\s*\/\s*\d+\s*[+\-]\s*\d+\s*\/\s*\d+/) || [])[0] || "";
-    return commonRet("fraccion", fraccionResueltaLSG(evitarFrac));
+    return commonRet("fraccion", fraccionResueltaLSG({ evitar: evitarFrac, nivel }));
   }
 
   // 4) ECUACIÓN LINEAL. Una ecuación lineal concreta ("2x + 5 = 15") o el tema genérico ("ecuación lineal").
@@ -677,7 +777,7 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   const solBase = solveLinearSteps(base);
   const instLin = solBase ? solBase.original : null;
   if (!noLineal && (instLin || /\becuaci[oó]n(?:es)?\b|\blineal(?:es)?\b|primer grado/.test(n))) {
-    return commonRet("lineal", linealResueltaLSG({ evitar: previo, instancia: instLin, seguimiento: esSeg }));
+    return commonRet("lineal", linealResueltaLSG({ evitar: previo, instancia: instLin, seguimiento: esSeg, nivel }));
   }
 
   return null; // no es ninguno de los 4 botones → flujo normal (Gemini)
