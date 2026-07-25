@@ -513,6 +513,13 @@ export function fraccionResueltaLSG(opts) {
   const B = dificil ? distintoDen(eB) : mismoDen(eB);
 
   const dir = [{ tipo: "avatar", accion: "sonreir" }];
+  // ENSEÑAR el tema ("enséñame fracciones"): primero el CONCEPTO (qué es una fracción) y la REGLA,
+  // igual que en los otros temas, para no saltar directo al ejercicio (paridad con lineal/derivadas/factoriz.).
+  if (o.concepto) {
+    dir.push({ tipo: "hablar", texto: "Una fracción representa partes de un todo: el número de arriba es el numerador (las partes que tomamos) y el de abajo es el denominador (en cuántas partes iguales se divide el todo)." });
+    dir.push({ tipo: "pizarra", accion: "escribir", contenido: "Fracción:  numerador / denominador" });
+    dir.push({ tipo: "hablar", texto: "Para sumar fracciones con el mismo denominador, se suman los numeradores y se mantiene el denominador. Si los denominadores son distintos, primero se igualan. Veámoslo con un ejemplo." });
+  }
   if (!dificil) {
     dir.push(
       { tipo: "hablar", texto: `Vamos a resolver juntos esta suma de fracciones: ${A.texto}. Fíjate que las dos tienen el mismo número de abajo, el denominador ${A.d}.` },
@@ -547,7 +554,7 @@ export function fraccionResueltaLSG(opts) {
   // PRÁCTICA: otra fracción DISTINTA que resuelve el alumno (calificable).
   dir.push({ tipo: "pizarra", accion: "escribir", contenido: `${B.texto} = ?` });
   dir.push({ tipo: "preguntar", texto: `¿Cuánto es ${B.texto}? Escríbelo en su forma más simple.`, respuesta: B.final, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" });
-  return { escena: "fraccion_resuelta", intencion: "resolver", duracion_estimada: 60, _mock: true, directivas: dir };
+  return { escena: "fraccion_resuelta", intencion: o.concepto ? "aprender" : "resolver", duracion_estimada: 60, _mock: true, directivas: dir };
 }
 
 // ════════ LECCIONES DE BOTÓN DETERMINISTAS (los 4 chips de "Tu consulta") ════════
@@ -774,7 +781,8 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   // 3) FRACCIONES (botón "ejercicio/ejemplo de fracciones", sin una fracción concreta en el texto).
   if (/fracc/.test(n) && !/\d\s*\/\s*\d/.test(base)) {
     const evitarFrac = (String(previo).match(/\d+\s*\/\s*\d+\s*[+\-]\s*\d+\s*\/\s*\d+/) || [])[0] || "";
-    return commonRet("fraccion", fraccionResueltaLSG({ evitar: evitarFrac, nivel }));
+    // "enséñame fracciones" (sin una fracción concreta) → enseñar el CONCEPTO primero (paridad con lineal).
+    return commonRet("fraccion", fraccionResueltaLSG({ evitar: evitarFrac, nivel, concepto: !esSeg && pideEnsenar }));
   }
 
   // 4) ECUACIÓN LINEAL. Una ecuación lineal concreta ("2x + 5 = 15") o el tema genérico ("ecuación lineal").
