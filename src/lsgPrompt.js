@@ -607,12 +607,19 @@ export function linealResueltaLSG(opts = {}) {
   const lista = listaNivel(LINEALES, opts.nivel);
   const sol = solveLinearSteps(ejemplo) || solveLinearSteps(lista[0]);
   const solP = solveLinearSteps(practica) || solveLinearSteps(lista[1]);
-  const dir = [
-    { tipo: "avatar", accion: "sonreir" },
+  const dir = [{ tipo: "avatar", accion: "sonreir" }];
+  // ENSEÑAR el tema ("enséñame ecuaciones lineales"): primero el CONCEPTO y la REGLA, no saltar directo
+  // a resolver un ejercicio (queja del cliente: "pido que me enseñe y de frente va a los ejercicios").
+  if (opts.concepto) {
+    dir.push({ tipo: "hablar", texto: "Una ecuación lineal, o de primer grado, es una igualdad donde la incógnita (la x) está elevada solo a la 1: no tiene x² ni raíces. Resolverla significa encontrar el valor de x que hace verdadera la igualdad." });
+    dir.push({ tipo: "pizarra", accion: "escribir", contenido: "Ecuación lineal:  a·x + b = c" });
+    dir.push({ tipo: "hablar", texto: "La regla para hallar la x es despejarla: los números que la acompañan pasan al otro lado con la operación inversa (lo que suma, resta; lo que resta, suma; lo que multiplica, divide), hasta dejar la x sola. Veámoslo con un ejemplo." });
+  }
+  dir.push(
     { tipo: "hablar", texto: `Vamos a resolver ${sol.original} paso a paso. La meta es dejar la ${sol.varName} sola en un lado del igual.` },
     { tipo: "pizarra", accion: "escribir", contenido: sol.original },
     { tipo: "esperar", segundos: 1 },
-  ];
+  );
   for (const s of sol.steps) {
     dir.push({ tipo: "hablar", texto: s.explica });
     dir.push({ tipo: "pizarra", accion: "escribir", contenido: s.escribe });
@@ -620,7 +627,7 @@ export function linealResueltaLSG(opts = {}) {
   dir.push({ tipo: "hablar", texto: `Comprobado: ${sol.varName} = ${sol.answer}. Ahora te toca a ti con otra ecuación parecida.` });
   dir.push({ tipo: "pizarra", accion: "escribir", contenido: solP.original });
   dir.push({ tipo: "preguntar", texto: `¿Cuánto vale ${solP.varName} en ${solP.original}? Escribe solo el número.`, respuesta: solP.answer, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" });
-  return { escena: "lineal_resuelta", intencion: "resolver", duracion_estimada: 70, _mock: true, directivas: dir };
+  return { escena: "lineal_resuelta", intencion: opts.concepto ? "aprender" : "resolver", duracion_estimada: 70, _mock: true, directivas: dir };
 }
 
 // ── 2) DERIVADAS: deriva un monomio con la regla de la potencia + práctica de otro distinto. ──
@@ -741,7 +748,11 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   // En un seguimiento el tema es el ACTIVO (contexto); en una pulsación nueva, la propia consulta.
   const base = (esSeg && (contexto || currentTopic)) ? (contexto || currentTopic) : query;
   const n = normBoton(base);
-  const commonRet = (tema, lsg) => ({ tema, escena: lsg.escena, intencion: "resolver", modelo: `${tema}-resuelto`, lsg });
+  // ¿Es un pedido de ENSEÑAR/APRENDER el tema ("enséñame ecuaciones lineales", "quiero aprender…",
+  // "explícame…") en vez de resolver un ejercicio concreto? En ese caso la lección debe empezar por el
+  // CONCEPTO y la REGLA (no saltar directo a resolver un ejercicio) — queja del cliente.
+  const pideEnsenar = /\bense[nñ]a|\baprend|expl[ií]ca|qu[eé]\s+(es|son)\b|c[oó]mo\s+se\b/.test(n);
+  const commonRet = (tema, lsg) => ({ tema, escena: lsg.escena, intencion: lsg.intencion || "resolver", modelo: `${tema}-resuelto`, lsg });
 
   // 1) DERIVADAS. Si nombra una función NO polinómica (trig, log, raíz, eˣ) → null (lo hace Gemini, Nivel 3).
   if (/deriv/.test(n)) {
@@ -770,14 +781,16 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   //    Se usa la ecuación LIMPIA (sol.original), no la frase entera ("Resuelve 2x + 5 = 15"), para que la
   //    práctica se elija DISTINTA de verdad (si no, "2x + 5 = 15" del preset parecía distinta de la frase).
   //    IMPORTANTE: solo ecuaciones de PRIMER GRADO. Si la consulta pide CUADRÁTICAS / segundo grado /
-  //    cúbicas / polinómicas / sistemas / inecuaciones (o trae una potencia x²), NO es la lección lineal
-  //    determinista → null (que lo enseñe Gemini, Nivel 2/3). Antes "ecuaciones cuadráticas" casaba con
-  //    "ecuaciones" y daba una lección lineal (2x+5=15) — defecto reportado por el cliente.
-  const noLineal = /cuadrat|segundo grado|2do grado|2\.?\s*grado|c[uú]bic|tercer grado|bicuadr|polinom|sistema|inecuaci|desigualdad|[a-z]\s*(?:\^\s*[2-9]|[²³⁴⁵⁶⁷⁸⁹])/.test(n);
+  //    cúbicas / TRIGONOMÉTRICAS / exponenciales / logarítmicas / diferenciales / sistemas / inecuaciones
+  //    (o trae una potencia x²), NO es la lección lineal determinista → null (que lo enseñe Gemini,
+  //    Nivel 2/3). Antes "ecuaciones cuadráticas/trigonométricas" casaba con "ecuaciones" y daba una
+  //    lección lineal (2x+5=15) — defecto reportado por el cliente.
+  const noLineal = /cuadrat|segundo grado|2do grado|2\.?\s*grado|c[uú]bic|tercer grado|bicuadr|polinom|trigonometr|\bseno\b|\bcoseno\b|\btangente\b|exponencial|logaritm|\bln\b|diferencial|integral|radical|\birracional|racional|matriz|matricial|vectorial|sistema|inecuaci|desigualdad|[a-z]\s*(?:\^\s*[2-9]|[²³⁴⁵⁶⁷⁸⁹])/.test(n);
   const solBase = solveLinearSteps(base);
   const instLin = solBase ? solBase.original : null;
   if (!noLineal && (instLin || /\becuaci[oó]n(?:es)?\b|\blineal(?:es)?\b|primer grado/.test(n))) {
-    return commonRet("lineal", linealResueltaLSG({ evitar: previo, instancia: instLin, seguimiento: esSeg, nivel }));
+    // "enséñame ecuaciones lineales" (sin una ecuación concreta) → enseñar el CONCEPTO primero.
+    return commonRet("lineal", linealResueltaLSG({ evitar: previo, instancia: instLin, seguimiento: esSeg, nivel, concepto: !instLin && !esSeg && pideEnsenar }));
   }
 
   return null; // no es ninguno de los 4 botones → flujo normal (Gemini)

@@ -248,6 +248,21 @@ async function unitTests() {
   check("botón: 'ecuaciones cuadráticas' → null (NO lineal; lo enseña Gemini)", leccionBotonLSG({ query: "Enséñame ecuaciones cuadráticas" }) === null);
   check("botón: 'ecuación de segundo grado' → null", leccionBotonLSG({ query: "resuélveme una ecuación de segundo grado" }) === null);
   check("botón: 'ecuaciones cúbicas' → null", leccionBotonLSG({ query: "enséñame ecuaciones cúbicas" }) === null);
+  // NO CAPTURAR otros tipos de ecuaciones como lineales (defecto del cliente: "trigonométricas" → 2x+5=15).
+  check("botón: 'ecuaciones trigonométricas' → null (NO lineal)", leccionBotonLSG({ query: "enséñame ecuaciones trigonométricas" }) === null);
+  check("botón: 'ecuaciones exponenciales' → null", leccionBotonLSG({ query: "enséñame ecuaciones exponenciales" }) === null);
+  check("botón: 'ecuaciones logarítmicas' → null", leccionBotonLSG({ query: "resuélveme ecuaciones logarítmicas" }) === null);
+  check("botón: 'ecuaciones diferenciales' → null", leccionBotonLSG({ query: "enséñame ecuaciones diferenciales" }) === null);
+  // ENSEÑAR el tema (aprender) empieza por CONCEPTO + REGLA, no salta directo a resolver un ejercicio
+  // (queja del cliente: "pido que me enseñe ecuaciones lineales y de frente va a los ejercicios").
+  const ensLin = correrBoton({ query: "enséñame ecuaciones lineales" });
+  check("enseñar lineal: intención = aprender", ensLin?.intencion === "aprender");
+  check("enseñar lineal: empieza por el CONCEPTO (qué es una ecuación lineal), no por 'vamos a resolver'", /ecuaci[oó]n lineal|primer grado/i.test(ensLin.hablar2) && /Una ecuaci[oó]n lineal/i.test(ensLin.flat.find((d) => d.tipo === "hablar").texto));
+  check("enseñar lineal: explica la REGLA (despejar/operación inversa) antes del ejercicio", ensLin.flat.filter((d) => d.tipo === "hablar").slice(0, 3).some((d) => /despejar|operaci[oó]n inversa/i.test(d.texto)));
+  check("enseñar lineal: sigue trayendo el ejercicio resuelto + práctica calificable", ensLin.nPreg === 1 && !!String(ensLin.q.respuesta || "").trim());
+  // "Resuelve 2x + 5 = 15" (ecuación concreta) NO mete el concepto: va directo a resolver.
+  const resLin = correrBoton({ query: "Resuelve 2x + 5 = 15" });
+  check("resolver lineal concreto: intención = resolver (sin preámbulo conceptual)", resLin?.intencion === "resolver" && /^vamos a resolver/i.test(resLin.flat.find((d) => d.tipo === "hablar").texto));
   check("botón: 'sistema de ecuaciones' → null", leccionBotonLSG({ query: "enséñame un sistema de ecuaciones" }) === null);
   check("botón: 'resuelve x² + 2x = 15' (cuadrática concreta) → null", leccionBotonLSG({ query: "resuelve x² + 2x = 15" }) === null);
   // pero las de PRIMER GRADO siguen siendo deterministas.
