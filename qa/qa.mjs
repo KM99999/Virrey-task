@@ -168,7 +168,8 @@ async function unitTests() {
     check(`botón [${label}]: despacha al tema ${expTema}`, !!r && r.tema === expTema, r ? `tema=${r.tema}` : "null");
     if (!r) return null;
     check(`botón [${label}]: determinista (modelo *-resuelto)`, /-resuelto$/.test(r.modelo), r.modelo);
-    check(`botón [${label}]: intención resolver`, r.intencion === "resolver", r.intencion);
+    // Los botones con frase "enséñame/explícame" son intención "aprender"; "resuelve/dame ejercicio" → "resolver". Ambas son deterministas.
+    check(`botón [${label}]: intención determinista (resolver/aprender)`, ["resolver", "aprender"].includes(r.intencion), r.intencion);
     check(`botón [${label}]: EXACTAMENTE una práctica calificable`, r.nPreg === 1 && !!(r.q && String(r.q.respuesta || "").trim()), `nPreg=${r.nPreg} resp=${r.q?.respuesta}`);
     check(`botón [${label}]: la respuesta se califica bien contra sí misma`, !!r.q && checkAnswer(r.q.respuesta, r.q.respuesta).correct === true);
     check(`botón [${label}]: NO adjunta ejemplo alterno (no ensucia/revela al fallar)`, !!r.q && !r.q.otro_ejemplo);

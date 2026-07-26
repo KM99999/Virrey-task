@@ -678,7 +678,7 @@ export function derivadaResueltaLSG(opts = {}) {
     { tipo: "pizarra", accion: "escribir", contenido: practica },
     { tipo: "preguntar", texto: `¿Cuál es la derivada de ${practica}?`, respuesta: derP, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
   ];
-  return { escena: "derivada_resuelta", intencion: "resolver", duracion_estimada: 65, _mock: true, directivas: dir };
+  return { escena: "derivada_resuelta", intencion: opts.concepto ? "aprender" : "resolver", duracion_estimada: 65, _mock: true, directivas: dir };
 }
 
 // ── 3) FACTORIZACIÓN (diferencia de cuadrados): factoriza x² - N + práctica de otra distinta. ──
@@ -729,7 +729,7 @@ export function factorizacionResueltaLSG(opts = {}) {
     { tipo: "pizarra", accion: "escribir", contenido: practica },
     { tipo: "preguntar", texto: `¿Cómo se factoriza ${practica}? Escríbelo como producto de dos paréntesis.`, respuesta: facP, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
   ];
-  return { escena: "factorizacion_resuelta", intencion: "resolver", duracion_estimada: 65, _mock: true, directivas: dir };
+  return { escena: "factorizacion_resuelta", intencion: opts.concepto ? "aprender" : "resolver", duracion_estimada: 65, _mock: true, directivas: dir };
 }
 
 // ── Detección del tema y despacho al generador correcto ──
@@ -767,7 +767,7 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   if (/deriv/.test(n)) {
     if (/\b(sen|sin|cos|tan|cot|sec|csc|log|ln|exp|ra[ií]z|sqrt)\b|√|e\s*\^/.test(n)) return null;
     const instancia = extraerMonomio(base);
-    return commonRet("derivada", derivadaResueltaLSG({ evitar: previo, instancia, seguimiento: esSeg, nivel }));
+    return commonRet("derivada", derivadaResueltaLSG({ evitar: previo, instancia, seguimiento: esSeg, nivel, concepto: !esSeg && pideEnsenar }));
   }
 
   // 2) FACTORIZACIÓN (diferencia de cuadrados). Con una expresión concreta NO factorizable así
@@ -777,7 +777,7 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
     // Hay una expresión con x² pero NO es diferencia de cuadrados factorizable → que lo intente Gemini.
     if (!instancia && /[a-z]\s*(?:\^\s*2|[²])/i.test(base) && !/factoriz/.test(n)) return null;
     if (!instancia && /[a-z]\s*(?:\^\s*2|[²])\s*[+]/i.test(base)) return null; // trinomio "x² + 5x + 6"
-    return commonRet("factorizacion", factorizacionResueltaLSG({ evitar: previo, instancia, seguimiento: esSeg, nivel }));
+    return commonRet("factorizacion", factorizacionResueltaLSG({ evitar: previo, instancia, seguimiento: esSeg, nivel, concepto: !esSeg && pideEnsenar }));
   }
 
   // 3) FRACCIONES (botón "ejercicio/ejemplo de fracciones", sin una fracción concreta en el texto).
