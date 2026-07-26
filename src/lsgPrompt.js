@@ -663,7 +663,9 @@ export function derivadaResueltaLSG(opts = {}) {
   const explica = !pm
     ? `Es un polinomio de varios términos, así que lo derivamos TÉRMINO A TÉRMINO: a cada uno le aplicamos la regla de la potencia (bajamos su exponente multiplicando delante y le restamos 1). Los números solos desaparecen, porque una constante no cambia.`
     : pm.n > 1
-      ? `Regla de la potencia: bajamos el exponente ${pm.n} multiplicando delante, y al exponente le restamos 1. Aquí ${pm.a === 1 ? "" : pm.a + "·"}${pm.n} = ${pm.a * pm.n}, y el nuevo exponente es ${pm.n - 1}.`
+      // Se muestra SIEMPRE el coeficiente (aunque sea 1) para que la cuenta no degenere en "2 = 2":
+      // "el coeficiente 1 por el exponente 2: 1 × 2 = 2, y el nuevo exponente es 1".
+      ? `Regla de la potencia: multiplicamos el coeficiente por el exponente, y al exponente le restamos 1. Aquí el coeficiente es ${pm.a} y el exponente ${pm.n}: ${pm.a} × ${pm.n} = ${pm.a * pm.n}, y el nuevo exponente es ${pm.n - 1}.`
       : `La derivada de una recta ${ejemplo} es su pendiente, ${derE}.`;
   const dir = [
     { tipo: "avatar", accion: "sonreir" },
