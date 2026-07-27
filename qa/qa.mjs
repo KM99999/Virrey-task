@@ -204,6 +204,33 @@ async function unitTests() {
     check(`botón [${label}] 'otro ejemplo': ejemplo NUEVO (no repite el primero)`, !!otro && otro.hablar2 !== first.hablar2);
     check(`botón [${label}] 'otro ejemplo': sigue siendo calificable`, !!otro && otro.nPreg === 1 && !!String(otro.q.respuesta || "").trim());
   }
+  // ── EJEMPLO APLICADO / DE LA VIDA REAL de DERIVADAS (queja del cliente): pedir "un ejemplo de la vida
+  //    cotidiana" o "con la variación de la velocidad" NO debe devolver un cálculo/ejercicio numérico
+  //    suelto, sino EXPLICAR el significado (la velocidad como razón de cambio) y cerrar con una práctica.
+  const aplicados = [
+    ["vida cotidiana (consulta nueva)", { query: "dame un ejemplo de derivadas de la vida cotidiana" }],
+    ["variación de la velocidad (seguimiento)", { query: "Enséñame con un ejemplo con la variación de la velocidad", seguimiento: "continuacion", contexto: "derivada de x²", currentTopic: "derivadas" }],
+    ["para qué sirve una derivada", { query: "¿para qué sirve una derivada en la vida real?", seguimiento: "continuacion", contexto: "derivadas" }],
+  ];
+  for (const [label, body] of aplicados) {
+    const r = correrBoton(body);
+    check(`derivada aplicada [${label}]: despacha a derivada (determinista)`, !!r && r.tema === "derivada", r ? r.tema : "null");
+    if (!r) continue;
+    check(`derivada aplicada [${label}]: intención 'aprender'`, r.intencion === "aprender", r.intencion);
+    check(`derivada aplicada [${label}]: EXPLICA el significado (velocidad/rapidez de cambio)`, /velocidad|rapidez/i.test(r.hablar2 + " " + r.flat.filter((d) => d.tipo === "hablar").map((d) => d.texto).join(" ")));
+    check(`derivada aplicada [${label}]: NO es el ejercicio numérico suelto ('derivada de … = …')`, !r.pizarras.some((p) => /derivada de .* = /.test(p)));
+    check(`derivada aplicada [${label}]: UNA práctica calificable, respuesta numérica`, r.nPreg === 1 && /^\d+$/.test(String(r.q?.respuesta || "").trim()), `nPreg=${r.nPreg} resp=${r.q?.respuesta}`);
+    check(`derivada aplicada [${label}]: la respuesta se califica bien`, !!r.q && checkAnswer(r.q.respuesta, r.q.respuesta).correct === true);
+    check(`derivada aplicada [${label}]: sin igualdad numérica corrupta en pizarra`, !r.pizarras.some((p) => /=\s*(?:$|[.,;])/.test(p) || /\(\s*[+×\-]/.test(p)));
+  }
+  // 'otro ejemplo' aplicado ROTA de escenario (no repite el coche).
+  const apl1 = correrBoton({ query: "un ejemplo de derivadas de la vida real" });
+  const apl2 = correrBoton({ query: "dame otro ejemplo de la vida real", seguimiento: "continuacion", contexto: "derivadas", previo: apl1?.hablar2 || "" });
+  check("derivada aplicada: 'otro ejemplo' rota de escenario (no repite)", !!apl1 && !!apl2 && apl1.hablar2 !== apl2.hablar2);
+  // Regresión: 'enséñame derivadas' (SIN pedir aplicación) sigue siendo la lección numérica de la regla de la potencia.
+  const derNum = correrBoton({ query: "Enséñame derivadas" });
+  check("regresión derivadas numérica: 'enséñame derivadas' sigue mostrando 'derivada de … = …'", !!derNum && derNum.pizarras.some((p) => /derivada de .* = /.test(p)));
+
   // ── NIVELES DE DIFICULTAD en los 4 temas: "más difícil" debe dar un ejercicio DE VERDAD más difícil
   //    (antes caía a una lista trivial y devolvía "2x = 6", MÁS FÁCIL que el propio ejemplo).
   const nivelBoton = (contexto, seg) => correrBoton({ query: seg === "mas_dificil" ? "presentar un problema más difícil" : "algo más fácil", seguimiento: seg, contexto, previo: "" });

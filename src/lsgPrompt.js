@@ -681,6 +681,41 @@ export function derivadaResueltaLSG(opts = {}) {
   return { escena: "derivada_resuelta", intencion: opts.concepto ? "aprender" : "resolver", duracion_estimada: 65, _mock: true, directivas: dir };
 }
 
+// ── 2b) DERIVADA EN LA VIDA REAL: la derivada como "rapidez de cambio". El caso canónico es la
+// VELOCIDAD (la velocidad es la derivada de la posición respecto al tiempo). DETERMINISTA: explica el
+// SIGNIFICADO con un caso cotidiano y números concretos, y cierra con una práctica NUMÉRICA (la
+// velocidad en un instante), fácil de calificar. Rota el escenario con `evitar` para que "otro ejemplo"
+// no repita. Se usa cuando el alumno pide un ejemplo APLICADO / de la vida real (no un cálculo de un
+// monomio) — queja del cliente: pedía derivadas "de la vida cotidiana" / "con la variación de la
+// velocidad" y recibía un ejercicio numérico sin significado.
+const DERIV_VIDA = [
+  { obj: "un coche", mag: "posición",       sym: "s", pos: "t²",  tabla: "a 1 s ha avanzado 1 m; a 2 s, 4 m; a 3 s, 9 m",   k: 2,  tE: 2, tP: 5 },
+  { obj: "una pelota que cae", mag: "distancia caída", sym: "h", pos: "5t²", tabla: "a 1 s ha caído 5 m; a 2 s, 20 m; a 3 s, 45 m", k: 10, tE: 2, tP: 4 },
+  { obj: "un tren", mag: "posición",        sym: "s", pos: "3t²", tabla: "a 1 s ha avanzado 3 m; a 2 s, 12 m; a 3 s, 27 m", k: 6,  tE: 3, tP: 5 },
+];
+export function derivadaAplicadaLSG(opts = {}) {
+  const evit = canonExpr(opts.evitar || "");
+  let idx = DERIV_VIDA.findIndex((c) => !evit.includes(canonExpr(c.obj)));
+  if (idx < 0) idx = 0;
+  const c = DERIV_VIDA[idx];
+  const vel = `${c.k}t`;               // velocidad = derivada de la posición (regla de la potencia)
+  const vE = c.k * c.tE;               // velocidad en el instante del ejemplo
+  const vP = c.k * c.tP;               // velocidad en la práctica (respuesta calificable)
+  const dir = [
+    { tipo: "avatar", accion: "sonreir" },
+    { tipo: "hablar", texto: "Una derivada mide la RAPIDEZ con la que algo cambia. El ejemplo más cotidiano es la velocidad: la velocidad es la derivada de la posición respecto al tiempo, es decir, qué tan rápido cambia tu posición." },
+    { tipo: "hablar", texto: `Imagina ${c.obj}: su ${c.mag} a los t segundos es ${c.sym}(t) = ${c.pos} metros. Fíjate: ${c.tabla}. Cada segundo avanza más, así que va cada vez más rápido.` },
+    { tipo: "pizarra", accion: "escribir", contenido: `${c.mag}: ${c.sym}(t) = ${c.pos}  (metros)` },
+    { tipo: "hablar", texto: `La velocidad en cada instante es la derivada de la ${c.mag}. Derivamos ${c.pos} con la regla de la potencia —bajamos el exponente multiplicando y le restamos 1— y queda ${vel}: esa es la velocidad en el segundo t.` },
+    { tipo: "pizarra", accion: "escribir", contenido: `velocidad: v(t) = ${vel}  (m/s)` },
+    { tipo: "hablar", texto: `Por ejemplo, a los ${c.tE} segundos la velocidad es ${c.k} × ${c.tE} = ${vE} metros por segundo. La derivada da la velocidad EXACTA en ese instante, no un promedio.` },
+    { tipo: "hablar", texto: "Como ves, la derivada no es solo un cálculo: te dice a qué ritmo cambian las cosas del día a día. Ahora te toca a ti, con el mismo móvil." },
+    { tipo: "pizarra", accion: "escribir", contenido: `v(t) = ${vel}.   Halla la velocidad a los ${c.tP} segundos.` },
+    { tipo: "preguntar", texto: `Si la velocidad es v(t) = ${vel}, ¿cuál es la velocidad a los ${c.tP} segundos? Escribe solo el número.`, respuesta: String(vP), esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
+  ];
+  return { escena: "derivada_resuelta", intencion: "aprender", duracion_estimada: 80, _mock: true, directivas: dir };
+}
+
 // ── 3) FACTORIZACIÓN (diferencia de cuadrados): factoriza x² - N + práctica de otra distinta. ──
 // FÁCIL: cuadrados pequeños (x² - 4). NORMAL: x² - N. DIFÍCIL: con COEFICIENTE en x² — o bien ambos son
 // cuadrados (4x² - 25 → (2x-5)(2x+5)) o bien hay que sacar FACTOR COMÚN primero (2x² - 8 → 2(x-2)(x+2)).
@@ -762,6 +797,23 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   // CONCEPTO y la REGLA (no saltar directo a resolver un ejercicio) — queja del cliente.
   const pideEnsenar = /\bense[nñ]a|\baprend|expl[ií]ca|qu[eé]\s+(es|son)\b|c[oó]mo\s+se\b/.test(n);
   const commonRet = (tema, lsg) => ({ tema, escena: lsg.escena, intencion: lsg.intencion || "resolver", modelo: `${tema}-resuelto`, lsg });
+
+  // 0) ¿PIDE UN EJEMPLO APLICADO / DE LA VIDA REAL (no un cálculo numérico)? "un ejemplo de la vida
+  //    cotidiana", "con la variación de la velocidad", "para qué sirve", "una aplicación real"... El
+  //    alumno NO quiere que le resolvamos un monomio: quiere ENTENDER el SIGNIFICADO del concepto con un
+  //    caso real. Esto se comprueba sobre la CONSULTA REAL (en un seguimiento, `base` pasa a ser el tema,
+  //    así que el detonante "variación de la velocidad" está en `query`, no en `base`). Para DERIVADAS
+  //    damos una lección aplicada DETERMINISTA (velocidad = razón de cambio); para otro tema en alcance,
+  //    la explicación conceptual la genera Gemini (Nivel 2). Queja del cliente: pedía derivadas "de la
+  //    vida cotidiana" / "con la variación de la velocidad" y recibía cálculos o ejercicios numéricos.
+  const nQ = normBoton(query);
+  const ctxTema = normBoton(`${contexto} ${currentTopic}`);
+  const pideAplicado = /vida cotidiana|vida real|vida diaria|mundo real|cotidian|d[ií]a a d[ií]a|para qu[eé]\s+(sirve|sirven|se usa|se utiliza)|aplicaci[oó]n|aplicad|caso real|ejemplo real|situaci[oó]n real|ejemplo pr[aá]ctico|en la pr[aá]ctica|variaci[oó]n de (?:la )?velocidad|\bvelocidad\b|\baceleraci[oó]n\b/.test(nQ);
+  if (pideAplicado) {
+    const esDerivada = /deriv/.test(nQ) || /velocidad|aceleraci|variaci[oó]n/.test(nQ) || /deriv/.test(ctxTema);
+    if (esDerivada) return commonRet("derivada", derivadaAplicadaLSG({ evitar: previo }));
+    return null; // aplicado en otro tema en alcance → explicación conceptual/aplicada la da Gemini (Nivel 2)
+  }
 
   // 1) DERIVADAS. Si nombra una función NO polinómica (trig, log, raíz, eˣ) → null (lo hace Gemini, Nivel 3).
   if (/deriv/.test(n)) {
