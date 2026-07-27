@@ -767,6 +767,96 @@ export function factorizacionResueltaLSG(opts = {}) {
   return { escena: "factorizacion_resuelta", intencion: opts.concepto ? "aprender" : "resolver", duracion_estimada: 65, _mock: true, directivas: dir };
 }
 
+// ════════ EJEMPLOS APLICADOS / DE LA VIDA REAL (los otros 3 temas núcleo) ════════
+// Igual que en derivadas: cuando el alumno pide un ejemplo "de la vida cotidiana / real / aplicado"
+// (una pregunta "leading"), NO debe recibir un ejercicio numérico suelto, sino una explicación con un
+// caso cotidiano y una práctica calificable. Todo DETERMINISTA (0 coste de IA, aritmética garantizada) y
+// reutilizando los motores ya probados (solveLinearSteps / computeFactorization / suma de fracciones).
+
+// ── 1) ECUACIÓN LINEAL en la vida real: un problema de compras (dato desconocido = precio). ──
+const LINEAL_VIDA = [
+  { cosa: "cuadernos", cosaS: "cuaderno", a: 3, b: 5, c: 20 }, // 3x + 5 = 20 → 5
+  { cosa: "lápices",   cosaS: "lápiz",    a: 4, b: 2, c: 18 }, // 4x + 2 = 18 → 4
+  { cosa: "manzanas",  cosaS: "manzana",  a: 2, b: 6, c: 16 }, // 2x + 6 = 16 → 5
+];
+export function linealAplicadaLSG(opts = {}) {
+  const evit = canonExpr(opts.evitar || "");
+  let i = LINEAL_VIDA.findIndex((c) => !evit.includes(canonExpr(c.cosa)));
+  if (i < 0) i = 0;
+  const E = LINEAL_VIDA[i], P = LINEAL_VIDA[(i + 1) % LINEAL_VIDA.length];
+  const sol = solveLinearSteps(`${E.a}x + ${E.b} = ${E.c}`);
+  const solP = solveLinearSteps(`${P.a}x + ${P.b} = ${P.c}`);
+  const dir = [
+    { tipo: "avatar", accion: "sonreir" },
+    { tipo: "hablar", texto: "Las ecuaciones lineales sirven para resolver problemas del día a día donde hay un dato que no conoces. Veamos un ejemplo de compras." },
+    { tipo: "hablar", texto: `Compraste ${E.a} ${E.cosa} iguales, pagaste ${E.c} y te devolvieron ${E.b} de cambio. Si cada ${E.cosaS} cuesta x, lo que costaron más el cambio es igual a lo que pagaste.` },
+    { tipo: "pizarra", accion: "escribir", contenido: sol.original },
+    { tipo: "esperar", segundos: 1 },
+  ];
+  for (const s of sol.steps) {
+    dir.push({ tipo: "hablar", texto: s.explica });
+    dir.push({ tipo: "pizarra", accion: "escribir", contenido: s.escribe });
+  }
+  dir.push({ tipo: "hablar", texto: `Así, cada ${E.cosaS} cuesta ${sol.answer}: la ecuación nos dio el dato que faltaba. Ahora te toca a ti.` });
+  dir.push({ tipo: "hablar", texto: `Compraste ${P.a} ${P.cosa}, pagaste ${P.c} y te devolvieron ${P.b} de cambio. El precio de cada uno cumple ${solP.original}.` });
+  dir.push({ tipo: "pizarra", accion: "escribir", contenido: solP.original });
+  dir.push({ tipo: "preguntar", texto: `¿Cuánto cuesta cada ${P.cosaS}? Escribe solo el número.`, respuesta: solP.answer, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" });
+  return { escena: "lineal_resuelta", intencion: "aprender", duracion_estimada: 80, _mock: true, directivas: dir };
+}
+
+// ── 2) FRACCIONES en la vida real: repartir algo (pizza, chocolate, jugo) en partes iguales. ──
+const FRACC_VIDA = [
+  { hist: "Una pizza está cortada en 8 partes iguales. Tú te comes 3 (3/8) y tu hermano 2 (2/8).", d: 8, a: 3, b: 2,
+    pHist: "Un chocolate tiene 7 cuadritos: comes 2 (2/7) y luego 3 más (3/7).", pd: 7, pa: 2, pb: 3 },
+  { hist: "Un pastel se corta en 5 porciones iguales. Comes 2 (2/5) y tu amiga 1 (1/5).", d: 5, a: 2, b: 1,
+    pHist: "Una jarra rinde 9 vasos: bebes 4 (4/9) y tu amigo 3 (3/9).", pd: 9, pa: 4, pb: 3 },
+];
+export function fraccionAplicadaLSG(opts = {}) {
+  const evit = canonExpr(opts.evitar || "");
+  let i = FRACC_VIDA.findIndex((c) => !evit.includes(canonExpr(c.hist.slice(0, 14))));
+  if (i < 0) i = 0;
+  const c = FRACC_VIDA[i];
+  const sum = c.a + c.b, psum = c.pa + c.pb;
+  const dir = [
+    { tipo: "avatar", accion: "sonreir" },
+    { tipo: "hablar", texto: "Las fracciones aparecen todo el tiempo cuando repartimos algo en partes iguales: una pizza, un chocolate, una jarra de jugo. Veamos un ejemplo." },
+    { tipo: "hablar", texto: `${c.hist} ¿Qué parte se comieron entre los dos? Como las partes son del mismo tamaño (mismo denominador ${c.d}), sumamos los de arriba: ${c.a} + ${c.b} = ${sum}.` },
+    { tipo: "pizarra", accion: "escribir", contenido: `${c.a}/${c.d} + ${c.b}/${c.d} = ${sum}/${c.d}` },
+    { tipo: "hablar", texto: `Así, entre los dos se comieron ${sum}/${c.d} del total: sumar fracciones con el mismo denominador es juntar las partes. Ahora te toca a ti.` },
+    { tipo: "hablar", texto: `${c.pHist} ¿Cuánto es en total?` },
+    { tipo: "pizarra", accion: "escribir", contenido: `${c.pa}/${c.pd} + ${c.pb}/${c.pd} = ?` },
+    { tipo: "preguntar", texto: `¿Cuánto es ${c.pa}/${c.pd} + ${c.pb}/${c.pd}? Escribe la fracción.`, respuesta: `${psum}/${c.pd}`, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
+  ];
+  return { escena: "fraccion_resuelta", intencion: "aprender", duracion_estimada: 70, _mock: true, directivas: dir };
+}
+
+// ── 3) FACTORIZACIÓN (diferencia de cuadrados) en la vida real: el área que sobra al recortar un
+//    cuadrado pequeño de uno grande (x² - b² = (x - b)(x + b), interpretación geométrica). ──
+const FACTOR_VIDA = [
+  { N: 9, r: 3 }, { N: 16, r: 4 }, { N: 25, r: 5 },
+];
+export function factorizacionAplicadaLSG(opts = {}) {
+  const evit = canonExpr(opts.evitar || "");
+  let i = FACTOR_VIDA.findIndex((c) => !evit.includes(`x^2-${c.N}`));
+  if (i < 0) i = 0;
+  const E = FACTOR_VIDA[i], P = FACTOR_VIDA[(i + 1) % FACTOR_VIDA.length];
+  const exprE = `x² - ${E.N}`, exprP = `x² - ${P.N}`;
+  const facE = computeFactorization(exprE), facP = computeFactorization(exprP);
+  const dir = [
+    { tipo: "avatar", accion: "sonreir" },
+    { tipo: "hablar", texto: "La factorización por diferencia de cuadrados tiene un significado muy visual: es el área que queda al recortar un cuadrado pequeño de uno grande." },
+    { tipo: "hablar", texto: `Imagina una lámina cuadrada de lado x y le recortas un cuadrado de lado ${E.r}. El área que sobra es el cuadrado grande menos el pequeño: x² - ${E.N}.` },
+    { tipo: "pizarra", accion: "escribir", contenido: `área sobrante:  ${exprE}` },
+    { tipo: "hablar", texto: `Esa misma área se puede reacomodar como un rectángulo. Como ${E.N} es ${E.r}², aplicamos la regla a² - b² = (a - b)(a + b) con a = x y b = ${E.r}.` },
+    { tipo: "pizarra", accion: "escribir", contenido: `${exprE} = ${facE}` },
+    { tipo: "hablar", texto: `Así, esa área es un rectángulo de lados (x - ${E.r}) y (x + ${E.r}). Factorizar es reescribir la misma cantidad como un producto. Ahora te toca a ti.` },
+    { tipo: "hablar", texto: `Recortas un cuadrado de lado ${P.r} de una lámina de lado x. El área sobrante es ${exprP}.` },
+    { tipo: "pizarra", accion: "escribir", contenido: exprP },
+    { tipo: "preguntar", texto: `¿Cómo se factoriza ${exprP}? Escríbelo como producto de dos paréntesis.`, respuesta: facP, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
+  ];
+  return { escena: "factorizacion_resuelta", intencion: "aprender", duracion_estimada: 75, _mock: true, directivas: dir };
+}
+
 // ── Detección del tema y despacho al generador correcto ──
 // Extrae de un texto una función/monomio simple ("derivada de 5x²" → "5x²"), o null.
 function extraerMonomio(texto) {
@@ -810,9 +900,14 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   const ctxTema = normBoton(`${contexto} ${currentTopic}`);
   const pideAplicado = /vida cotidiana|vida real|vida diaria|mundo real|cotidian|d[ií]a a d[ií]a|para qu[eé]\s+(sirve|sirven|se usa|se utiliza)|aplicaci[oó]n|aplicad|caso real|ejemplo real|situaci[oó]n real|ejemplo pr[aá]ctico|en la pr[aá]ctica|variaci[oó]n de (?:la )?velocidad|\bvelocidad\b|\baceleraci[oó]n\b/.test(nQ);
   if (pideAplicado) {
-    const esDerivada = /deriv/.test(nQ) || /velocidad|aceleraci|variaci[oó]n/.test(nQ) || /deriv/.test(ctxTema);
-    if (esDerivada) return commonRet("derivada", derivadaAplicadaLSG({ evitar: previo }));
-    return null; // aplicado en otro tema en alcance → explicación conceptual/aplicada la da Gemini (Nivel 2)
+    // Se despacha al MISMO tema, pero a su lección APLICADA determinista (no a la numérica). El tema se
+    // toma de la consulta o, en un seguimiento, del contexto activo.
+    const tt = `${nQ} ${ctxTema}`;
+    if (/deriv/.test(nQ) || /velocidad|aceleraci|variaci[oó]n/.test(nQ) || /deriv/.test(ctxTema)) return commonRet("derivada", derivadaAplicadaLSG({ evitar: previo }));
+    if (/fracc/.test(tt)) return commonRet("fraccion", fraccionAplicadaLSG({ evitar: previo }));
+    if (/factoriz|diferencia de cuadrados/.test(tt)) return commonRet("factorizacion", factorizacionAplicadaLSG({ evitar: previo }));
+    if (/ecuaci|lineal|primer grado|despej/.test(tt)) return commonRet("lineal", linealAplicadaLSG({ evitar: previo }));
+    return null; // aplicado pero sin tema identificable → explicación conceptual la da Gemini (Nivel 2)
   }
 
   // 1) DERIVADAS. Si nombra una función NO polinómica (trig, log, raíz, eˣ) → null (lo hace Gemini, Nivel 3).

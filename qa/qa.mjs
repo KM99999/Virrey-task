@@ -231,6 +231,26 @@ async function unitTests() {
   const derNum = correrBoton({ query: "Enséñame derivadas" });
   check("regresión derivadas numérica: 'enséñame derivadas' sigue mostrando 'derivada de … = …'", !!derNum && derNum.pizarras.some((p) => /derivada de .* = /.test(p)));
 
+  // ── MISMO ARREGLO en los OTROS 3 temas: una consulta aplicada / de la vida real NO debe caer en un
+  //    ejercicio numérico suelto ni en null (Gemini): debe dar una lección APLICADA determinista con
+  //    caso cotidiano + práctica calificable. (Cliente: "no debe haber bugs en los otros ítems".)
+  const aplicadosTemas = [
+    ["lineal",        "dame un ejemplo de ecuaciones lineales de la vida cotidiana", /compr|precio|cuest|pag|cambio/i],
+    ["fraccion",      "dame un ejemplo de fracciones de la vida real",               /pizza|chocolate|jarra|repart|parte/i],
+    ["factorizacion", "un ejemplo de factorización aplicado a la vida real",          /área|area|lámina|lamina|recort|rectángulo|rectangulo/i],
+  ];
+  for (const [tema, q, ctxRe] of aplicadosTemas) {
+    const r = correrBoton({ query: q });
+    check(`aplicada [${tema}]: despacha determinista (no null/Gemini)`, !!r && r.tema === tema, r ? r.tema : "null");
+    if (!r) continue;
+    check(`aplicada [${tema}]: intención 'aprender'`, r.intencion === "aprender", r.intencion);
+    const hablarTodo = r.flat.filter((d) => d.tipo === "hablar").map((d) => d.texto).join(" ");
+    check(`aplicada [${tema}]: usa un contexto cotidiano real`, ctxRe.test(hablarTodo));
+    check(`aplicada [${tema}]: UNA práctica calificable`, r.nPreg === 1 && !!String(r.q?.respuesta || "").trim());
+    check(`aplicada [${tema}]: la respuesta se califica bien`, !!r.q && checkAnswer(r.q.respuesta, r.q.respuesta).correct === true);
+    check(`aplicada [${tema}]: sin igualdad corrupta en pizarra`, !r.pizarras.some((p) => /=\s*(?:$|[.,;])/.test(p) || /\bx\s*\d+\b/.test(p)));
+  }
+
   // ── NIVELES DE DIFICULTAD en los 4 temas: "más difícil" debe dar un ejercicio DE VERDAD más difícil
   //    (antes caía a una lista trivial y devolvía "2x = 6", MÁS FÁCIL que el propio ejemplo).
   const nivelBoton = (contexto, seg) => correrBoton({ query: seg === "mas_dificil" ? "presentar un problema más difícil" : "algo más fácil", seguimiento: seg, contexto, previo: "" });
