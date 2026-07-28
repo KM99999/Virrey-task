@@ -881,9 +881,11 @@ function esSaludoOMetaBoton(n) {
 // "ayúdame", "otro", "más", "resuélveme otro". Sirve para que, con un tema núcleo activo, estas consultas
 // se respondan DETERMINISTAS (nunca Gemini, de donde salían las lecciones incoherentes).
 function esReteachBoton(q, seguimiento) {
-  if (["reexplicar", "continuacion", "practicar", "resolver_otro", "mas_facil", "mas_dificil"].includes(seguimiento)) return true;
   const n = normBoton(q);
+  // Un SALUDO/META nunca es una re-explicación, aunque llegue con un tipo de seguimiento (defensa: el
+  // servidor pone "reexplicar" si hay contexto, y no queremos convertir "hola/gracias" en una lección).
   if (!n || esSaludoOMetaBoton(n)) return false;
+  if (["reexplicar", "continuacion", "practicar", "resolver_otro", "mas_facil", "mas_dificil"].includes(seguimiento)) return true;
   if (/\bno\s+(lo\s+|la\s+|me\s+|se\s+lo\s+)?(entend|entiend|comprend|capt|pill)/.test(n)) return true;
   if (/explica\w*\s+(lo\s+|me\s+)?(mejor|otra vez|de nuevo|de otra forma|nuevamente|bien)/.test(n)) return true;
   if (/para dummies|mas simple|mas facil de entender|no me queda claro|estoy perdid|me perd[ií]|sigo sin entend|ni idea|no lo veo/.test(n)) return true;

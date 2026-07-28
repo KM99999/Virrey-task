@@ -266,10 +266,12 @@ async function unitTests() {
       check(`red de seguridad [${tema}] "${q}": práctica calificable coherente`, r.nPreg === 1 && checkAnswer(r.q.respuesta, r.q.respuesta).correct === true);
     }
   }
-  // Un SALUDO con tema activo NO debe secuestrarse como lección (debe seguir a Gemini/normal).
+  // Un SALUDO con tema activo NO debe secuestrarse como lección (debe seguir a Gemini/normal), NI
+  // siquiera si por el contexto el servidor le pusiera "reexplicar" (defensa: "hola" no es re-explicar).
   for (const [, ctx] of temasCtx) {
-    for (const saludo of ["hola", "gracias"]) {
+    for (const saludo of ["hola", "gracias", "ok", "buenos días"]) {
       check(`red de seguridad: "${saludo}" NO se convierte en lección`, correrBoton({ query: saludo, seguimiento: "", contexto: "", currentTopic: ctx }) === null);
+      check(`red de seguridad: "${saludo}" NO se secuestra ni con contexto/reexplicar`, correrBoton({ query: saludo, seguimiento: "reexplicar", contexto: ctx, currentTopic: ctx }) === null);
     }
   }
   // 'otro ejemplo' aplicado ROTA de escenario (no repite el coche).
