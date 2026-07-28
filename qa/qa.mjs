@@ -223,6 +223,29 @@ async function unitTests() {
     check(`derivada aplicada [${label}]: la respuesta se califica bien`, !!r.q && checkAnswer(r.q.respuesta, r.q.respuesta).correct === true);
     check(`derivada aplicada [${label}]: sin igualdad numérica corrupta en pizarra`, !r.pizarras.some((p) => /=\s*(?:$|[.,;])/.test(p) || /\(\s*[+×\-]/.test(p)));
   }
+  // SEGUIMIENTO aplicado sobre un tema con EXPRESIÓN concreta en el contexto (no la palabra "ecuación"):
+  // "explícalo con ejemplos de la vida real" estando en "Resuelve 2x + 5 = 15" DEBE dar la lección
+  // aplicada DETERMINISTA del tema (lineal), no caer a Gemini (que generaba "2x = 10" narrado vs
+  // "2x = 6" en la pizarra — incoherencia reportada por el cliente). Se prueba con el tema en el contexto.
+  const segAplicado = [
+    ["lineal",        "Resuelve 2x + 5 = 15",                  "Explícalo utilizando ejemplos de la vida real."],
+    ["factorizacion", "Explícame por qué se factoriza x² - 9", "dame un ejemplo de la vida real"],
+    ["derivada",      "Enséñame derivadas",                    "explícalo con un ejemplo de la vida cotidiana"],
+  ];
+  for (const [tema, ctx, q] of segAplicado) {
+    for (const seg of ["continuacion", "reexplicar"]) {
+      const r = correrBoton({ query: q, seguimiento: seg, contexto: ctx, currentTopic: ctx });
+      check(`seguimiento aplicado [${tema}/${seg}]: da lección determinista (no Gemini)`, !!r && r.tema === tema, r ? r.tema : "null");
+      if (!r) continue;
+      check(`seguimiento aplicado [${tema}/${seg}]: práctica calificable coherente`, r.nPreg === 1 && checkAnswer(r.q.respuesta, r.q.respuesta).correct === true);
+      // COHERENCIA (el bug era narrar un valor y preguntar otro): al ser DETERMINISTA, la respuesta se
+      // deduce del propio ejercicio. Se verifica que la respuesta calificable NO contradiga la lección,
+      // recalculándola a partir del enunciado/board con los mismos motores (lineal/factorización/fracción).
+      const board = r.board || "";
+      const recalc = solveLinearFromText(board) || computeFactorization(board) || solveFractionFromText((r.q.texto || "") + " " + board);
+      check(`seguimiento aplicado [${tema}/${seg}]: respuesta coherente con el ejercicio (sin contradicción)`, recalc == null || String(recalc).replace(/\s/g, "") === String(r.q.respuesta).replace(/\s/g, ""), `board=${board} recalc=${recalc} resp=${r.q.respuesta}`);
+    }
+  }
   // 'otro ejemplo' aplicado ROTA de escenario (no repite el coche).
   const apl1 = correrBoton({ query: "un ejemplo de derivadas de la vida real" });
   const apl2 = correrBoton({ query: "dame otro ejemplo de la vida real", seguimiento: "continuacion", contexto: "derivadas", previo: apl1?.hablar2 || "" });

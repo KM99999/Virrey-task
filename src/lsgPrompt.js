@@ -901,12 +901,21 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   const pideAplicado = /vida cotidiana|vida real|vida diaria|mundo real|cotidian|d[ií]a a d[ií]a|para qu[eé]\s+(sirve|sirven|se usa|se utiliza)|aplicaci[oó]n|aplicad|caso real|ejemplo real|situaci[oó]n real|ejemplo pr[aá]ctico|en la pr[aá]ctica|variaci[oó]n de (?:la )?velocidad|\bvelocidad\b|\baceleraci[oó]n\b/.test(nQ);
   if (pideAplicado) {
     // Se despacha al MISMO tema, pero a su lección APLICADA determinista (no a la numérica). El tema se
-    // toma de la consulta o, en un seguimiento, del contexto activo.
+    // toma de la consulta O del CONTEXTO activo. OJO: en un seguimiento ("explícalo con ejemplos de la
+    // vida real"), el frontend manda como contexto/currentTopic la CONSULTA que abrió el tema (p.ej.
+    // "Resuelve 2x + 5 = 15"), que NO contiene la palabra "ecuación/lineal". Por eso, además de las
+    // palabras clave, se detecta el tema por la FORMA de la expresión (una ecuación lineal, una
+    // diferencia de cuadrados o una fracción en el contexto). Sin esto caía a Gemini, que generaba
+    // lecciones incoherentes (p.ej. narrar "2x = 10" y preguntar "2x = 6") — bug reportado por el cliente.
     const tt = `${nQ} ${ctxTema}`;
+    const enCtx = `${query} ${contexto} ${currentTopic}`;
+    const hayLineal = solveLinearSteps(query) !== null || solveLinearSteps(contexto) !== null || solveLinearSteps(currentTopic) !== null;
+    const hayDifCuad = /[a-z]\s*(?:\^\s*2|[²])\s*-\s*\d/i.test(enCtx);
+    const hayFrac = /\d\s*\/\s*\d/.test(enCtx);
     if (/deriv/.test(nQ) || /velocidad|aceleraci|variaci[oó]n/.test(nQ) || /deriv/.test(ctxTema)) return commonRet("derivada", derivadaAplicadaLSG({ evitar: previo }));
-    if (/fracc/.test(tt)) return commonRet("fraccion", fraccionAplicadaLSG({ evitar: previo }));
-    if (/factoriz|diferencia de cuadrados/.test(tt)) return commonRet("factorizacion", factorizacionAplicadaLSG({ evitar: previo }));
-    if (/ecuaci|lineal|primer grado|despej/.test(tt)) return commonRet("lineal", linealAplicadaLSG({ evitar: previo }));
+    if (/fracc/.test(tt) || (hayFrac && !hayLineal)) return commonRet("fraccion", fraccionAplicadaLSG({ evitar: previo }));
+    if (/factoriz|diferencia de cuadrados/.test(tt) || hayDifCuad) return commonRet("factorizacion", factorizacionAplicadaLSG({ evitar: previo }));
+    if (/ecuaci|lineal|primer grado|despej/.test(tt) || hayLineal) return commonRet("lineal", linealAplicadaLSG({ evitar: previo }));
     return null; // aplicado pero sin tema identificable → explicación conceptual la da Gemini (Nivel 2)
   }
 
