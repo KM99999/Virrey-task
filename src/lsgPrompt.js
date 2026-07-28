@@ -681,6 +681,20 @@ export function derivadaResueltaLSG(opts = {}) {
   return { escena: "derivada_resuelta", intencion: opts.concepto ? "aprender" : "resolver", duracion_estimada: 65, _mock: true, directivas: dir };
 }
 
+// Elige el ÍNDICE de escenario aplicado que NO se acaba de mostrar (rota con `evitar` = resumen de la
+// lección previa). Si algún escenario aparece en `evitar`, salta al siguiente que NO aparece; si NINGUNO
+// aparece (la lección previa era de otro tipo y su resumen no nombra ningún escenario), varía según la
+// longitud del texto previo para no repetir SIEMPRE el primero. Todos los escenarios son válidos, así que
+// cualquier índice da una lección correcta: esto solo aporta VARIEDAD (evita repetir el mismo caso real).
+function idxEscenario(list, evitarRaw, keyOf) {
+  const evit = canonExpr(evitarRaw || "");
+  const mencionado = !!evit && list.some((c) => evit.includes(canonExpr(keyOf(c))));
+  if (mencionado) { const i = list.findIndex((c) => !evit.includes(canonExpr(keyOf(c)))); return i < 0 ? 0 : i; }
+  if (!evitarRaw) return 0;
+  const h = String(evitarRaw).split("").reduce((a, ch) => a + ch.charCodeAt(0), 0);
+  return h % list.length;
+}
+
 // ── 2b) DERIVADA EN LA VIDA REAL: la derivada como "rapidez de cambio". El caso canónico es la
 // VELOCIDAD (la velocidad es la derivada de la posición respecto al tiempo). DETERMINISTA: explica el
 // SIGNIFICADO con un caso cotidiano y números concretos, y cierra con una práctica NUMÉRICA (la
@@ -694,10 +708,7 @@ const DERIV_VIDA = [
   { obj: "un tren", mag: "posición",        sym: "s", pos: "3t²", tabla: "a 1 s ha avanzado 3 m; a 2 s, 12 m; a 3 s, 27 m", k: 6,  tE: 3, tP: 5 },
 ];
 export function derivadaAplicadaLSG(opts = {}) {
-  const evit = canonExpr(opts.evitar || "");
-  let idx = DERIV_VIDA.findIndex((c) => !evit.includes(canonExpr(c.obj)));
-  if (idx < 0) idx = 0;
-  const c = DERIV_VIDA[idx];
+  const c = DERIV_VIDA[idxEscenario(DERIV_VIDA, opts.evitar, (s) => s.obj)];
   const vel = `${c.k}t`;               // velocidad = derivada de la posición (regla de la potencia)
   const vE = c.k * c.tE;               // velocidad en el instante del ejemplo
   const vP = c.k * c.tP;               // velocidad en la práctica (respuesta calificable)
@@ -780,9 +791,7 @@ const LINEAL_VIDA = [
   { cosa: "manzanas",  cosaS: "manzana",  a: 2, b: 6, c: 16 }, // 2x + 6 = 16 → 5
 ];
 export function linealAplicadaLSG(opts = {}) {
-  const evit = canonExpr(opts.evitar || "");
-  let i = LINEAL_VIDA.findIndex((c) => !evit.includes(canonExpr(c.cosa)));
-  if (i < 0) i = 0;
+  const i = idxEscenario(LINEAL_VIDA, opts.evitar, (c) => c.cosa);
   const E = LINEAL_VIDA[i], P = LINEAL_VIDA[(i + 1) % LINEAL_VIDA.length];
   const sol = solveLinearSteps(`${E.a}x + ${E.b} = ${E.c}`);
   const solP = solveLinearSteps(`${P.a}x + ${P.b} = ${P.c}`);
@@ -812,10 +821,7 @@ const FRACC_VIDA = [
     pHist: "Una jarra rinde 9 vasos: bebes 4 (4/9) y tu amigo 3 (3/9).", pd: 9, pa: 4, pb: 3 },
 ];
 export function fraccionAplicadaLSG(opts = {}) {
-  const evit = canonExpr(opts.evitar || "");
-  let i = FRACC_VIDA.findIndex((c) => !evit.includes(canonExpr(c.hist.slice(0, 14))));
-  if (i < 0) i = 0;
-  const c = FRACC_VIDA[i];
+  const c = FRACC_VIDA[idxEscenario(FRACC_VIDA, opts.evitar, (s) => s.hist.slice(0, 14))];
   const sum = c.a + c.b, psum = c.pa + c.pb;
   const dir = [
     { tipo: "avatar", accion: "sonreir" },
@@ -836,9 +842,7 @@ const FACTOR_VIDA = [
   { N: 9, r: 3 }, { N: 16, r: 4 }, { N: 25, r: 5 },
 ];
 export function factorizacionAplicadaLSG(opts = {}) {
-  const evit = canonExpr(opts.evitar || "");
-  let i = FACTOR_VIDA.findIndex((c) => !evit.includes(`x^2-${c.N}`));
-  if (i < 0) i = 0;
+  const i = idxEscenario(FACTOR_VIDA, opts.evitar, (c) => `x^2-${c.N}`);
   const E = FACTOR_VIDA[i], P = FACTOR_VIDA[(i + 1) % FACTOR_VIDA.length];
   const exprE = `x² - ${E.N}`, exprP = `x² - ${P.N}`;
   const facE = computeFactorization(exprE), facP = computeFactorization(exprP);
