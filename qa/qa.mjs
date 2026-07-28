@@ -246,6 +246,32 @@ async function unitTests() {
       check(`seguimiento aplicado [${tema}/${seg}]: respuesta coherente con el ejercicio (sin contradicción)`, recalc == null || String(recalc).replace(/\s/g, "") === String(r.q.respuesta).replace(/\s/g, ""), `board=${board} recalc=${recalc} resp=${r.q.respuesta}`);
     }
   }
+  // ── RED DE SEGURIDAD: con un tema NÚCLEO activo, un seguimiento de re-explicación/ayuda NUNCA debe ir
+  //    a Gemini (de ahí salían las lecciones incoherentes). "no entendí", "explícalo mejor", "¿por qué?",
+  //    "no sé", "ayúdame", "otra vez", "resuélveme otro" → lección determinista, coherente y calificable.
+  const temasCtx = [
+    ["lineal", "Resuelve 2x + 5 = 15"], ["derivada", "Enséñame derivadas"],
+    ["factorizacion", "¿Por qué factorizar x² - 9?"], ["fraccion", "Ejercicio de fracciones"],
+  ];
+  const reteachFrases = [
+    ["no entendí", "reexplicar"], ["explícalo mejor", "reexplicar"], ["otra vez", "reexplicar"],
+    ["para dummies", "reexplicar"], ["¿por qué?", ""], ["no sé", ""], ["ayúdame", ""], ["resuélveme otro", ""],
+  ];
+  for (const [tema, ctx] of temasCtx) {
+    for (const [q, seg] of reteachFrases) {
+      // seg="" simula el caso en que el frontend NO clasifica el seguimiento pero SÍ envía currentTopic.
+      const r = correrBoton({ query: q, seguimiento: seg, contexto: seg ? ctx : "", currentTopic: ctx, previo: "" });
+      check(`red de seguridad [${tema}] "${q}": determinista (no Gemini)`, !!r && r.tema === tema, r ? r.tema : "null");
+      if (!r) continue;
+      check(`red de seguridad [${tema}] "${q}": práctica calificable coherente`, r.nPreg === 1 && checkAnswer(r.q.respuesta, r.q.respuesta).correct === true);
+    }
+  }
+  // Un SALUDO con tema activo NO debe secuestrarse como lección (debe seguir a Gemini/normal).
+  for (const [, ctx] of temasCtx) {
+    for (const saludo of ["hola", "gracias"]) {
+      check(`red de seguridad: "${saludo}" NO se convierte en lección`, correrBoton({ query: saludo, seguimiento: "", contexto: "", currentTopic: ctx }) === null);
+    }
+  }
   // 'otro ejemplo' aplicado ROTA de escenario (no repite el coche).
   const apl1 = correrBoton({ query: "un ejemplo de derivadas de la vida real" });
   const apl2 = correrBoton({ query: "dame otro ejemplo de la vida real", seguimiento: "continuacion", contexto: "derivadas", previo: apl1?.hablar2 || "" });

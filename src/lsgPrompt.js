@@ -872,6 +872,39 @@ function extraerDifCuadrados(texto) {
 // Devuelve el LSG determinista de uno de los 4 botones, o null si la consulta no es de ninguno de
 // ellos (→ el servidor sigue el flujo normal con Gemini para temas libres/avanzados, Nivel 3).
 //   { query, seguimiento, contexto, currentTopic, previo }
+// ¿Saludo o mensaje META (no matemático)? — para NO re-enseñar un tema por un "hola/gracias/ok".
+function esSaludoOMetaBoton(n) {
+  return /^(hola|buenas|buenos dias|buenas tardes|buenas noches|hey|ola|que tal|como estas|gracias|muchas gracias|ok|okay|vale|listo|perfecto|adios|chao|hi|hello|thanks|thank you)\b[\s!.?]*$/.test(n);
+}
+// ¿La consulta es un SEGUIMIENTO de re-explicación / ayuda / "otro" sobre el tema ACTIVO (sin nombrar un
+// tema nuevo)? Cubre "no entendí", "explícalo mejor", "otra vez", "para dummies", "¿por qué?", "no sé",
+// "ayúdame", "otro", "más", "resuélveme otro". Sirve para que, con un tema núcleo activo, estas consultas
+// se respondan DETERMINISTAS (nunca Gemini, de donde salían las lecciones incoherentes).
+function esReteachBoton(q, seguimiento) {
+  if (["reexplicar", "continuacion", "practicar", "resolver_otro", "mas_facil", "mas_dificil"].includes(seguimiento)) return true;
+  const n = normBoton(q);
+  if (!n || esSaludoOMetaBoton(n)) return false;
+  if (/\bno\s+(lo\s+|la\s+|me\s+|se\s+lo\s+)?(entend|entiend|comprend|capt|pill)/.test(n)) return true;
+  if (/explica\w*\s+(lo\s+|me\s+)?(mejor|otra vez|de nuevo|de otra forma|nuevamente|bien)/.test(n)) return true;
+  if (/para dummies|mas simple|mas facil de entender|no me queda claro|estoy perdid|me perd[ií]|sigo sin entend|ni idea|no lo veo/.test(n)) return true;
+  if (/\botr[oa]\b|\bmas\b|resuelv|de nuevo|otra vez|sigue|contin[uú]a/.test(n)) return true;
+  const p = n.split(/\s+/).filter(Boolean).length;
+  if (p <= 3 && /(no se|ayud|auxilio|por que|porque)/.test(n)) return true;
+  return false;
+}
+// Tema NÚCLEO (uno de los 4) al que pertenece un texto, por palabra clave o por la FORMA de la expresión
+// ("2x + 5 = 15" → lineal, "x² - 9" → factorización). null si no es de ningún tema núcleo.
+function temaNucleo(text) {
+  const n = normBoton(text);
+  if (!n) return null;
+  if (/deriv/.test(n)) return "derivada";
+  if (/factoriz|diferencia de cuadrados/.test(n) || /[a-z]\s*(?:\^\s*2|[²])\s*-\s*\d/i.test(text)) return "factorizacion";
+  if (/fracc/.test(n) || /\d\s*\/\s*\d/.test(text)) return "fraccion";
+  if (/ecuaci|lineal|primer grado|despej/.test(n) || solveLinearSteps(text) !== null) return "lineal";
+  return null;
+}
+const GEN_APLICADA = { derivada: derivadaAplicadaLSG, lineal: linealAplicadaLSG, fraccion: fraccionAplicadaLSG, factorizacion: factorizacionAplicadaLSG };
+
 export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", currentTopic = "", previo = "" } = {}) {
   const SEG_OTRO = new Set(["continuacion", "practicar", "resolver_otro"]);
   // "más fácil"/"más difícil" son seguimientos de NIVEL del tema activo: se mantiene el tema y se cambia
@@ -957,6 +990,19 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   if (!noLineal && (instLin || /\becuaci[oó]n(?:es)?\b|\blineal(?:es)?\b|primer grado/.test(n))) {
     // "enséñame ecuaciones lineales" (sin una ecuación concreta) → enseñar el CONCEPTO primero.
     return commonRet("lineal", linealResueltaLSG({ evitar: previo, instancia: instLin, seguimiento: esSeg, nivel, concepto: !instLin && !esSeg && pideEnsenar }));
+  }
+
+  // ── RED DE SEGURIDAD: los 4 temas núcleo NUNCA caen en Gemini por un seguimiento ──
+  // Si hay un TEMA NÚCLEO ACTIVO (contexto/currentTopic) y la consulta es un seguimiento de
+  // re-explicación/ayuda/"otro" (no un tema nuevo ni un saludo), se re-enseña con la versión APLICADA
+  // determinista del tema —coherente, correcta y calificable— en lugar de mandar "no entendí" / "¿por
+  // qué?" / "explícalo mejor" a Gemini, que generaba lecciones incoherentes (narraba un valor y
+  // preguntaba otro). Cierra TODA la clase de bug: dentro de un tema núcleo se responde SIEMPRE
+  // determinista, salvo que el alumno nombre explícitamente un tema nuevo (esas consultas ya salieron
+  // arriba por las ramas 1-4 o no tienen tema núcleo activo).
+  const temaActivo = temaNucleo(contexto) || temaNucleo(currentTopic);
+  if (temaActivo && GEN_APLICADA[temaActivo] && esReteachBoton(query, seguimiento)) {
+    return commonRet(temaActivo, GEN_APLICADA[temaActivo]({ evitar: previo }));
   }
 
   return null; // no es ninguno de los 4 botones → flujo normal (Gemini)
