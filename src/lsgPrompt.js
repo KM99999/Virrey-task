@@ -674,9 +674,20 @@ export function derivadaResueltaLSG(opts = {}) {
       // "el coeficiente 1 por el exponente 2: 1 × 2 = 2, y el nuevo exponente es 1".
       ? `Regla de la potencia: multiplicamos el coeficiente por el exponente, y al exponente le restamos 1. Aquí el coeficiente es ${pm.a} y el exponente ${pm.n}: ${pm.a} × ${pm.n} = ${pm.a * pm.n}, y el nuevo exponente es ${pm.n - 1}.`
       : `La derivada de una recta ${ejemplo} es su pendiente, ${derE}.`;
-  const dir = [
-    { tipo: "avatar", accion: "sonreir" },
-    { tipo: "hablar", texto: `Vamos a derivar ${ejemplo}. Derivar mide qué tan rápido cambia una función. Para una potencia usamos la regla de la potencia: la derivada de xⁿ es n·xⁿ⁻¹.` },
+  const dir = [{ tipo: "avatar", accion: "sonreir" }];
+  // ENSEÑAR el tema ("enséñame derivadas"): primero el CONCEPTO (qué es una derivada y para qué sirve)
+  // y la REGLA, y SOLO DESPUÉS el ejemplo resuelto — no saltar directo a resolver un ejercicio (queja
+  // del cliente: "le digo 'enséñame derivadas' y de frente me enseña a resolver ejercicios").
+  if (opts.concepto) {
+    dir.push({ tipo: "hablar", texto: "Una derivada mide la RAPIDEZ con la que cambia una función: en cada punto indica cuánto crece o decrece, es decir, la pendiente de su gráfica. Por eso sirve, por ejemplo, para obtener la velocidad a partir de la posición." });
+    dir.push({ tipo: "pizarra", accion: "escribir", contenido: "Derivada: razón de cambio (la pendiente) de una función" });
+    dir.push({ tipo: "hablar", texto: "Para derivar una potencia usamos la REGLA DE LA POTENCIA: se baja el exponente multiplicando delante y se le resta 1. Es decir, la derivada de x elevado a n es n por x elevado a n menos 1. Veámoslo con un ejemplo." });
+    dir.push({ tipo: "pizarra", accion: "escribir", contenido: "Regla de la potencia:  la derivada de xⁿ es n·xⁿ⁻¹" });
+    dir.push({ tipo: "hablar", texto: `Vamos a derivar ${ejemplo}.` });
+  } else {
+    dir.push({ tipo: "hablar", texto: `Vamos a derivar ${ejemplo}. Derivar mide qué tan rápido cambia una función. Para una potencia usamos la regla de la potencia: la derivada de xⁿ es n·xⁿ⁻¹.` });
+  }
+  dir.push(
     { tipo: "pizarra", accion: "escribir", contenido: ejemplo },
     { tipo: "esperar", segundos: 1 },
     { tipo: "hablar", texto: explica },
@@ -684,7 +695,7 @@ export function derivadaResueltaLSG(opts = {}) {
     { tipo: "hablar", texto: `Así, la derivada de ${ejemplo} es ${derE}. Ahora te toca a ti.` },
     { tipo: "pizarra", accion: "escribir", contenido: practica },
     { tipo: "preguntar", texto: `¿Cuál es la derivada de ${practica}?`, respuesta: derP, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
-  ];
+  );
   return { escena: "derivada_resuelta", intencion: opts.concepto ? "aprender" : "resolver", duracion_estimada: 65, _mock: true, directivas: dir };
 }
 
@@ -778,9 +789,19 @@ export function factorizacionResueltaLSG(opts = {}) {
   }
   const facE = computeFactorization(ejemplo);
   const facP = computeFactorization(practica);
-  const dir = [
-    { tipo: "avatar", accion: "sonreir" },
-    { tipo: "hablar", texto: `Vamos a factorizar ${ejemplo}. Es una "diferencia de cuadrados": un cuadrado menos otro cuadrado. La regla es a² - b² = (a - b)(a + b).` },
+  const dir = [{ tipo: "avatar", accion: "sonreir" }];
+  // ENSEÑAR el tema ("enséñame factorización"): primero el CONCEPTO (qué es factorizar) y la REGLA, y
+  // LUEGO el ejemplo — no saltar directo a resolver (misma queja del cliente que en derivadas).
+  if (opts.concepto) {
+    dir.push({ tipo: "hablar", texto: "Factorizar es reescribir una expresión como un PRODUCTO —una multiplicación de factores más simples— sin cambiar su valor. Es lo contrario de multiplicar: en vez de abrir paréntesis, los buscamos." });
+    dir.push({ tipo: "pizarra", accion: "escribir", contenido: "Factorizar: escribir una expresión como un producto de factores" });
+    dir.push({ tipo: "hablar", texto: 'Un caso muy común es la DIFERENCIA DE CUADRADOS: un cuadrado menos otro cuadrado. Su regla es a² - b² = (a - b)(a + b). Veámoslo con un ejemplo.' });
+    dir.push({ tipo: "pizarra", accion: "escribir", contenido: "Diferencia de cuadrados:  a² - b² = (a - b)(a + b)" });
+    dir.push({ tipo: "hablar", texto: `Vamos a factorizar ${ejemplo}.` });
+  } else {
+    dir.push({ tipo: "hablar", texto: `Vamos a factorizar ${ejemplo}. Es una "diferencia de cuadrados": un cuadrado menos otro cuadrado. La regla es a² - b² = (a - b)(a + b).` });
+  }
+  dir.push(
     { tipo: "pizarra", accion: "escribir", contenido: ejemplo },
     { tipo: "esperar", segundos: 1 },
     { tipo: "hablar", texto: explicaDifCuadrados(ejemplo) || "Identificamos a y b (las raíces de cada cuadrado) y aplicamos la regla." },
@@ -788,7 +809,7 @@ export function factorizacionResueltaLSG(opts = {}) {
     { tipo: "hablar", texto: `Así, ${ejemplo} se factoriza como ${facE}. Ahora te toca a ti con otra parecida.` },
     { tipo: "pizarra", accion: "escribir", contenido: practica },
     { tipo: "preguntar", texto: `¿Cómo se factoriza ${practica}? Escríbelo como producto de dos paréntesis.`, respuesta: facP, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
-  ];
+  );
   return { escena: "factorizacion_resuelta", intencion: opts.concepto ? "aprender" : "resolver", duracion_estimada: 65, _mock: true, directivas: dir };
 }
 
