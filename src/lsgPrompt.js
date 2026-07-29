@@ -688,11 +688,14 @@ export function derivadaResueltaLSG(opts = {}) {
 // cualquier índice da una lección correcta: esto solo aporta VARIEDAD (evita repetir el mismo caso real).
 function idxEscenario(list, evitarRaw, keyOf) {
   const evit = canonExpr(evitarRaw || "");
+  // Si el resumen previo MENCIONA un escenario (piden "otro ejemplo de la vida real" seguido), se salta
+  // al PRIMERO no mostrado (rota, no repite). Si NO menciona ninguno (primera vez en el tema, o venía de
+  // una lección numérica), se usa el escenario CANÓNICO (0): así el primer ejemplo de la vida real es
+  // PREDECIBLE y coincide con la guía de aceptación (coche / cuadernos / pizza / recortar un cuadrado).
   const mencionado = !!evit && list.some((c) => evit.includes(canonExpr(keyOf(c))));
-  if (mencionado) { const i = list.findIndex((c) => !evit.includes(canonExpr(keyOf(c)))); return i < 0 ? 0 : i; }
-  if (!evitarRaw) return 0;
-  const h = String(evitarRaw).split("").reduce((a, ch) => a + ch.charCodeAt(0), 0);
-  return h % list.length;
+  if (!mencionado) return 0;
+  const i = list.findIndex((c) => !evit.includes(canonExpr(keyOf(c))));
+  return i < 0 ? 0 : i;
 }
 
 // ── 2b) DERIVADA EN LA VIDA REAL: la derivada como "rapidez de cambio". El caso canónico es la
