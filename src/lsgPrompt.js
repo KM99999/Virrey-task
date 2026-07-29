@@ -705,10 +705,14 @@ function idxEscenario(list, evitarRaw, keyOf) {
 // no repita. Se usa cuando el alumno pide un ejemplo APLICADO / de la vida real (no un cálculo de un
 // monomio) — queja del cliente: pedía derivadas "de la vida cotidiana" / "con la variación de la
 // velocidad" y recibía un ejercicio numérico sin significado.
+// Nota TTS: las UNIDADES se escriben con palabra completa ("segundo/metro"), NO abreviadas ("s"/"m"):
+// el normalizador de voz lee una letra suelta como su NOMBRE (m→"eme", s→"ese"), igual que hace con las
+// variables (x→"equis"), y no puede distinguir una unidad de una variable. Con la palabra completa se
+// oye "un metro", no "eme". Los símbolos de la pizarra ("t²", "v(t) = 2t") NO se hablan (la pizarra es muda).
 const DERIV_VIDA = [
-  { obj: "un coche", mag: "posición",       sym: "s", pos: "t²",  tabla: "a 1 s ha avanzado 1 m; a 2 s, 4 m; a 3 s, 9 m",   k: 2,  tE: 2, tP: 5 },
-  { obj: "una pelota que cae", mag: "distancia caída", sym: "h", pos: "5t²", tabla: "a 1 s ha caído 5 m; a 2 s, 20 m; a 3 s, 45 m", k: 10, tE: 2, tP: 4 },
-  { obj: "un tren", mag: "posición",        sym: "s", pos: "3t²", tabla: "a 1 s ha avanzado 3 m; a 2 s, 12 m; a 3 s, 27 m", k: 6,  tE: 3, tP: 5 },
+  { obj: "un coche", mag: "posición",       sym: "s", pos: "t²",  tabla: "en 1 segundo avanza 1 metro, en 2 segundos 4 metros, en 3 segundos 9 metros",   k: 2,  tE: 2, tP: 5 },
+  { obj: "una pelota que cae", mag: "distancia caída", sym: "h", pos: "5t²", tabla: "en 1 segundo cae 5 metros, en 2 segundos 20 metros, en 3 segundos 45 metros", k: 10, tE: 2, tP: 4 },
+  { obj: "un tren", mag: "posición",        sym: "s", pos: "3t²", tabla: "en 1 segundo avanza 3 metros, en 2 segundos 12 metros, en 3 segundos 27 metros", k: 6,  tE: 3, tP: 5 },
 ];
 export function derivadaAplicadaLSG(opts = {}) {
   const c = DERIV_VIDA[idxEscenario(DERIV_VIDA, opts.evitar, (s) => s.obj)];
@@ -718,9 +722,9 @@ export function derivadaAplicadaLSG(opts = {}) {
   const dir = [
     { tipo: "avatar", accion: "sonreir" },
     { tipo: "hablar", texto: "Una derivada mide la RAPIDEZ con la que algo cambia. El ejemplo más cotidiano es la velocidad: la velocidad es la derivada de la posición respecto al tiempo, es decir, qué tan rápido cambia tu posición." },
-    { tipo: "hablar", texto: `Imagina ${c.obj}: su ${c.mag} a los t segundos es ${c.sym}(t) = ${c.pos} metros. Fíjate: ${c.tabla}. Cada segundo avanza más, así que va cada vez más rápido.` },
+    { tipo: "hablar", texto: `Imagina ${c.obj}: su ${c.mag} después de un tiempo t sigue la fórmula ${c.pos}, medida en metros. Fíjate: ${c.tabla}. Cada segundo avanza más, así que va cada vez más rápido.` },
     { tipo: "pizarra", accion: "escribir", contenido: `${c.mag}: ${c.sym}(t) = ${c.pos}  (metros)` },
-    { tipo: "hablar", texto: `La velocidad en cada instante es la derivada de la ${c.mag}. Derivamos ${c.pos} con la regla de la potencia —bajamos el exponente multiplicando y le restamos 1— y queda ${vel}: esa es la velocidad en el segundo t.` },
+    { tipo: "hablar", texto: `La velocidad en cada instante es la derivada de la ${c.mag}. Derivamos ${c.pos} con la regla de la potencia —bajamos el exponente multiplicando y le restamos 1— y queda ${vel}: esa es la velocidad en cada instante.` },
     { tipo: "pizarra", accion: "escribir", contenido: `velocidad: v(t) = ${vel}  (m/s)` },
     { tipo: "hablar", texto: `Por ejemplo, a los ${c.tE} segundos la velocidad es ${c.k} × ${c.tE} = ${vE} metros por segundo. La derivada da la velocidad EXACTA en ese instante, no un promedio.` },
     { tipo: "hablar", texto: "Como ves, la derivada no es solo un cálculo: te dice a qué ritmo cambian las cosas del día a día. Ahora te toca a ti, con el mismo móvil." },
