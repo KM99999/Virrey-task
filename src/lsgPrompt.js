@@ -594,8 +594,15 @@ const listaNivel = (listas, nivel) => listas[NIVELES.includes(nivel) ? nivel : "
 function elegirBoton(listas, { evitar, instancia, seguimiento, nivel } = {}) {
   const lista = listaNivel(listas, nivel);
   if (!seguimiento && instancia) {
-    const practica = lista.find((x) => canonExpr(x) !== canonExpr(instancia)) || lista[0];
-    return { ejemplo: instancia, practica };
+    // La práctica debe ser DISTINTA del ejemplo y VARIAR según la instancia. Antes se tomaba SIEMPRE el
+    // primer preset (find → lista[0]), así que consultas concretas distintas ("resuelve 3x-7=8",
+    // "resuelve 2x+3=8"; "deriva x⁵", "deriva 7x³") daban SIEMPRE la misma práctica ("2x + 5 = 15" / "x²"):
+    // repetitiva y con dificultad descolgada del ejemplo. Ahora se elige de forma determinista según la
+    // instancia (misma consulta → misma práctica; consultas distintas → prácticas distintas).
+    const pool = lista.filter((x) => canonExpr(x) !== canonExpr(instancia));
+    const cands = pool.length ? pool : lista;
+    const h = canonExpr(instancia).split("").reduce((a, c) => a + c.charCodeAt(0), 0);
+    return { ejemplo: instancia, practica: cands[h % cands.length] };
   }
   if (!seguimiento) return { ejemplo: lista[0], practica: lista[1] };
   return rotarBoton(lista, evitar);
