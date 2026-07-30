@@ -712,10 +712,10 @@ export function derivadaResueltaLSG(opts = {}) {
 // cualquier índice da una lección correcta: esto solo aporta VARIEDAD (evita repetir el mismo caso real).
 function idxEscenario(list, evitarRaw, keyOf) {
   const evit = canonExpr(evitarRaw || "");
-  // Si el resumen previo MENCIONA un escenario (piden "otro ejemplo de la vida real" seguido), se salta
-  // al PRIMERO no mostrado (rota, no repite). Si NO menciona ninguno (primera vez en el tema, o venía de
-  // una lección numérica), se usa el escenario CANÓNICO (0): así el primer ejemplo de la vida real es
-  // PREDECIBLE y coincide con la guía de aceptación (coche / cuadernos / pizza / recortar un cuadrado).
+  // Si el resumen previo MENCIONA un escenario (piden "otro ejemplo de la vida real" seguido), se AVANZA
+  // al SIGUIENTE no mostrado (rota por TODA la lista, no repite). Si NO menciona ninguno (primera vez en
+  // el tema, o venía de una lección numérica), se usa el escenario CANÓNICO (0): así el primer ejemplo de
+  // la vida real es PREDECIBLE y coincide con la guía de aceptación (coche / cuadernos / pizza / recortar).
   // keyOf puede devolver VARIAS palabras clave separadas por espacio (p.ej. "coche velocidad"): el
   // escenario se "evita" si CUALQUIERA de sus palabras aparece en `evitar`. Así, excluir "velocidad"
   // salta TODO escenario etiquetado con esa palabra (no solo el que se mostró) — queja del cliente:
@@ -723,8 +723,17 @@ function idxEscenario(list, evitarRaw, keyOf) {
   const hit = (c) => String(keyOf(c)).split(/\s+/).some((w) => w && evit.includes(canonExpr(w)));
   const mencionado = !!evit && list.some(hit);
   if (!mencionado) return 0;
-  const i = list.findIndex((c) => !hit(c));
-  return i < 0 ? 0 : i;
+  // AVANCE desde el ÚLTIMO escenario mencionado (índice más alto que aparece en `evitar`) hacia el
+  // siguiente NO mencionado/excluido, dando la vuelta. Antes se devolvía el PRIMER no-mencionado, lo que
+  // producía un ciclo de 2 (p.ej. pizza→dinero→pizza→dinero) que NUNCA llegaba al tercer escenario y, al
+  // compartir números, se veía como "repite el mismo ejemplo" — bug reportado por el cliente.
+  let last = -1;
+  for (let i = 0; i < list.length; i++) if (hit(list[i])) last = i;
+  for (let step = 1; step <= list.length; step++) {
+    const j = (last + step) % list.length;
+    if (!hit(list[j])) return j;
+  }
+  return 0; // todos los escenarios están excluidos → cae al canónico
 }
 
 // ── 2b) DERIVADA EN LA VIDA REAL: la derivada como "rapidez de cambio". El caso canónico es la
@@ -878,8 +887,8 @@ const FRACC_VIDA = [
     hist: "Una pizza está cortada en 8 partes iguales. Tú te comes 3 (3/8) y tu hermano 2 (2/8).", d: 8, a: 3, b: 2,
     pHist: "Un chocolate tiene 7 cuadritos: comes 2 (2/7) y luego 3 más (3/7).", pd: 7, pa: 2, pb: 3 },
   { key: "dinero presupuesto gastar sueldo plata mesada",
-    hist: "De tu dinero del mes, gastas 3/8 en útiles y 2/8 en transporte.", d: 8, a: 3, b: 2,
-    pHist: "De otro presupuesto, usas 2/7 en una cosa y 3/7 en otra.", pd: 7, pa: 2, pb: 3 },
+    hist: "De tu dinero del mes, gastas 1/6 en útiles y 4/6 en transporte.", d: 6, a: 1, b: 4,
+    pHist: "De otro presupuesto, usas 3/10 en una cosa y 4/10 en otra.", pd: 10, pa: 3, pb: 4 },
   { key: "tiempo hora estudio dia minutos reloj",
     hist: "De una hora de estudio, dedicas 2/5 a matemáticas y 1/5 a lectura.", d: 5, a: 2, b: 1,
     pHist: "De otra hora, dedicas 4/9 a un tema y 3/9 a otro.", pd: 9, pa: 4, pb: 3 },

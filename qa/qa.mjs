@@ -211,6 +211,30 @@ async function unitTests() {
     check(`botón [${label}] 'otro ejemplo': ejercicio NUEVO (no repite el primero)`, !!otro && (otro.q.texto !== first.q.texto || JSON.stringify(otro.pizarras) !== JSON.stringify(first.pizarras)));
     check(`botón [${label}] 'otro ejemplo': sigue siendo calificable`, !!otro && otro.nPreg === 1 && !!String(otro.q.respuesta || "").trim());
   }
+  // ── ROTACIÓN de la lección APLICADA (vida real): pedir "otro ejemplo" VARIAS veces debe RECORRER TODOS
+  //    los escenarios con lecciones DISTINTAS y sin repetir dos veces seguidas. Antes idxEscenario devolvía
+  //    el PRIMER escenario no-mostrado → ciclo de 2 (p.ej. pizza→dinero→pizza) que nunca llegaba al tercero
+  //    y, al compartir números, se veía como "repite el mismo ejemplo" (bug reportado por el cliente).
+  for (const [label, abrir, expTema, minDistintos] of [
+    ["fracciones",    "dame un ejemplo de fracciones de la vida real",            "fraccion",      3],
+    ["derivadas",     "dame un ejemplo de derivadas de la vida cotidiana",        "derivada",      3],
+    ["lineal",        "dame un ejemplo de ecuaciones lineales de la vida cotidiana", "lineal",     3],
+    ["factorización", "dame un ejemplo de factorización de la vida real",         "factorizacion", 2],
+  ]) {
+    let previo = ""; const sigs = []; let repiteConsec = false, temaOk = true;
+    for (let i = 0; i <= 5; i++) {
+      const body = i === 0 ? { query: abrir } : { query: "otro ejemplo", seguimiento: "continuacion", contexto: abrir, previo };
+      const r = correrBoton(body);
+      if (!r) { temaOk = false; break; }
+      if (r.tema !== expTema) temaOk = false;
+      const sig = JSON.stringify(r.pizarras) + "||" + r.hablar2; // board + historia (lo que ve el alumno)
+      if (sigs.length && sig === sigs[sigs.length - 1]) repiteConsec = true;
+      sigs.push(sig); previo = r.resumen;
+    }
+    check(`aplicado [${label}]: siempre el mismo tema determinista`, temaOk);
+    check(`aplicado [${label}]: 'otro ejemplo' NO repite la lección dos veces seguidas`, !repiteConsec);
+    check(`aplicado [${label}]: recorre ≥${minDistintos} ejemplos DISTINTOS`, new Set(sigs).size >= minDistintos, `distintos=${new Set(sigs).size} de ${sigs.length}`);
+  }
   // ── EJEMPLO APLICADO / DE LA VIDA REAL de DERIVADAS (queja del cliente): pedir "un ejemplo de la vida
   //    cotidiana" o "con la variación de la velocidad" NO debe devolver un cálculo/ejercicio numérico
   //    suelto, sino EXPLICAR el significado (la velocidad como razón de cambio) y cerrar con una práctica.
