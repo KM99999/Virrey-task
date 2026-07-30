@@ -272,6 +272,34 @@ async function unitTests() {
   check(`recuperación de historial: historial off-topic → NO inventa tema (cae a Gemini)`, correrBoton({ query: "otro ejemplo", historial: ["¿qué es la fotosíntesis?", "otro ejemplo"] }) === null);
   check(`recuperación de historial: pregunta NUEVA (no 'otro') con tema en historial → NO se secuestra`, correrBoton({ query: "¿qué es un límite?", historial: ["Enséñame derivadas", "¿qué es un límite?"] }) === null);
 
+  // ── FACTORIZACIÓN con COEFICIENTE ("factoriza 9x² - 16"): antes se factorizaba MAL como (x-4)(x+4)
+  //    (se perdía el coeficiente 9). Debe dar (3x-4)(3x+4). Verificación con el motor independiente.
+  for (const q of ["factoriza 9x² - 16", "factoriza 4x² - 25", "factoriza x² - 9"]) {
+    const r = correrBoton({ query: q });
+    check(`factorización coeficiente [${q}]: determinista`, !!r && r.tema === "factorizacion", r ? r.tema : "null");
+    if (!r) continue;
+    const board = r.pizarras.find((p) => /=/.test(p) && /\)\s*\(/.test(p)) || "";
+    const inst = (q.match(/factoriza (.+)$/) || [])[1] || "";
+    const esperado = computeFactorization(inst);
+    check(`factorización coeficiente [${q}]: factoriza BIEN (${esperado})`, !!esperado && board.replace(/\s/g, "").includes(esperado.replace(/\s/g, "")), `board=${board}`);
+    check(`factorización coeficiente [${q}]: práctica calificable`, r.nPreg === 1 && checkAnswer(r.q.respuesta, r.q.respuesta).correct === true);
+  }
+  // ── FRACCIÓN CONCRETA ("5/8 + 2/8"): antes caía a Gemini (no determinista, sin práctica calificable).
+  //    Debe resolver ESA suma de forma determinista, con práctica. Cubre mismo y distinto denominador.
+  for (const [q, res] of [["5/8 + 2/8", "7/8"], ["2/6 + 3/6", "5/6"], ["1/2 + 1/3", "5/6"]]) {
+    const r = correrBoton({ query: q });
+    check(`fracción concreta [${q}]: determinista (no Gemini)`, !!r && r.tema === "fraccion", r ? r.tema : "null (Gemini)");
+    if (!r) continue;
+    check(`fracción concreta [${q}]: resuelve ESA suma (resultado ${res})`, r.pizarras.some((p) => p.replace(/\s/g, "").includes(res.replace(/\s/g, ""))), r.pizarras.join(" | "));
+    check(`fracción concreta [${q}]: práctica calificable`, r.nPreg === 1 && checkAnswer(r.q.respuesta, r.q.respuesta).correct === true);
+  }
+  // "otro ejemplo" tras una fracción CONCRETA debe ROTAR (no repetir la misma suma).
+  {
+    const first = correrBoton({ query: "5/8 + 2/8" });
+    const otro = correrBoton({ query: "otro ejemplo", seguimiento: "continuacion", contexto: "5/8 + 2/8", previo: first?.resumen });
+    check(`fracción concreta → 'otro ejemplo' rota (no repite la misma suma)`, !!otro && otro.tema === "fraccion" && JSON.stringify(otro.pizarras) !== JSON.stringify(first.pizarras));
+  }
+
   // SEGUIMIENTO aplicado sobre un tema con EXPRESIÓN concreta en el contexto (no la palabra "ecuación"):
   // "explícalo con ejemplos de la vida real" estando en "Resuelve 2x + 5 = 15" DEBE dar la lección
   // aplicada DETERMINISTA del tema (lineal), no caer a Gemini (que generaba "2x = 10" narrado vs

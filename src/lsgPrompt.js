@@ -503,12 +503,24 @@ export function fraccionResueltaLSG(opts) {
     return { texto: textoFrac(e), n1, d1, n2, d2, L, a, b, suma: s, g, final: fmt(s / g, L / g), simp: g > 1 ? fmt(s / g, L / g) : null };
   };
   const lista = FRACCIONES[nivel];
+  // INSTANCIA concreta: si el alumno escribió una suma ("5/8 + 2/8" → [5,2,8], o "1/2 + 1/3" → [1,2,1,3]),
+  // se resuelve ESA como ejemplo (paridad con los otros 3 temas, que sí resuelven lo que el alumno escribe);
+  // la PRÁCTICA sale de los presets del mismo tipo (mismo/distinto denominador), distinta del ejemplo.
+  const inst = Array.isArray(o.instancia) && (o.instancia.length === 3 || o.instancia.length === 4) ? o.instancia : null;
+  const dificil = inst ? inst.length === 4 : nivel === "dificil";
   // Rota a la SIGUIENTE tras la ya mostrada; la práctica usa la siguiente (siempre distinta).
   const hay = canonExpr(evitar);
   let last = -1;
   for (let i = 0; i < lista.length; i++) if (hay.includes(canonExpr(textoFrac(lista[i])))) last = i;
-  const eA = lista[(last + 1) % lista.length], eB = lista[(last + 2) % lista.length];
-  const dificil = nivel === "dificil";
+  let eA, eB;
+  if (inst) {
+    eA = inst;
+    const pool = (dificil ? FRACCIONES.dificil : FRACCIONES.normal).filter((e) => canonExpr(textoFrac(e)) !== canonExpr(textoFrac(inst)));
+    eB = pool[0];
+  } else {
+    eA = lista[(last + 1) % lista.length];
+    eB = lista[(last + 2) % lista.length];
+  }
   const A = dificil ? distintoDen(eA) : mismoDen(eA);
   const B = dificil ? distintoDen(eB) : mismoDen(eB);
 
@@ -954,10 +966,23 @@ function extraerMonomio(texto) {
   const m = String(texto).match(/[+-]?\d{0,3}\s*x\s*(?:\^\s*\d+|[⁰¹²³⁴⁵⁶⁷⁸⁹])?/i);
   return m ? monomioLimpio(m[0].replace(/\s+/g, "")) : null;
 }
-// Extrae una diferencia de cuadrados factorizable ("...factoriza x² - 9..." → "x² - 9"), o null.
+// Extrae una diferencia de cuadrados factorizable ("...factoriza x² - 9..." → "x² - 9";
+// "...factoriza 9x² - 16..." → "9x² - 16"), o null. Incluye el COEFICIENTE opcional del término x²:
+// sin él, "9x² - 16" casaba solo "x² - 16" y se factorizaba MAL como (x-4)(x+4) en vez de (3x-4)(3x+4)
+// — bug detectado en QA. computeFactorization sí resuelve el caso con coeficiente; solo faltaba capturarlo.
 function extraerDifCuadrados(texto) {
-  const m = String(texto).match(/[a-z]\s*(?:\^\s*2|[²])\s*-\s*\d+/i);
-  return m && computeFactorization(m[0]) ? m[0] : null;
+  const m = String(texto).match(/\d*\s*[a-z]\s*(?:\^\s*2|[²])\s*-\s*\d+/i);
+  return m && computeFactorization(m[0].trim()) ? m[0].trim() : null;
+}
+// Extrae una SUMA de dos fracciones escrita por el alumno ("5/8 + 2/8" → [5,2,8] mismo denominador;
+// "1/2 + 1/3" → [1,2,1,3] distinto denominador), o null. Se usa para resolver EXACTAMENTE lo que el
+// alumno escribe (los otros 3 temas ya lo hacen; las fracciones concretas antes caían a Gemini).
+function extraerFraccionSuma(texto) {
+  const m = String(texto).match(/(\d+)\s*\/\s*(\d+)\s*\+\s*(\d+)\s*\/\s*(\d+)/);
+  if (!m) return null;
+  const n1 = +m[1], d1 = +m[2], n2 = +m[3], d2 = +m[4];
+  if (!d1 || !d2) return null;
+  return d1 === d2 ? [n1, n2, d1] : [n1, d1, n2, d2];
 }
 
 // Devuelve el LSG determinista de uno de los 4 botones, o null si la consulta no es de ninguno de
@@ -1110,11 +1135,18 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
     return commonRet("factorizacion", factorizacionResueltaLSG({ evitar: previo, instancia, seguimiento: esSeg, nivel, concepto: conceptoOn }));
   }
 
-  // 3) FRACCIONES (botón "ejercicio/ejemplo de fracciones", sin una fracción concreta en el texto).
-  if (/fracc/.test(n) && !/\d\s*\/\s*\d/.test(base)) {
+  // 3) FRACCIONES. El tema genérico ("ejercicio/ejemplo de fracciones", "enséñame fracciones") O una SUMA
+  //    CONCRETA que el alumno escribe ("5/8 + 2/8"). Con la suma concreta se resuelve ESA (paridad con los
+  //    otros 3 temas); antes una fracción concreta caía a Gemini (lección no determinista, sin práctica
+  //    calificable) — hueco detectado en QA.
+  const fracInst = extraerFraccionSuma(base);
+  if (/fracc/.test(n) || fracInst) {
     const evitarFrac = (String(previo).match(/\d+\s*\/\s*\d+\s*[+\-]\s*\d+\s*\/\s*\d+/) || [])[0] || "";
-    // "enséñame fracciones" (sin una fracción concreta) → enseñar el CONCEPTO primero (paridad con lineal).
-    return commonRet("fraccion", fraccionResueltaLSG({ evitar: evitarFrac, nivel, concepto: conceptoOn }));
+    // La instancia concreta se usa SOLO en una consulta NUEVA ("5/8 + 2/8"); en un seguimiento ("otro
+    // ejemplo") se IGNORA y se ROTA (igual que los otros temas), si no repetiría siempre la misma suma.
+    const instFrac = esSeg ? null : fracInst;
+    // "enséñame fracciones" (sin fracción concreta) → CONCEPTO primero; con fracción concreta → resolver ESA.
+    return commonRet("fraccion", fraccionResueltaLSG({ evitar: evitarFrac, nivel, concepto: !instFrac && conceptoOn, instancia: instFrac }));
   }
 
   // 4) ECUACIÓN LINEAL. Una ecuación lineal concreta ("2x + 5 = 15") o el tema genérico ("ecuación lineal").
