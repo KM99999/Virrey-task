@@ -79,8 +79,13 @@ function extraerEjercicio(lsg) {
 // Resumen breve de una lección (sus primeras explicaciones), para dárselo a la IA como "lo ya visto".
 function resumenLeccion(lsg) {
   const flat = flattenLSG(lsg) || [];
-  const textos = flat.filter((d) => d.tipo === "hablar").map((d) => d.texto).filter(Boolean);
-  return textos.slice(0, 2).join(" ").slice(0, 400);
+  // Incluye las primeras explicaciones (para saber el TEMA/CONCEPTO) Y las pizarras + la pregunta de
+  // práctica (el EJEMPLO y el EJERCICIO mostrados): así "otro ejemplo" puede ROTAR a uno distinto aunque
+  // la lección repita el concepto. Sin las pizarras, un seguimiento no sabía qué se acababa de mostrar.
+  const hablar = flat.filter((d) => d.tipo === "hablar").map((d) => d.texto).filter(Boolean).slice(0, 2);
+  const pizarra = flat.filter((d) => d.tipo === "pizarra").map((d) => d.contenido).filter(Boolean);
+  const preg = flat.filter((d) => d.tipo === "preguntar").map((d) => d.texto).filter(Boolean);
+  return [...hablar, ...pizarra, ...preg].join(" · ").slice(0, 600);
 }
 let modo = "ia"; // "ia" = temas avanzados con Gemini · "demo" = temas básicos sin IA (instantáneo)
 

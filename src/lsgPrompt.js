@@ -578,7 +578,13 @@ const canonExpr = (s) => String(s || "").toLowerCase()
 function rotarBoton(lista, evitarRaw) {
   const hay = canonExpr(evitarRaw);
   let last = -1;
-  for (let i = 0; i < lista.length; i++) if (hay.includes(canonExpr(lista[i]))) last = i;
+  for (let i = 0; i < lista.length; i++) {
+    // Coincidencia con FRONTERA (no subcadena): así "x^3" NO casa dentro de "2x^3" (antes eso hacía que
+    // la rotación "volviera al principio" y repitiera el mismo ejemplo). El token no puede ir precedido
+    // ni seguido de un dígito o letra.
+    const t = canonExpr(lista[i]).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (t && new RegExp(`(^|[^0-9a-z])${t}([^0-9a-z]|$)`, "i").test(hay)) last = i;
+  }
   const n = lista.length;
   return { ejemplo: lista[(last + 1) % n], practica: lista[(last + 2) % n] };
 }
@@ -985,7 +991,9 @@ function extraerExclusion(q) {
 // seguimiento que pide OTRO ejemplo / uno DIFERENTE / "que no sea X" siga siendo aplicado (otro caso de
 // la vida real) en vez de caer en la lección numérica o repetir el mismo.
 function esContextoAplicado(texto) {
-  return /ejemplo m[aá]s cotidiano|problemas del d[ií]a a d[ií]a|cuando repartimos|significado muy visual|imagina un|imagina una|compraste \d|una pizza|un pastel|una l[aá]mina|recortar un cuadrado/i.test(String(texto || ""));
+  // Se detecta por la FRASE-CONCEPTO inicial de cada lección aplicada (estable, sea cual sea el escenario),
+  // más marcas de escenario como respaldo.
+  return /mide la rapidez con la que algo cambia|sirven para encontrar un dato|repartimos un todo|significado muy visual|multiplicar r[aá]pido|imagina un coche|imagina una planta|imagina un tanque|compraste \d|una pizza está cortada|un pastel se corta|de tu dinero del mes|una hora de estudio|un taxi cobra|una l[aá]mina cuadrada|recortar un cuadrado/i.test(String(texto || ""));
 }
 // Tema NÚCLEO (uno de los 4) al que pertenece un texto, por palabra clave o por la FORMA de la expresión
 // ("2x + 5 = 15" → lineal, "x² - 9" → factorización). null si no es de ningún tema núcleo.
@@ -1013,7 +1021,13 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   // ¿Es un pedido de ENSEÑAR/APRENDER el tema ("enséñame ecuaciones lineales", "quiero aprender…",
   // "explícame…") en vez de resolver un ejercicio concreto? En ese caso la lección debe empezar por el
   // CONCEPTO y la REGLA (no saltar directo a resolver un ejercicio) — queja del cliente.
-  const pideEnsenar = /\bense[nñ]a|\baprend|expl[ií]ca|qu[eé]\s+(es|son)\b|c[oó]mo\s+se\b/.test(n);
+  const pideEnsenar = /\bense[nñ]a|\baprend|expl[ií]ca|qu[eé]\s+(es|son)\b|c[oó]mo\s+se\b|concepto|teor[ií]a/.test(n);
+  // MODO APRENDER que se MANTIENE en un seguimiento: si el tema se abrió con "enséñame/explícame/el
+  // concepto de [tema]" (n = contexto en un seguimiento), un "otro ejemplo" debe seguir ENSEÑANDO el
+  // concepto con un ejemplo nuevo, NO pasar a solo resolver. (Queja del cliente: pidió el concepto de
+  // fracciones con otros ejemplos y el sistema mostró solo el proceso de resolución, sin el concepto.)
+  // Una petición de NIVEL ("más difícil") o de resolver otra ("resuélveme otra") sí cambia a resolver.
+  const conceptoOn = pideEnsenar && (!esSeg || seguimiento === "continuacion" || seguimiento === "practicar");
   const commonRet = (tema, lsg) => ({ tema, escena: lsg.escena, intencion: lsg.intencion || "resolver", modelo: `${tema}-resuelto`, lsg });
 
   // 0) ¿PIDE UN EJEMPLO APLICADO / DE LA VIDA REAL (no un cálculo numérico)? "un ejemplo de la vida
@@ -1061,7 +1075,7 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   if (/deriv/.test(n)) {
     if (/\b(sen|sin|cos|tan|cot|sec|csc|log|ln|exp|ra[ií]z|sqrt)\b|√|e\s*\^/.test(n)) return null;
     const instancia = extraerMonomio(base);
-    return commonRet("derivada", derivadaResueltaLSG({ evitar: previo, instancia, seguimiento: esSeg, nivel, concepto: !esSeg && pideEnsenar }));
+    return commonRet("derivada", derivadaResueltaLSG({ evitar: previo, instancia, seguimiento: esSeg, nivel, concepto: conceptoOn }));
   }
 
   // 2) FACTORIZACIÓN (diferencia de cuadrados). Con una expresión concreta NO factorizable así
@@ -1071,14 +1085,14 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
     // Hay una expresión con x² pero NO es diferencia de cuadrados factorizable → que lo intente Gemini.
     if (!instancia && /[a-z]\s*(?:\^\s*2|[²])/i.test(base) && !/factoriz/.test(n)) return null;
     if (!instancia && /[a-z]\s*(?:\^\s*2|[²])\s*[+]/i.test(base)) return null; // trinomio "x² + 5x + 6"
-    return commonRet("factorizacion", factorizacionResueltaLSG({ evitar: previo, instancia, seguimiento: esSeg, nivel, concepto: !esSeg && pideEnsenar }));
+    return commonRet("factorizacion", factorizacionResueltaLSG({ evitar: previo, instancia, seguimiento: esSeg, nivel, concepto: conceptoOn }));
   }
 
   // 3) FRACCIONES (botón "ejercicio/ejemplo de fracciones", sin una fracción concreta en el texto).
   if (/fracc/.test(n) && !/\d\s*\/\s*\d/.test(base)) {
     const evitarFrac = (String(previo).match(/\d+\s*\/\s*\d+\s*[+\-]\s*\d+\s*\/\s*\d+/) || [])[0] || "";
     // "enséñame fracciones" (sin una fracción concreta) → enseñar el CONCEPTO primero (paridad con lineal).
-    return commonRet("fraccion", fraccionResueltaLSG({ evitar: evitarFrac, nivel, concepto: !esSeg && pideEnsenar }));
+    return commonRet("fraccion", fraccionResueltaLSG({ evitar: evitarFrac, nivel, concepto: conceptoOn }));
   }
 
   // 4) ECUACIÓN LINEAL. Una ecuación lineal concreta ("2x + 5 = 15") o el tema genérico ("ecuación lineal").
@@ -1094,7 +1108,7 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   const instLin = solBase ? solBase.original : null;
   if (!noLineal && (instLin || /\becuaci[oó]n(?:es)?\b|\blineal(?:es)?\b|primer grado/.test(n))) {
     // "enséñame ecuaciones lineales" (sin una ecuación concreta) → enseñar el CONCEPTO primero.
-    return commonRet("lineal", linealResueltaLSG({ evitar: previo, instancia: instLin, seguimiento: esSeg, nivel, concepto: !instLin && !esSeg && pideEnsenar }));
+    return commonRet("lineal", linealResueltaLSG({ evitar: previo, instancia: instLin, seguimiento: esSeg, nivel, concepto: !instLin && conceptoOn }));
   }
 
   // ── RED DE SEGURIDAD: los 4 temas núcleo NUNCA caen en Gemini por un seguimiento ──

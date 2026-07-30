@@ -160,7 +160,10 @@ async function unitTests() {
     let board = ""; for (let i = qi - 1; i >= 0; i--) if (flat[i].tipo === "pizarra") { board = flat[i].contenido; break; }
     const pizarras = flat.filter((d) => d.tipo === "pizarra").map((d) => d.contenido);
     const hablar2 = flat.filter((d) => d.tipo === "hablar").slice(0, 2).map((d) => d.texto).join(" ");
-    return { tema: b.tema, modelo: b.modelo, intencion: b.intencion, lsg, flat, q, board, pizarras, hablar2,
+    // `resumen` replica resumenLeccion() del frontend (2 hablars + pizarras + pregunta): es lo que se
+    // envía como `previo`, y lo que permite ROTAR (contiene el ejemplo y el ejercicio mostrados).
+    const resumen = [hablar2, ...pizarras, q ? q.texto : ""].filter(Boolean).join(" · ").slice(0, 600);
+    return { tema: b.tema, modelo: b.modelo, intencion: b.intencion, lsg, flat, q, board, pizarras, hablar2, resumen,
       nPreg: flat.filter((d) => d.tipo === "preguntar").length };
   };
   const bateriaBoton = (label, body, expTema) => {
@@ -199,9 +202,12 @@ async function unitTests() {
     ["fracciones", "Dame un ejercicio de fracciones", "fraccion"],
   ]) {
     const first = correrBoton({ query: contexto });
-    const otro = correrBoton({ query: "dame otro ejemplo", seguimiento: "continuacion", contexto, previo: first.hablar2 });
+    const otro = correrBoton({ query: "dame otro ejemplo", seguimiento: "continuacion", contexto, previo: first.resumen });
     check(`botón [${label}] 'otro ejemplo': mismo tema (${expTema})`, !!otro && otro.tema === expTema);
-    check(`botón [${label}] 'otro ejemplo': ejemplo NUEVO (no repite el primero)`, !!otro && otro.hablar2 !== first.hablar2);
+    // El EJERCICIO (práctica/pizarras) debe rotar; el CONCEPTO inicial puede repetirse a propósito en una
+    // sesión de "enséñame [tema]" (el alumno pide el concepto con OTROS ejemplos), así que se compara el
+    // ejercicio, no la introducción.
+    check(`botón [${label}] 'otro ejemplo': ejercicio NUEVO (no repite el primero)`, !!otro && (otro.q.texto !== first.q.texto || JSON.stringify(otro.pizarras) !== JSON.stringify(first.pizarras)));
     check(`botón [${label}] 'otro ejemplo': sigue siendo calificable`, !!otro && otro.nPreg === 1 && !!String(otro.q.respuesta || "").trim());
   }
   // ── EJEMPLO APLICADO / DE LA VIDA REAL de DERIVADAS (queja del cliente): pedir "un ejemplo de la vida
