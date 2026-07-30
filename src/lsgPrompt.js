@@ -1129,9 +1129,12 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   //    (trinomio, etc.) → null (Gemini). Genérica ("factorizar") o una diferencia de cuadrados → determinista.
   if (/factoriz|diferencia de cuadrados/.test(n)) {
     const instancia = extraerDifCuadrados(base);
-    // Hay una expresión con x² pero NO es diferencia de cuadrados factorizable → que lo intente Gemini.
-    if (!instancia && /[a-z]\s*(?:\^\s*2|[²])/i.test(base) && !/factoriz/.test(n)) return null;
-    if (!instancia && /[a-z]\s*(?:\^\s*2|[²])\s*[+]/i.test(base)) return null; // trinomio "x² + 5x + 6"
+    // El alumno escribió una EXPRESIÓN concreta con potencia (x², x³, x⁴, x^n…) que NO es una diferencia
+    // de cuadrados factorizable con enteros (x²-2, x³-8 —diferencia de CUBOS—, x²+9 —suma—, trinomios…):
+    // lo maneja Gemini. NO caer a un PRESET, porque mostraría OTRA expresión distinta de la que pidió el
+    // alumno (p. ej. pedir "factoriza x³ - 8" y ver "x² - 9") — incoherente, del tipo de queja del cliente.
+    // Solo el pedido GENÉRICO ("enséñame factorización", "ejercicio de factorización") usa un preset.
+    if (!instancia && /[a-z]\s*(?:\^\s*\d|[²³⁴⁵⁶⁷⁸⁹])/i.test(base)) return null;
     return commonRet("factorizacion", factorizacionResueltaLSG({ evitar: previo, instancia, seguimiento: esSeg, nivel, concepto: conceptoOn }));
   }
 

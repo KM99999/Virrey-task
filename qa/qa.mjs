@@ -284,6 +284,13 @@ async function unitTests() {
     check(`factorización coeficiente [${q}]: factoriza BIEN (${esperado})`, !!esperado && board.replace(/\s/g, "").includes(esperado.replace(/\s/g, "")), `board=${board}`);
     check(`factorización coeficiente [${q}]: práctica calificable`, r.nPreg === 1 && checkAnswer(r.q.respuesta, r.q.respuesta).correct === true);
   }
+  // ── FACTORIZACIÓN NO diferencia de cuadrados con enteros: una EXPRESIÓN concreta que no factoriza así
+  //    (x²-2, x³-8 —cubos—, x²+9 —suma—) debe ir a Gemini, NO mostrar un PRESET (otra expresión distinta
+  //    de la que pidió el alumno). Solo el pedido GENÉRICO usa preset.
+  for (const q of ["factoriza x³ - 8", "factoriza x² - 2", "factoriza x² + 9", "factoriza 2x³ - 16"]) {
+    check(`factorización fuera de alcance [${q}]: NO da preset (→ Gemini)`, correrBoton({ query: q }) === null, "dio lección determinista");
+  }
+  check(`factorización genérica ("¿Por qué factorizar?"): sí usa preset determinista`, !!correrBoton({ query: "¿Por qué factorizar?" }));
   // ── FRACCIÓN CONCRETA ("5/8 + 2/8"): antes caía a Gemini (no determinista, sin práctica calificable).
   //    Debe resolver ESA suma de forma determinista, con práctica. Cubre mismo y distinto denominador.
   for (const [q, res] of [["5/8 + 2/8", "7/8"], ["2/6 + 3/6", "5/6"], ["1/2 + 1/3", "5/6"]]) {
