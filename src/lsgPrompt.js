@@ -830,21 +830,27 @@ export function factorizacionResueltaLSG(opts = {}) {
 // caso cotidiano y una práctica calificable. Todo DETERMINISTA (0 coste de IA, aritmética garantizada) y
 // reutilizando los motores ya probados (solveLinearSteps / computeFactorization / suma de fracciones).
 
-// ── 1) ECUACIÓN LINEAL en la vida real: un problema de compras (dato desconocido = precio). ──
+// ── 1) ECUACIÓN LINEAL en la vida real, de DISTINTO tipo (compras, edad, viaje): así "otro ejemplo
+//    diferente a las compras" tiene a dónde ir. Cada escenario trae su ecuación de ejemplo y su ecuación
+//    de práctica (ambas con solución ENTERA), y su historia. El `key` incluye la palabra del tipo. ──
 const LINEAL_VIDA = [
-  { cosa: "cuadernos", cosaS: "cuaderno", a: 3, b: 5, c: 20 }, // 3x + 5 = 20 → 5
-  { cosa: "lápices",   cosaS: "lápiz",    a: 4, b: 2, c: 18 }, // 4x + 2 = 18 → 4
-  { cosa: "manzanas",  cosaS: "manzana",  a: 2, b: 6, c: 16 }, // 2x + 6 = 16 → 5
+  { key: "compras cuadernos precio dinero tienda comprar",
+    eqE: "3x + 5 = 20", histE: "En una tienda compraste 3 cuadernos iguales, pagaste 20 y te devolvieron 5 de cambio. Si cada cuaderno cuesta x, lo que costaron más el cambio es igual a lo que pagaste.",
+    eqP: "4x + 2 = 18", histP: "Compraste 4 lápices iguales, pagaste 18 y te devolvieron 2 de cambio. El precio de cada lápiz cumple esta ecuación." },
+  { key: "edad años ana niño hermano cumpleaños",
+    eqE: "2x + 3 = 15", histE: "El doble de la edad de Ana, más 3 años, da 15. Si su edad es x, eso se escribe así.",
+    eqP: "3x + 2 = 20", histP: "El triple de la edad de un niño, más 2, es 20. Su edad cumple esta ecuación." },
+  { key: "taxi viaje kilometros distancia transporte pasaje",
+    eqE: "2x + 5 = 15", histE: "Un taxi cobra 5 de tarifa base y 2 por cada kilómetro. Pagaste 15 en total. Si recorriste x kilómetros, eso se escribe así.",
+    eqP: "3x + 4 = 19", histP: "Otro taxi cobra 4 de base y 3 por kilómetro; pagaste 19. Los kilómetros recorridos cumplen esta ecuación." },
 ];
 export function linealAplicadaLSG(opts = {}) {
-  const i = idxEscenario(LINEAL_VIDA, opts.evitar, (c) => c.cosa);
-  const E = LINEAL_VIDA[i], P = LINEAL_VIDA[(i + 1) % LINEAL_VIDA.length];
-  const sol = solveLinearSteps(`${E.a}x + ${E.b} = ${E.c}`);
-  const solP = solveLinearSteps(`${P.a}x + ${P.b} = ${P.c}`);
+  const c = LINEAL_VIDA[idxEscenario(LINEAL_VIDA, opts.evitar, (s) => s.key)];
+  const sol = solveLinearSteps(c.eqE), solP = solveLinearSteps(c.eqP);
   const dir = [
     { tipo: "avatar", accion: "sonreir" },
-    { tipo: "hablar", texto: "Las ecuaciones lineales sirven para resolver problemas del día a día donde hay un dato que no conoces. Veamos un ejemplo de compras." },
-    { tipo: "hablar", texto: `Compraste ${E.a} ${E.cosa} iguales, pagaste ${E.c} y te devolvieron ${E.b} de cambio. Si cada ${E.cosaS} cuesta x, lo que costaron más el cambio es igual a lo que pagaste.` },
+    { tipo: "hablar", texto: "Las ecuaciones lineales sirven para encontrar un dato que no conoces en problemas del día a día. Veamos un ejemplo." },
+    { tipo: "hablar", texto: c.histE },
     { tipo: "pizarra", accion: "escribir", contenido: sol.original },
     { tipo: "esperar", segundos: 1 },
   ];
@@ -852,29 +858,35 @@ export function linealAplicadaLSG(opts = {}) {
     dir.push({ tipo: "hablar", texto: s.explica });
     dir.push({ tipo: "pizarra", accion: "escribir", contenido: s.escribe });
   }
-  dir.push({ tipo: "hablar", texto: `Así, cada ${E.cosaS} cuesta ${sol.answer}: la ecuación nos dio el dato que faltaba. Ahora te toca a ti.` });
-  dir.push({ tipo: "hablar", texto: `Compraste ${P.a} ${P.cosa}, pagaste ${P.c} y te devolvieron ${P.b} de cambio. El precio de cada uno cumple ${solP.original}.` });
+  dir.push({ tipo: "hablar", texto: `Así, x vale ${sol.answer}: la ecuación nos dio el dato que faltaba. Ahora te toca a ti.` });
+  dir.push({ tipo: "hablar", texto: `${c.histP} Resuélvela.` });
   dir.push({ tipo: "pizarra", accion: "escribir", contenido: solP.original });
-  dir.push({ tipo: "preguntar", texto: `¿Cuánto cuesta cada ${P.cosaS}? Escribe solo el número.`, respuesta: solP.answer, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" });
+  dir.push({ tipo: "preguntar", texto: `¿Cuánto vale x en ${solP.original}? Escribe solo el número.`, respuesta: solP.answer, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" });
   return { escena: "lineal_resuelta", intencion: "aprender", duracion_estimada: 80, _mock: true, directivas: dir };
 }
 
-// ── 2) FRACCIONES en la vida real: repartir algo (pizza, chocolate, jugo) en partes iguales. ──
+// ── 2) FRACCIONES en la vida real, de DISTINTO tipo (comida, dinero, tiempo): así "otro ejemplo
+//    diferente a la comida" tiene a dónde ir. Misma operación (suma con igual denominador), otro contexto. ──
 const FRACC_VIDA = [
-  { key: "pizza", hist: "Una pizza está cortada en 8 partes iguales. Tú te comes 3 (3/8) y tu hermano 2 (2/8).", d: 8, a: 3, b: 2,
+  { key: "pizza comida pastel chocolate comer repartir",
+    hist: "Una pizza está cortada en 8 partes iguales. Tú te comes 3 (3/8) y tu hermano 2 (2/8).", d: 8, a: 3, b: 2,
     pHist: "Un chocolate tiene 7 cuadritos: comes 2 (2/7) y luego 3 más (3/7).", pd: 7, pa: 2, pb: 3 },
-  { key: "pastel", hist: "Un pastel se corta en 5 porciones iguales. Comes 2 (2/5) y tu amiga 1 (1/5).", d: 5, a: 2, b: 1,
-    pHist: "Una jarra rinde 9 vasos: bebes 4 (4/9) y tu amigo 3 (3/9).", pd: 9, pa: 4, pb: 3 },
+  { key: "dinero presupuesto gastar sueldo plata mesada",
+    hist: "De tu dinero del mes, gastas 3/8 en útiles y 2/8 en transporte.", d: 8, a: 3, b: 2,
+    pHist: "De otro presupuesto, usas 2/7 en una cosa y 3/7 en otra.", pd: 7, pa: 2, pb: 3 },
+  { key: "tiempo hora estudio dia minutos reloj",
+    hist: "De una hora de estudio, dedicas 2/5 a matemáticas y 1/5 a lectura.", d: 5, a: 2, b: 1,
+    pHist: "De otra hora, dedicas 4/9 a un tema y 3/9 a otro.", pd: 9, pa: 4, pb: 3 },
 ];
 export function fraccionAplicadaLSG(opts = {}) {
   const c = FRACC_VIDA[idxEscenario(FRACC_VIDA, opts.evitar, (s) => s.key)];
   const sum = c.a + c.b, psum = c.pa + c.pb;
   const dir = [
     { tipo: "avatar", accion: "sonreir" },
-    { tipo: "hablar", texto: "Las fracciones aparecen todo el tiempo cuando repartimos algo en partes iguales: una pizza, un chocolate, una jarra de jugo. Veamos un ejemplo." },
-    { tipo: "hablar", texto: `${c.hist} ¿Qué parte se comieron entre los dos? Como las partes son del mismo tamaño (mismo denominador ${c.d}), sumamos los de arriba: ${c.a} + ${c.b} = ${sum}.` },
+    { tipo: "hablar", texto: "Las fracciones aparecen cuando repartimos un todo en partes iguales. Veamos un ejemplo." },
+    { tipo: "hablar", texto: `${c.hist} ¿Qué fracción es en total? Como tienen el mismo denominador ${c.d}, sumamos los números de arriba: ${c.a} + ${c.b} = ${sum}, y el denominador se mantiene.` },
     { tipo: "pizarra", accion: "escribir", contenido: `${c.a}/${c.d} + ${c.b}/${c.d} = ${sum}/${c.d}` },
-    { tipo: "hablar", texto: `Así, entre los dos se comieron ${sum}/${c.d} del total: sumar fracciones con el mismo denominador es juntar las partes. Ahora te toca a ti.` },
+    { tipo: "hablar", texto: `Así, en total es ${sum}/${c.d}: sumar fracciones con el mismo denominador es juntar las partes. Ahora te toca a ti.` },
     { tipo: "hablar", texto: `${c.pHist} ¿Cuánto es en total?` },
     { tipo: "pizarra", accion: "escribir", contenido: `${c.pa}/${c.pd} + ${c.pb}/${c.pd} = ?` },
     { tipo: "preguntar", texto: `¿Cuánto es ${c.pa}/${c.pd} + ${c.pb}/${c.pd}? Escribe la fracción.`, respuesta: `${psum}/${c.pd}`, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
@@ -882,28 +894,42 @@ export function fraccionAplicadaLSG(opts = {}) {
   return { escena: "fraccion_resuelta", intencion: "aprender", duracion_estimada: 70, _mock: true, directivas: dir };
 }
 
-// ── 3) FACTORIZACIÓN (diferencia de cuadrados) en la vida real: el área que sobra al recortar un
-//    cuadrado pequeño de uno grande (x² - b² = (x - b)(x + b), interpretación geométrica). ──
+// ── 3) FACTORIZACIÓN (diferencia de cuadrados) en la vida real, de DISTINTO tipo: (a) GEOMÉTRICO — el
+//    área que sobra al recortar un cuadrado; (b) ARITMÉTICO — truco para MULTIPLICAR rápido dos números
+//    (a-b)(a+b) = a²-b². Así "otro ejemplo diferente al área" tiene a dónde ir. ──
 const FACTOR_VIDA = [
-  { N: 9, r: 3 }, { N: 16, r: 4 }, { N: 25, r: 5 },
+  { key: "area lamina recortar cuadrado geometria figura", tipo: "area", N: 9, r: 3, pN: 16 },
+  { key: "multiplicar numeros calculo mental rapido truco aritmetica", tipo: "numero", A: 10, bb: 3, pN: 25 },
 ];
 export function factorizacionAplicadaLSG(opts = {}) {
-  const i = idxEscenario(FACTOR_VIDA, opts.evitar, (c) => `x^2-${c.N}`);
-  const E = FACTOR_VIDA[i], P = FACTOR_VIDA[(i + 1) % FACTOR_VIDA.length];
-  const exprE = `x² - ${E.N}`, exprP = `x² - ${P.N}`;
-  const facE = computeFactorization(exprE), facP = computeFactorization(exprP);
-  const dir = [
-    { tipo: "avatar", accion: "sonreir" },
-    { tipo: "hablar", texto: "La factorización por diferencia de cuadrados tiene un significado muy visual: es el área que queda al recortar un cuadrado pequeño de uno grande." },
-    { tipo: "hablar", texto: `Imagina una lámina cuadrada de lado x y le recortas un cuadrado de lado ${E.r}. El área que sobra es el cuadrado grande menos el pequeño: x² - ${E.N}.` },
-    { tipo: "pizarra", accion: "escribir", contenido: `área sobrante:  ${exprE}` },
-    { tipo: "hablar", texto: `Esa misma área se puede reacomodar como un rectángulo. Como ${E.N} es ${E.r}², aplicamos la regla a² - b² = (a - b)(a + b) con a = x y b = ${E.r}.` },
-    { tipo: "pizarra", accion: "escribir", contenido: `${exprE} = ${facE}` },
-    { tipo: "hablar", texto: `Así, esa área es un rectángulo de lados (x - ${E.r}) y (x + ${E.r}). Factorizar es reescribir la misma cantidad como un producto. Ahora te toca a ti.` },
-    { tipo: "hablar", texto: `Recortas un cuadrado de lado ${P.r} de una lámina de lado x. El área sobrante es ${exprP}.` },
+  const c = FACTOR_VIDA[idxEscenario(FACTOR_VIDA, opts.evitar, (s) => s.key)];
+  const exprP = `x² - ${c.pN}`, facP = computeFactorization(exprP);
+  const dir = [{ tipo: "avatar", accion: "sonreir" }];
+  if (c.tipo === "area") {
+    const exprE = `x² - ${c.N}`, facE = computeFactorization(exprE);
+    dir.push(
+      { tipo: "hablar", texto: "La factorización por diferencia de cuadrados tiene un significado muy visual: es el área que queda al recortar un cuadrado pequeño de uno grande." },
+      { tipo: "hablar", texto: `Imagina una lámina cuadrada de lado x y le recortas un cuadrado de lado ${c.r}. El área que sobra es el cuadrado grande menos el pequeño: x² - ${c.N}.` },
+      { tipo: "pizarra", accion: "escribir", contenido: `área sobrante:  ${exprE}` },
+      { tipo: "hablar", texto: `Como ${c.N} es ${c.r}², aplicamos la regla a² - b² = (a - b)(a + b) con a = x y b = ${c.r}.` },
+      { tipo: "pizarra", accion: "escribir", contenido: `${exprE} = ${facE}` },
+      { tipo: "hablar", texto: `Así, esa área es un rectángulo de lados (x - ${c.r}) y (x + ${c.r}). Ahora te toca a ti.` },
+    );
+  } else {
+    const A = c.A, b = c.bb, lo = A - b, hi = A + b, sq = A * A - b * b;
+    dir.push(
+      { tipo: "hablar", texto: "La diferencia de cuadrados también sirve para MULTIPLICAR RÁPIDO dos números, sin hacer la cuenta larga." },
+      { tipo: "hablar", texto: `Por ejemplo, ${lo} por ${hi}: fíjate que ${lo} es ${A} menos ${b}, y ${hi} es ${A} más ${b}. Es de la forma (a - b)(a + b), con a = ${A} y b = ${b}.` },
+      { tipo: "pizarra", accion: "escribir", contenido: `${lo} × ${hi} = (${A} - ${b})(${A} + ${b})` },
+      { tipo: "hablar", texto: `Y (a - b)(a + b) es igual a a² - b². Entonces la cuenta es ${A} al cuadrado menos ${b} al cuadrado, o sea ${A * A} menos ${b * b}, que da ${sq}.` },
+      { tipo: "pizarra", accion: "escribir", contenido: `${A}² - ${b}² = ${A * A} - ${b * b} = ${sq}` },
+      { tipo: "hablar", texto: "Esa misma regla, al revés, sirve para FACTORIZAR: a² - b² = (a - b)(a + b). Ahora te toca a ti." },
+    );
+  }
+  dir.push(
     { tipo: "pizarra", accion: "escribir", contenido: exprP },
     { tipo: "preguntar", texto: `¿Cómo se factoriza ${exprP}? Escríbelo como producto de dos paréntesis.`, respuesta: facP, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
-  ];
+  );
   return { escena: "factorizacion_resuelta", intencion: "aprender", duracion_estimada: 75, _mock: true, directivas: dir };
 }
 

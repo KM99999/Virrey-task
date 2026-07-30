@@ -306,6 +306,21 @@ async function unitTests() {
     check("derivada 'diferente a la velocidad': el ejemplo NO es de velocidad", !!dif && !/\bvelocidad\b/.test(txt), (txt.match(/veámoslo con [^.:]+/) || [""])[0]);
     check("derivada 'diferente a la velocidad': práctica calificable", !!dif && dif.nPreg === 1 && checkAnswer(dif.q.respuesta, dif.q.respuesta).correct === true);
   }
+  // Blindaje preventivo: en los otros 3 temas, pedir "diferente a [el tipo dominante]" da un ejemplo de
+  // OTRO tipo (no repite el mismo tipo). lineal≠compras, fracción≠comida, factorización≠área.
+  const tipoExcl = [
+    ["lineal", "dame un ejemplo de ecuaciones lineales de la vida cotidiana", "compras", /compr|cuaderno|tienda|pagaste/i],
+    ["fraccion", "dame un ejemplo de fracciones de la vida real", "comida", /pizza|chocolate|comes|pastel/i],
+    ["factorizacion", "un ejemplo de factorización de la vida real", "área", /l[aá]mina|recort|área sobrante/i],
+  ];
+  for (const [tema, ctx, tipo, reTipo] of tipoExcl) {
+    const primero = correrBoton({ query: ctx });
+    const resumen = primero ? primero.flat.filter((d) => d.tipo === "hablar").slice(0, 3).map((d) => d.texto).join(" ") : "";
+    const dif = correrBoton({ query: `otro ejemplo que no sea de ${tipo}`, seguimiento: "continuacion", contexto: ctx, currentTopic: ctx, previo: resumen });
+    const txt = dif ? dif.flat.filter((d) => d.tipo === "hablar").map((d) => d.texto).join(" ") : "";
+    check(`${tema} 'diferente a ${tipo}': mismo tema, OTRO tipo (no repite)`, !!dif && dif.tema === tema && !reTipo.test(txt), (txt.match(/(veamos un ejemplo\.?\s*)?([A-ZÉ][^.]{0,45})/) || ["", "", txt.slice(0, 40)])[2]);
+    check(`${tema} 'diferente a ${tipo}': práctica calificable`, !!dif && dif.nPreg === 1 && checkAnswer(dif.q.respuesta, dif.q.respuesta).correct === true);
+  }
   // 'otro ejemplo' aplicado ROTA de escenario (no repite el coche).
   const apl1 = correrBoton({ query: "un ejemplo de derivadas de la vida real" });
   const apl2 = correrBoton({ query: "dame otro ejemplo de la vida real", seguimiento: "continuacion", contexto: "derivadas", previo: apl1?.hablar2 || "" });
