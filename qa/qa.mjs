@@ -274,6 +274,26 @@ async function unitTests() {
       check(`red de seguridad: "${saludo}" NO se secuestra ni con contexto/reexplicar`, correrBoton({ query: saludo, seguimiento: "reexplicar", contexto: ctx, currentTopic: ctx }) === null);
     }
   }
+  // ── EXCLUSIÓN + "otro ejemplo de la vida real" en los 4 temas (queja del cliente): pedir "que no sea
+  //    un coche" NO debe repetir el coche, y "otro ejemplo de la vida cotidiana" debe dar otro caso real
+  //    (no caer en la lección numérica). Se comprueba el ESCENARIO (2º hablar de la lección aplicada).
+  const escAplicado = (r) => { if (!r) return ""; const hs = r.flat.filter((d) => d.tipo === "hablar").map((d) => d.texto); return (hs[1] || "").toLowerCase(); };
+  const aplicCtx = {
+    derivada: { ctx: "dame un ejemplo de derivadas de la vida cotidiana", excluye: "coche", noRepite: /coche/ },
+    fraccion: { ctx: "dame un ejemplo de fracciones de la vida real", excluye: "pizza", noRepite: /pizza/ },
+    lineal: { ctx: "dame un ejemplo de ecuaciones lineales de la vida cotidiana", excluye: "cuadernos", noRepite: /cuadernos/ },
+  };
+  for (const [tema, C] of Object.entries(aplicCtx)) {
+    const primero = correrBoton({ query: C.ctx });
+    const resumen = primero ? primero.flat.filter((d) => d.tipo === "hablar").slice(0, 3).map((d) => d.texto).join(" ") : "";
+    // (a) "otro ejemplo de la vida cotidiana/real" → sigue APLICADO (mismo tema) y con escenario NUEVO.
+    const otro = correrBoton({ query: tema === "fraccion" ? "otro ejemplo de la vida real" : "otro ejemplo de la vida cotidiana", seguimiento: "continuacion", contexto: C.ctx, currentTopic: C.ctx, previo: resumen });
+    check(`aplicada [${tema}] 'otro de la vida real': sigue aplicado (mismo tema)`, !!otro && otro.tema === tema, otro ? otro.tema : "null");
+    check(`aplicada [${tema}] 'otro de la vida real': escenario NUEVO (no repite)`, !!otro && !C.noRepite.test(escAplicado(otro)), escAplicado(otro).slice(0, 40));
+    // (b) "que no sea <X>" → aplicado, tema correcto, y NO usa el escenario excluido.
+    const excl = correrBoton({ query: `dame un ejemplo que no sea ${C.excluye}`, seguimiento: "continuacion", contexto: C.ctx, currentTopic: C.ctx, previo: resumen });
+    check(`aplicada [${tema}] 'que no sea ${C.excluye}': aplicado y sin el escenario excluido`, !!excl && excl.tema === tema && !C.noRepite.test(escAplicado(excl)), escAplicado(excl).slice(0, 40));
+  }
   // 'otro ejemplo' aplicado ROTA de escenario (no repite el coche).
   const apl1 = correrBoton({ query: "un ejemplo de derivadas de la vida real" });
   const apl2 = correrBoton({ query: "dame otro ejemplo de la vida real", seguimiento: "continuacion", contexto: "derivadas", previo: apl1?.hablar2 || "" });

@@ -728,12 +728,12 @@ function idxEscenario(list, evitarRaw, keyOf) {
 // variables (x→"equis"), y no puede distinguir una unidad de una variable. Con la palabra completa se
 // oye "un metro", no "eme". Los símbolos de la pizarra ("t²", "v(t) = 2t") NO se hablan (la pizarra es muda).
 const DERIV_VIDA = [
-  { obj: "un coche", mag: "posición",       sym: "s", pos: "t²",  tabla: "en 1 segundo avanza 1 metro, en 2 segundos 4 metros, en 3 segundos 9 metros",   k: 2,  tE: 2, tP: 5 },
-  { obj: "una pelota que cae", mag: "distancia caída", sym: "h", pos: "5t²", tabla: "en 1 segundo cae 5 metros, en 2 segundos 20 metros, en 3 segundos 45 metros", k: 10, tE: 2, tP: 4 },
-  { obj: "un tren", mag: "posición",        sym: "s", pos: "3t²", tabla: "en 1 segundo avanza 3 metros, en 2 segundos 12 metros, en 3 segundos 27 metros", k: 6,  tE: 3, tP: 5 },
+  { key: "coche", obj: "un coche", mag: "posición",       sym: "s", pos: "t²",  tabla: "en 1 segundo avanza 1 metro, en 2 segundos 4 metros, en 3 segundos 9 metros",   k: 2,  tE: 2, tP: 5 },
+  { key: "pelota", obj: "una pelota que cae", mag: "distancia caída", sym: "h", pos: "5t²", tabla: "en 1 segundo cae 5 metros, en 2 segundos 20 metros, en 3 segundos 45 metros", k: 10, tE: 2, tP: 4 },
+  { key: "tren", obj: "un tren", mag: "posición",        sym: "s", pos: "3t²", tabla: "en 1 segundo avanza 3 metros, en 2 segundos 12 metros, en 3 segundos 27 metros", k: 6,  tE: 3, tP: 5 },
 ];
 export function derivadaAplicadaLSG(opts = {}) {
-  const c = DERIV_VIDA[idxEscenario(DERIV_VIDA, opts.evitar, (s) => s.obj)];
+  const c = DERIV_VIDA[idxEscenario(DERIV_VIDA, opts.evitar, (s) => s.key)];
   const vel = `${c.k}t`;               // velocidad = derivada de la posición (regla de la potencia)
   const vE = c.k * c.tE;               // velocidad en el instante del ejemplo
   const vP = c.k * c.tP;               // velocidad en la práctica (respuesta calificable)
@@ -850,13 +850,13 @@ export function linealAplicadaLSG(opts = {}) {
 
 // ── 2) FRACCIONES en la vida real: repartir algo (pizza, chocolate, jugo) en partes iguales. ──
 const FRACC_VIDA = [
-  { hist: "Una pizza está cortada en 8 partes iguales. Tú te comes 3 (3/8) y tu hermano 2 (2/8).", d: 8, a: 3, b: 2,
+  { key: "pizza", hist: "Una pizza está cortada en 8 partes iguales. Tú te comes 3 (3/8) y tu hermano 2 (2/8).", d: 8, a: 3, b: 2,
     pHist: "Un chocolate tiene 7 cuadritos: comes 2 (2/7) y luego 3 más (3/7).", pd: 7, pa: 2, pb: 3 },
-  { hist: "Un pastel se corta en 5 porciones iguales. Comes 2 (2/5) y tu amiga 1 (1/5).", d: 5, a: 2, b: 1,
+  { key: "pastel", hist: "Un pastel se corta en 5 porciones iguales. Comes 2 (2/5) y tu amiga 1 (1/5).", d: 5, a: 2, b: 1,
     pHist: "Una jarra rinde 9 vasos: bebes 4 (4/9) y tu amigo 3 (3/9).", pd: 9, pa: 4, pb: 3 },
 ];
 export function fraccionAplicadaLSG(opts = {}) {
-  const c = FRACC_VIDA[idxEscenario(FRACC_VIDA, opts.evitar, (s) => s.hist.slice(0, 14))];
+  const c = FRACC_VIDA[idxEscenario(FRACC_VIDA, opts.evitar, (s) => s.key)];
   const sum = c.a + c.b, psum = c.pa + c.pb;
   const dir = [
     { tipo: "avatar", accion: "sonreir" },
@@ -933,6 +933,23 @@ function esReteachBoton(q, seguimiento) {
   if (p <= 3 && /(no se|ayud|auxilio|por que|porque)/.test(n)) return true;
   return false;
 }
+// Extrae lo que el alumno pide EVITAR ("un ejemplo que no sea un coche", "diferente a la pizza",
+// "sin usar cuadernos", "otro que no sea el tren") → devuelve la palabra clave a excluir ("coche"), o "".
+function extraerExclusion(q) {
+  const n = normBoton(q);
+  const m = n.match(/(?:que no (?:sea|sean|uses?|use|tenga|hable de|salga|mencione)|diferente(?:s)? al?|distint[oa] al?|sin(?: usar)?|en vez del?|en lugar del?)\s+(.+)$/);
+  if (!m) return "";
+  // Puede haber VARIAS exclusiones ("ni el coche ni la pelota"): se quitan artículos/conjunciones y se
+  // devuelven todas las palabras clave, para EXCLUIR todos los escenarios pedidos (no solo el primero).
+  const rest = m[1].replace(/\b(el|la|los|las|un|una|unos|unas|lo|de|del|ni|y|o|e|u|que|ejemplo|ejemplos|caso|casos)\b/g, " ");
+  return (rest.match(/[a-zñáéíóú]{3,}/g) || []).join(" ");
+}
+// ¿El resumen/tema indica que la lección ACTIVA es de tipo APLICADO (vida real)? — para que un
+// seguimiento que pide OTRO ejemplo / uno DIFERENTE / "que no sea X" siga siendo aplicado (otro caso de
+// la vida real) en vez de caer en la lección numérica o repetir el mismo.
+function esContextoAplicado(texto) {
+  return /ejemplo m[aá]s cotidiano|problemas del d[ií]a a d[ií]a|cuando repartimos|significado muy visual|imagina un|imagina una|compraste \d|una pizza|un pastel|una l[aá]mina|recortar un cuadrado/i.test(String(texto || ""));
+}
 // Tema NÚCLEO (uno de los 4) al que pertenece un texto, por palabra clave o por la FORMA de la expresión
 // ("2x + 5 = 15" → lineal, "x² - 9" → factorización). null si no es de ningún tema núcleo.
 function temaNucleo(text) {
@@ -973,7 +990,17 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   const nQ = normBoton(query);
   const ctxTema = normBoton(`${contexto} ${currentTopic}`);
   const pideAplicado = /vida cotidiana|vida real|vida diaria|mundo real|cotidian|d[ií]a a d[ií]a|para qu[eé]\s+(sirve|sirven|se usa|se utiliza)|aplicaci[oó]n|aplicad|caso real|ejemplo real|situaci[oó]n real|ejemplo pr[aá]ctico|en la pr[aá]ctica|variaci[oó]n de (?:la )?velocidad|\bvelocidad\b|\baceleraci[oó]n\b/.test(nQ);
-  if (pideAplicado) {
+  // Exclusión pedida ("que no sea un coche") y si pide OTRO/DIFERENTE ejemplo. Si la lección ACTIVA es
+  // aplicada (vida real) y el alumno pide otro/diferente/"que no sea X", debe seguir siendo APLICADO
+  // (otro caso real, EXCLUYENDO lo pedido) — no repetir el mismo ni caer en la lección numérica.
+  // (Queja del cliente: "que no sea un coche" seguía dando el coche; "otro de la vida cotidiana" no daba ejemplo.)
+  const excluir = extraerExclusion(query);
+  const pideOtroDiferente = !!excluir || /\b(otr[oa]|diferente|distint[oa]|nuev[oa])\b/.test(nQ);
+  const ctxAplicado = esContextoAplicado(`${previo} ${contexto} ${currentTopic}`);
+  if (pideAplicado || (ctxAplicado && pideOtroDiferente)) {
+    // `evitar` combina el resumen previo (lo ya mostrado) + lo que el alumno pide EXCLUIR, para que la
+    // rotación de escenario salte tanto lo anterior como lo excluido.
+    const evitarAp = `${previo} ${excluir}`.trim();
     // Se despacha al MISMO tema, pero a su lección APLICADA determinista (no a la numérica). El tema se
     // toma de la consulta O del CONTEXTO activo. OJO: en un seguimiento ("explícalo con ejemplos de la
     // vida real"), el frontend manda como contexto/currentTopic la CONSULTA que abrió el tema (p.ej.
@@ -986,10 +1013,10 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
     const hayLineal = solveLinearSteps(query) !== null || solveLinearSteps(contexto) !== null || solveLinearSteps(currentTopic) !== null;
     const hayDifCuad = /[a-z]\s*(?:\^\s*2|[²])\s*-\s*\d/i.test(enCtx);
     const hayFrac = /\d\s*\/\s*\d/.test(enCtx);
-    if (/deriv/.test(nQ) || /velocidad|aceleraci|variaci[oó]n/.test(nQ) || /deriv/.test(ctxTema)) return commonRet("derivada", derivadaAplicadaLSG({ evitar: previo }));
-    if (/fracc/.test(tt) || (hayFrac && !hayLineal)) return commonRet("fraccion", fraccionAplicadaLSG({ evitar: previo }));
-    if (/factoriz|diferencia de cuadrados/.test(tt) || hayDifCuad) return commonRet("factorizacion", factorizacionAplicadaLSG({ evitar: previo }));
-    if (/ecuaci|lineal|primer grado|despej/.test(tt) || hayLineal) return commonRet("lineal", linealAplicadaLSG({ evitar: previo }));
+    if (/deriv/.test(nQ) || /velocidad|aceleraci|variaci[oó]n/.test(nQ) || /deriv/.test(ctxTema)) return commonRet("derivada", derivadaAplicadaLSG({ evitar: evitarAp }));
+    if (/fracc/.test(tt) || (hayFrac && !hayLineal)) return commonRet("fraccion", fraccionAplicadaLSG({ evitar: evitarAp }));
+    if (/factoriz|diferencia de cuadrados/.test(tt) || hayDifCuad) return commonRet("factorizacion", factorizacionAplicadaLSG({ evitar: evitarAp }));
+    if (/ecuaci|lineal|primer grado|despej/.test(tt) || hayLineal) return commonRet("lineal", linealAplicadaLSG({ evitar: evitarAp }));
     return null; // aplicado pero sin tema identificable → explicación conceptual la da Gemini (Nivel 2)
   }
 
