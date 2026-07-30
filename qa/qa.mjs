@@ -305,6 +305,19 @@ async function unitTests() {
     check(`notación tolerante [${q}]: determinista (tema ${tema})`, !!r && r.tema === tema, r ? r.tema : "null");
     if (r) check(`notación tolerante [${q}]: resuelve LO QUE SE PIDIÓ (${clave})`, r.pizarras.some((p) => p.replace(/\s/g, "").includes(clave)), r.pizarras.join(" | "));
   }
+  // ── LINEAL con respuesta NO entera → FRACCIÓN EXACTA (no un decimal truncado "2.333", que sería
+  //    INEXACTO: 3·2.333 = 6.999 ≠ 7, y contradiría "siempre exacta"). Se comprueba que la solución
+  //    SATISFAGA la ecuación exactamente.
+  for (const [eq, sol] of [["3x = 7", "7/3"], ["2x + 1 = 4", "3/2"], ["6x = 4", "2/3"], ["5x + 2 = 3", "1/5"], ["x + 5 = 2", "-3"], ["2x + 5 = 15", "5"]]) {
+    const r = solveLinearSteps(eq);
+    check(`lineal exacta "${eq}" = ${sol}`, !!r && checkAnswer(r.answer, sol).correct === true, r ? `dio ${r.answer}` : "null");
+    if (r) {
+      const v = r.answer.includes("/") ? (+r.answer.split("/")[0] / +r.answer.split("/")[1]) : +r.answer;
+      const ev = (s) => { let sum = 0; for (const t of s.replace(/\s/g, "").replace(/(?<!^)(?=[+-])/g, " ").trim().split(" ")) { if (/x/.test(t)) { const c = t.replace("x", "").replace("+", ""); sum += (c === "" || c === "+") ? v : c === "-" ? -v : (+c) * v; } else sum += +t; } return sum; };
+      const [Ls, Rs] = eq.split("=");
+      check(`lineal "${eq}": la solución x=${r.answer} SATISFACE la ecuación (exacta)`, Math.abs(ev(Ls) - ev(Rs)) < 1e-9);
+    }
+  }
   // ── FRACCIÓN CONCRETA ("5/8 + 2/8"): antes caía a Gemini (no determinista, sin práctica calificable).
   //    Debe resolver ESA suma de forma determinista, con práctica. Cubre mismo y distinto denominador.
   for (const [q, res] of [["5/8 + 2/8", "7/8"], ["2/6 + 3/6", "5/6"], ["1/2 + 1/3", "5/6"]]) {

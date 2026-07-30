@@ -430,6 +430,20 @@ export function solveLinearSteps(text) {
   if (coef === 0) return null;
   const answer = (c - konst) / coef;
   if (!Number.isFinite(answer)) return null;
+  // Solución EXACTA: fracción reducida cuando NO es entera (evita decimales truncados como "2.333" para
+  // 7/3, que dan una solución INEXACTA — "3 × 2.333 = 6.999 ≠ 7"— y contradicen la garantía de exactitud).
+  // Cae a decimal solo si hay coeficientes decimales (num/den no enteros). checkAnswer acepta "7/3" y "2.333".
+  const gcd = (a, b) => { a = Math.abs(a); b = Math.abs(b); while (b) { [a, b] = [b, a % b]; } return a || 1; };
+  const fmtSol = (num, den) => {
+    if (!den) return "0";
+    if (Number.isInteger(num) && Number.isInteger(den)) {
+      let n = num, d = den; if (d < 0) { n = -n; d = -d; }
+      const g = gcd(n, d); n /= g; d /= g;
+      return d === 1 ? String(n) : `${n}/${d}`;
+    }
+    return Number.isInteger(answer) ? String(answer) : String(Math.round(answer * 1000) / 1000);
+  };
+  const answerStr = fmtSol(c - konst, coef);
 
   const fmt = (n) => (Number.isInteger(n) ? String(n) : String(Math.round(n * 1000) / 1000));
   const xc = (k) => (k === 1 ? "" : k === -1 ? "-" : fmt(k)); // coeficiente legible
@@ -447,12 +461,12 @@ export function solveLinearSteps(text) {
     steps.push({ explica: `Para despejar, ${op} en ambos lados (operación inversa).`, escribe: `${xc(coef)}${v} = ${fmt(c - konst)}` });
   }
   if (coef !== 1) {
-    steps.push({ explica: `Dividimos ambos lados entre ${fmt(coef)} para dejar ${v} sola.`, escribe: `${v} = ${fmt(answer)}` });
+    steps.push({ explica: `Dividimos ambos lados entre ${fmt(coef)} para dejar ${v} sola.`, escribe: `${v} = ${answerStr}` });
   }
   if (steps.length === 0 || !steps[steps.length - 1].escribe.startsWith(`${v} =`)) {
-    steps.push({ explica: `Entonces, ${v} vale ${fmt(answer)}.`, escribe: `${v} = ${fmt(answer)}` });
+    steps.push({ explica: `Entonces, ${v} vale ${answerStr}.`, escribe: `${v} = ${answerStr}` });
   }
-  return { original, steps, answer: fmt(answer), varName: v };
+  return { original, steps, answer: answerStr, varName: v };
 }
 
 // ─── Validación matemática INTEGRAL de la lección ─────────────────────────────
