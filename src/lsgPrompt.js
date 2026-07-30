@@ -710,9 +710,14 @@ function idxEscenario(list, evitarRaw, keyOf) {
   // al PRIMERO no mostrado (rota, no repite). Si NO menciona ninguno (primera vez en el tema, o venía de
   // una lección numérica), se usa el escenario CANÓNICO (0): así el primer ejemplo de la vida real es
   // PREDECIBLE y coincide con la guía de aceptación (coche / cuadernos / pizza / recortar un cuadrado).
-  const mencionado = !!evit && list.some((c) => evit.includes(canonExpr(keyOf(c))));
+  // keyOf puede devolver VARIAS palabras clave separadas por espacio (p.ej. "coche velocidad"): el
+  // escenario se "evita" si CUALQUIERA de sus palabras aparece en `evitar`. Así, excluir "velocidad"
+  // salta TODO escenario etiquetado con esa palabra (no solo el que se mostró) — queja del cliente:
+  // pedía "otro ejemplo diferente a la velocidad" y todos los ejemplos de derivada eran de velocidad.
+  const hit = (c) => String(keyOf(c)).split(/\s+/).some((w) => w && evit.includes(canonExpr(w)));
+  const mencionado = !!evit && list.some(hit);
   if (!mencionado) return 0;
-  const i = list.findIndex((c) => !evit.includes(canonExpr(keyOf(c))));
+  const i = list.findIndex((c) => !hit(c));
   return i < 0 ? 0 : i;
 }
 
@@ -727,27 +732,33 @@ function idxEscenario(list, evitarRaw, keyOf) {
 // el normalizador de voz lee una letra suelta como su NOMBRE (m→"eme", s→"ese"), igual que hace con las
 // variables (x→"equis"), y no puede distinguir una unidad de una variable. Con la palabra completa se
 // oye "un metro", no "eme". Los símbolos de la pizarra ("t²", "v(t) = 2t") NO se hablan (la pizarra es muda).
+// Escenarios de DISTINTO tipo (no solo velocidad): así "otro ejemplo diferente a la velocidad" tiene a
+// dónde ir (crecimiento de una planta, llenado de un tanque). Cada uno usa la fórmula t² (derivada 2t):
+// solo cambia el CONTEXTO, las UNIDADES y el tiempo. El `key` incluye la palabra del tipo ("velocidad",
+// "crecimiento", "caudal") para que la exclusión por tipo funcione. Unidades con palabra completa (TTS).
 const DERIV_VIDA = [
-  { key: "coche", obj: "un coche", mag: "posición",       sym: "s", pos: "t²",  tabla: "en 1 segundo avanza 1 metro, en 2 segundos 4 metros, en 3 segundos 9 metros",   k: 2,  tE: 2, tP: 5 },
-  { key: "pelota", obj: "una pelota que cae", mag: "distancia caída", sym: "h", pos: "5t²", tabla: "en 1 segundo cae 5 metros, en 2 segundos 20 metros, en 3 segundos 45 metros", k: 10, tE: 2, tP: 4 },
-  { key: "tren", obj: "un tren", mag: "posición",        sym: "s", pos: "3t²", tabla: "en 1 segundo avanza 3 metros, en 2 segundos 12 metros, en 3 segundos 27 metros", k: 6,  tE: 3, tP: 5 },
+  { key: "coche velocidad posicion", obj: "un coche", mag: "posición", sym: "s", rate: "velocidad", uMag: "metros", uRate: "metros por segundo", tSg: "segundo", tPl: "segundos", verbo: "avanza",
+    tabla: "en 1 segundo avanza 1 metro, en 2 segundos 4 metros, en 3 segundos 9 metros", tE: 2, tP: 5 },
+  { key: "planta crecimiento altura", obj: "una planta", mag: "altura", sym: "h", rate: "rapidez de crecimiento", uMag: "centímetros", uRate: "centímetros por día", tSg: "día", tPl: "días", verbo: "crece",
+    tabla: "en 1 día mide 1 centímetro, en 2 días 4 centímetros, en 3 días 9 centímetros", tE: 2, tP: 4 },
+  { key: "tanque caudal volumen llenado agua", obj: "un tanque que se llena de agua", mag: "cantidad de agua", sym: "V", rate: "rapidez de llenado", uMag: "litros", uRate: "litros por minuto", tSg: "minuto", tPl: "minutos", verbo: "sube",
+    tabla: "en 1 minuto hay 1 litro, en 2 minutos 4 litros, en 3 minutos 9 litros", tE: 3, tP: 5 },
 ];
 export function derivadaAplicadaLSG(opts = {}) {
   const c = DERIV_VIDA[idxEscenario(DERIV_VIDA, opts.evitar, (s) => s.key)];
-  const vel = `${c.k}t`;               // velocidad = derivada de la posición (regla de la potencia)
-  const vE = c.k * c.tE;               // velocidad en el instante del ejemplo
-  const vP = c.k * c.tP;               // velocidad en la práctica (respuesta calificable)
+  const vE = 2 * c.tE;                  // valor de la razón de cambio en el instante del ejemplo (t² → 2t)
+  const vP = 2 * c.tP;                  // valor en la práctica (respuesta calificable)
   const dir = [
     { tipo: "avatar", accion: "sonreir" },
-    { tipo: "hablar", texto: "Una derivada mide la RAPIDEZ con la que algo cambia. El ejemplo más cotidiano es la velocidad: la velocidad es la derivada de la posición respecto al tiempo, es decir, qué tan rápido cambia tu posición." },
-    { tipo: "hablar", texto: `Imagina ${c.obj}: su ${c.mag} después de un tiempo t sigue la fórmula ${c.pos}, medida en metros. Fíjate: ${c.tabla}. Cada segundo avanza más, así que va cada vez más rápido.` },
-    { tipo: "pizarra", accion: "escribir", contenido: `${c.mag}: ${c.sym}(t) = ${c.pos}  (metros)` },
-    { tipo: "hablar", texto: `La velocidad en cada instante es la derivada de la ${c.mag}. Derivamos ${c.pos} con la regla de la potencia —bajamos el exponente multiplicando y le restamos 1— y queda ${vel}: esa es la velocidad en cada instante.` },
-    { tipo: "pizarra", accion: "escribir", contenido: `velocidad: v(t) = ${vel}  (m/s)` },
-    { tipo: "hablar", texto: `Por ejemplo, a los ${c.tE} segundos la velocidad es ${c.k} × ${c.tE} = ${vE} metros por segundo. La derivada da la velocidad EXACTA en ese instante, no un promedio.` },
-    { tipo: "hablar", texto: "Como ves, la derivada no es solo un cálculo: te dice a qué ritmo cambian las cosas del día a día. Ahora te toca a ti, con el mismo móvil." },
-    { tipo: "pizarra", accion: "escribir", contenido: `v(t) = ${vel}.   Halla la velocidad a los ${c.tP} segundos.` },
-    { tipo: "preguntar", texto: `Si la velocidad es v(t) = ${vel}, ¿cuál es la velocidad a los ${c.tP} segundos? Escribe solo el número.`, respuesta: String(vP), esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
+    { tipo: "hablar", texto: "Una derivada mide la RAPIDEZ con la que algo cambia: en cada instante indica qué tan rápido crece o decrece una cantidad." },
+    { tipo: "hablar", texto: `Veámoslo con ${c.obj}: su ${c.mag} después de un tiempo t sigue la fórmula t², medida en ${c.uMag}. Fíjate: ${c.tabla}. Cada ${c.tSg} ${c.verbo} más, así que va cada vez más rápido.` },
+    { tipo: "pizarra", accion: "escribir", contenido: `${c.mag}: ${c.sym}(t) = t²  (${c.uMag})` },
+    { tipo: "hablar", texto: `La ${c.rate} en cada instante es la derivada de la ${c.mag}. Derivamos t² con la regla de la potencia —bajamos el exponente multiplicando y le restamos 1— y queda 2t.` },
+    { tipo: "pizarra", accion: "escribir", contenido: `derivada: ${c.sym}'(t) = 2t  (${c.uRate})` },
+    { tipo: "hablar", texto: `Por ejemplo, a los ${c.tE} ${c.tPl} vale 2 × ${c.tE} = ${vE} ${c.uRate}. La derivada da el valor EXACTO en ese instante, no un promedio.` },
+    { tipo: "hablar", texto: "Como ves, la derivada mide a qué ritmo cambian las cosas del día a día. Ahora te toca a ti." },
+    { tipo: "pizarra", accion: "escribir", contenido: `derivada = 2t.   Halla su valor a los ${c.tP} ${c.tPl}.` },
+    { tipo: "preguntar", texto: `Si la razón de cambio es 2t, ¿cuánto vale a los ${c.tP} ${c.tPl}? Escribe solo el número.`, respuesta: String(vP), esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
   ];
   return { escena: "derivada_resuelta", intencion: "aprender", duracion_estimada: 80, _mock: true, directivas: dir };
 }

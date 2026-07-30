@@ -294,6 +294,18 @@ async function unitTests() {
     const excl = correrBoton({ query: `dame un ejemplo que no sea ${C.excluye}`, seguimiento: "continuacion", contexto: C.ctx, currentTopic: C.ctx, previo: resumen });
     check(`aplicada [${tema}] 'que no sea ${C.excluye}': aplicado y sin el escenario excluido`, !!excl && excl.tema === tema && !C.noRepite.test(escAplicado(excl)), escAplicado(excl).slice(0, 40));
   }
+  // Caso EXACTO del cliente: "no entendí, explícame con otro ejemplo diferente a la velocidad" → debe dar
+  // un ejemplo de derivada que NO sea de velocidad (crecimiento, llenado…), no otro de velocidad.
+  {
+    const ctxD = "dame un ejemplo de derivadas de la vida cotidiana";
+    const primero = correrBoton({ query: ctxD });
+    const resumen = primero ? primero.flat.filter((d) => d.tipo === "hablar").slice(0, 3).map((d) => d.texto).join(" ") : "";
+    const dif = correrBoton({ query: "no entendí, explícame con otro ejemplo diferente a la velocidad", seguimiento: "reexplicar", contexto: ctxD, currentTopic: ctxD, previo: resumen });
+    const txt = dif ? dif.flat.filter((d) => d.tipo === "hablar").map((d) => d.texto).join(" ").toLowerCase() : "";
+    check("derivada 'diferente a la velocidad': sigue aplicado (mismo tema)", !!dif && dif.tema === "derivada", dif ? dif.tema : "null");
+    check("derivada 'diferente a la velocidad': el ejemplo NO es de velocidad", !!dif && !/\bvelocidad\b/.test(txt), (txt.match(/veámoslo con [^.:]+/) || [""])[0]);
+    check("derivada 'diferente a la velocidad': práctica calificable", !!dif && dif.nPreg === 1 && checkAnswer(dif.q.respuesta, dif.q.respuesta).correct === true);
+  }
   // 'otro ejemplo' aplicado ROTA de escenario (no repite el coche).
   const apl1 = correrBoton({ query: "un ejemplo de derivadas de la vida real" });
   const apl2 = correrBoton({ query: "dame otro ejemplo de la vida real", seguimiento: "continuacion", contexto: "derivadas", previo: apl1?.hablar2 || "" });
