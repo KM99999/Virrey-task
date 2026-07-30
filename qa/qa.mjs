@@ -291,6 +291,20 @@ async function unitTests() {
     check(`factorización fuera de alcance [${q}]: NO da preset (→ Gemini)`, correrBoton({ query: q }) === null, "dio lección determinista");
   }
   check(`factorización genérica ("¿Por qué factorizar?"): sí usa preset determinista`, !!correrBoton({ query: "¿Por qué factorizar?" }));
+  // ── TOLERANCIA DE NOTACIÓN (peor caso: el alumno NO pone superíndice/caret, o usa X mayúscula). Debe
+  //    resolver EXACTAMENTE lo que pidió, no otra cosa: "deriva x2" derivaba "x" (perdía el 2); "deriva 4X³"
+  //    caía a un ejemplo por defecto. Ahora "x2"→x², "X"→x.
+  for (const [q, tema, clave] of [
+    ["deriva x2", "derivada", "x²=2x"],
+    ["deriva 4X³", "derivada", "4x³=12x²"],
+    ["deriva 4x3", "derivada", "4x³=12x²"],
+    ["factoriza x2 - 9", "factorizacion", "(x-3)(x+3)"],
+    ["factoriza X² - 9", "factorizacion", "(x-3)(x+3)"],
+  ]) {
+    const r = correrBoton({ query: q });
+    check(`notación tolerante [${q}]: determinista (tema ${tema})`, !!r && r.tema === tema, r ? r.tema : "null");
+    if (r) check(`notación tolerante [${q}]: resuelve LO QUE SE PIDIÓ (${clave})`, r.pizarras.some((p) => p.replace(/\s/g, "").includes(clave)), r.pizarras.join(" | "));
+  }
   // ── FRACCIÓN CONCRETA ("5/8 + 2/8"): antes caía a Gemini (no determinista, sin práctica calificable).
   //    Debe resolver ESA suma de forma determinista, con práctica. Cubre mismo y distinto denominador.
   for (const [q, res] of [["5/8 + 2/8", "7/8"], ["2/6 + 3/6", "5/6"], ["1/2 + 1/3", "5/6"]]) {

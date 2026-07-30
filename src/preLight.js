@@ -273,8 +273,12 @@ export function monomioLimpio(text) {
   const rhs = (text.includes("=") ? text.split("=").pop() : text).trim();
   if (/[{}()·]/.test(rhs)) return null;                          // paréntesis/productos → paso intermedio
   if (/[²³⁴⁵⁶⁷⁸⁹]\s*[⁻⁺]|\^\s*[^0-9]/.test(rhs)) return null;    // exponente compuesto/no numérico
-  const r = rhs.replace(/\s+/g, "");
-  if ((r.match(/x/gi) || []).length !== 1) return null;
+  // Normaliza para TOLERAR cómo escribe el alumno: minúsculas (acepta "X") y un dígito PEGADO tras la x
+  // como EXPONENTE ("x2" → "x^2", "4x3" → "4x^3"), muy común cuando no puede poner superíndice. Un dígito
+  // ANTES de la x sigue siendo COEFICIENTE ("2x"). Sin esto, "deriva x2" derivaba "x" (perdía el 2) y
+  // "deriva 4X³" (X mayúscula) caía a un ejemplo por defecto — defectos hallados en la prueba de peor caso.
+  const r = rhs.replace(/\s+/g, "").toLowerCase().replace(/x(\d)/g, "x^$1");
+  if ((r.match(/x/g) || []).length !== 1) return null;
   return /^[+-]?\d{0,3}x(?:\^\d|[²³⁴⁵⁶⁷⁸⁹])?$/.test(r) ? r : null;
 }
 

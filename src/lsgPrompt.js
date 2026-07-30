@@ -963,7 +963,9 @@ export function factorizacionAplicadaLSG(opts = {}) {
 // ── Detección del tema y despacho al generador correcto ──
 // Extrae de un texto una función/monomio simple ("derivada de 5x²" → "5x²"), o null.
 function extraerMonomio(texto) {
-  const m = String(texto).match(/[+-]?\d{0,3}\s*x\s*(?:\^\s*\d+|[⁰¹²³⁴⁵⁶⁷⁸⁹])?/i);
+  // Incluye el dígito PEGADO tras la x (`\d+`) para capturar "x2"/"4x3" (exponente sin superíndice ni
+  // caret); monomioLimpio lo normaliza a "x^2"/"4x^3". `/i` acepta "X" mayúscula.
+  const m = String(texto).match(/[+-]?\d{0,3}\s*x\s*(?:\^\s*\d+|[⁰¹²³⁴⁵⁶⁷⁸⁹]|\d+)?/i);
   return m ? monomioLimpio(m[0].replace(/\s+/g, "")) : null;
 }
 // Extrae una diferencia de cuadrados factorizable ("...factoriza x² - 9..." → "x² - 9";
@@ -972,7 +974,8 @@ function extraerMonomio(texto) {
 // — bug detectado en QA. computeFactorization sí resuelve el caso con coeficiente; solo faltaba capturarlo.
 function extraerDifCuadrados(texto) {
   const m = String(texto).match(/\d*\s*[a-z]\s*(?:\^\s*2|[²])\s*-\s*\d+/i);
-  return m && computeFactorization(m[0].trim()) ? m[0].trim() : null;
+  const inst = m ? m[0].trim().toLowerCase() : ""; // minúsculas: "X² - 9" → "x² - 9" (board coherente)
+  return inst && computeFactorization(inst) ? inst : null;
 }
 // Extrae una SUMA de dos fracciones escrita por el alumno ("5/8 + 2/8" → [5,2,8] mismo denominador;
 // "1/2 + 1/3" → [1,2,1,3] distinto denominador), o null. Se usa para resolver EXACTAMENTE lo que el
