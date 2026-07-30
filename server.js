@@ -118,7 +118,7 @@ app.post("/api/query", async (req, res) => {
     //      siempre correcta y siempre diferente). Los cuatro comparten el MISMO flujo pero con generadores
     //      AISLADOS: tocar uno no afecta a los demás. Si la consulta no es de ninguno de los 4 botones
     //      (tema libre/avanzado), devuelve null y se sigue el flujo normal con Gemini.
-    const boton = leccionBotonLSG({ query, seguimiento, contexto, currentTopic, previo });
+    const boton = leccionBotonLSG({ query, seguimiento, contexto, currentTopic, previo, historial });
     if (boton) {
       const { lsg, pasos, warnings } = processLSG(boton.lsg, boton.intencion, query);
       return res.json({

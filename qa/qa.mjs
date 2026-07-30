@@ -254,6 +254,24 @@ async function unitTests() {
     check(`derivada aplicada [${label}]: la respuesta se califica bien`, !!r.q && checkAnswer(r.q.respuesta, r.q.respuesta).correct === true);
     check(`derivada aplicada [${label}]: sin igualdad numérica corrupta en pizarra`, !r.pizarras.some((p) => /=\s*(?:$|[.,;])/.test(p) || /\(\s*[+×\-]/.test(p)));
   }
+  // ── RECUPERACIÓN DE TEMA desde el HISTORIAL: "otro ejemplo" SIN tema activo (contexto/currentTopic/
+  //    seguimiento vacíos) pero con el tema en el HISTORIAL de conversación debe seguir siendo DETERMINISTA
+  //    (reconstruye el tema del historial), no caer a Gemini. Caso real: el alumno recarga la página (se
+  //    pierde el tema en memoria) y pide "otro ejemplo" — antes iba a Gemini (lección no determinista).
+  for (const [tema, hist, frase] of [
+    ["derivada",      "Enséñame derivadas",             "otro ejemplo"],
+    ["lineal",        "Enséñame ecuaciones lineales",   "otro"],
+    ["factorizacion", "Explícame por qué se factoriza x² - 9", "dame otro ejemplo"],
+    ["fraccion",      "Enséñame fracciones",            "otro más"],
+  ]) {
+    const r = correrBoton({ query: frase, historial: [hist, frase] });
+    check(`recuperación de historial [${tema}]: "${frase}" sigue determinista (no Gemini)`, !!r && r.tema === tema, r ? r.tema : "null (Gemini)");
+    if (r) check(`recuperación de historial [${tema}]: práctica calificable`, r.nPreg === 1 && checkAnswer(r.q.respuesta, r.q.respuesta).correct === true);
+  }
+  // NO debe secuestrar: "otro ejemplo" con historial SIN tema núcleo (o pregunta nueva) → NO fuerza tema.
+  check(`recuperación de historial: historial off-topic → NO inventa tema (cae a Gemini)`, correrBoton({ query: "otro ejemplo", historial: ["¿qué es la fotosíntesis?", "otro ejemplo"] }) === null);
+  check(`recuperación de historial: pregunta NUEVA (no 'otro') con tema en historial → NO se secuestra`, correrBoton({ query: "¿qué es un límite?", historial: ["Enséñame derivadas", "¿qué es un límite?"] }) === null);
+
   // SEGUIMIENTO aplicado sobre un tema con EXPRESIÓN concreta en el contexto (no la palabra "ecuación"):
   // "explícalo con ejemplos de la vida real" estando en "Resuelve 2x + 5 = 15" DEBE dar la lección
   // aplicada DETERMINISTA del tema (lineal), no caer a Gemini (que generaba "2x = 10" narrado vs

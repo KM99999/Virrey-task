@@ -1017,7 +1017,20 @@ function temaNucleo(text) {
 }
 const GEN_APLICADA = { derivada: derivadaAplicadaLSG, lineal: linealAplicadaLSG, fraccion: fraccionAplicadaLSG, factorizacion: factorizacionAplicadaLSG };
 
-export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", currentTopic = "", previo = "" } = {}) {
+export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", currentTopic = "", previo = "", historial = [] } = {}) {
+  // RECUPERACIÓN DE TEMA desde el HISTORIAL. Si la consulta es un "otro ejemplo" / "otra vez" / "resuélveme
+  // otro" SIN tema activo (contexto/currentTopic/seguimiento vacíos), reconstruimos el tema a partir del
+  // último mensaje del historial que sea de un TEMA NÚCLEO y lo tratamos como CONTINUACIÓN. Caso real: el
+  // alumno recarga la página (se pierde el tema en memoria del navegador) pero el historial de conversación
+  // SÍ conserva el tema; sin esto, "otro ejemplo" caía a Gemini (lección no determinista) — bug observado
+  // en pruebas: tras recargar, "otro ejemplo" de derivadas se iba a Gemini en vez de la lección determinista.
+  if (!seguimiento && !contexto && !currentTopic && Array.isArray(historial) && historial.length && esReteachBoton(query, "")) {
+    for (let i = historial.length - 1; i >= 0; i--) {
+      const h = historial[i];
+      if (!h || normBoton(h) === normBoton(query)) continue; // saltar la consulta actual
+      if (temaNucleo(h)) { contexto = h; seguimiento = "continuacion"; break; }
+    }
+  }
   const SEG_OTRO = new Set(["continuacion", "practicar", "resolver_otro"]);
   // "más fácil"/"más difícil" son seguimientos de NIVEL del tema activo: se mantiene el tema y se cambia
   // la lista de ejercicios a la del nivel pedido (antes caían a Gemini y devolvían algo trivial).
