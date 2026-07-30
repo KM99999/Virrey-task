@@ -58,6 +58,30 @@ const historial = [];      // consultas recientes del alumno (contexto de conver
 let lastLessonSummary = ""; // resumen de la ÚLTIMA lección (memoria: para no repetir el mismo ejemplo)
 let lastExercise = null;    // EJERCICIO en pantalla { ejercicio, respuesta } — para "explícame los pasos"
 
+// PERSISTENCIA de la sesión entre RECARGAS de la página. El estado de conversación (tema activo,
+// historial, memoria de la última lección y ejercicio en pantalla) se guarda en sessionStorage y se
+// restaura al cargar. Así, si el alumno RECARGA (F5) en medio de un tema y pide "otro ejemplo", el
+// sistema SIGUE sabiendo el tema y responde DETERMINISTA. Antes, tras recargar se perdía todo el estado
+// en memoria y "otro ejemplo" caía a Gemini (sin tema) — defecto observado en pruebas. sessionStorage se
+// limpia sola al cerrar la pestaña y con "reiniciar sesión" (no persiste entre visitas, no es rastreo).
+const SESSION_KEY = "mathia_sesion_v1";
+function persistSession() {
+  try {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ lastTopicQuery, historial, lastLessonSummary, lastExercise }));
+  } catch { /* sessionStorage no disponible (modo privado, etc.): seguimos sin persistir */ }
+}
+function restoreSession() {
+  try {
+    const s = JSON.parse(sessionStorage.getItem(SESSION_KEY) || "null");
+    if (!s || typeof s !== "object") return;
+    if (typeof s.lastTopicQuery === "string") lastTopicQuery = s.lastTopicQuery;
+    if (Array.isArray(s.historial)) { historial.length = 0; for (const x of s.historial) if (typeof x === "string") historial.push(x); }
+    if (typeof s.lastLessonSummary === "string") lastLessonSummary = s.lastLessonSummary;
+    if (s.lastExercise && typeof s.lastExercise === "object") lastExercise = s.lastExercise;
+  } catch { /* estado corrupto: se ignora y se empieza limpio */ }
+}
+restoreSession();
+
 // Extrae el EJERCICIO de práctica de un LSG: el enunciado escrito en la pizarra (o, en su defecto,
 // el texto de la pregunta) junto con su respuesta ya calculada. Sirve para RE-NARRARLO paso a paso
 // cuando el alumno pide "explícame los pasos anteriores" (continuidad de artefacto). null si no hay.
@@ -515,6 +539,7 @@ async function submitQuery() {
     // lección trae uno; un desglose (que no lo trae) conserva el ejercicio anterior.
     const ejActual = extraerEjercicio(data.lsg);
     if (ejActual) lastExercise = ejActual;
+    persistSession(); // guardar el estado para que sobreviva una recarga (F5)
 
     renderResult(data);
     addToHistory(data);
@@ -779,6 +804,7 @@ els.clearHistory.addEventListener("click", () => {
   historial.length = 0;    // olvida el historial de conversación que se manda a la IA
   lastLessonSummary = "";  // olvida la memoria de la última lección
   lastExercise = null;     // olvida el ejercicio en pantalla (para "explícame los pasos")
+  try { sessionStorage.removeItem(SESSION_KEY); } catch { /* noop */ } // no restaurar al recargar
   renderHistory();
   toast("Sesión reiniciada: se borró el historial, el tema activo y el contexto. La próxima consulta empieza de cero.");
 });
