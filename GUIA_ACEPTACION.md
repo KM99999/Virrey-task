@@ -14,6 +14,20 @@ Escribe cada frase en el cuadro **"Tu consulta"** (o usa los botones de ejemplo)
 > Nota: la primera consulta tras un rato de inactividad puede tardar ~50 s (el hosting gratuito
 > "despierta" el servicio). Las siguientes son inmediatas.
 
+### Dos cuadros distintos — no confundirlos
+
+- **"Tu consulta"** (cuadro grande, con el botón *Enviar*): aquí escribes lo que quieres aprender
+  o resolver — *"Enséñame derivadas"*, *"otro ejemplo"*, *"factoriza x² − 25"*, etc.
+- **"Tu respuesta"** (cuadro pequeño que aparece **al final de la lección**, con el botón
+  *Responder*): aquí escribes **solo la respuesta** al ejercicio de práctica (un número o una
+  fracción, p. ej. `10`, `3/4`, `(x-5)(x+5)`). Si aciertas te **felicita**; si fallas, te da una
+  **pista** y otro intento.
+
+> **Importante:** "responder la práctica" es una **acción sobre el ejercicio**, NO una frase que se
+> escriba en "Tu consulta". Si escribes *"responde en el cuadro"* como consulta, el sistema lo toma
+> como una pregunta nueva (no como tu respuesta). Espera a que termine la lección, y escribe el
+> **número/resultado** en el cuadro **"Tu respuesta"**.
+
 ## Las 6 formas de preguntar (valen para los 4 temas)
 
 | Lo que el cliente escribe | Qué hace el sistema |
