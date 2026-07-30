@@ -160,9 +160,10 @@ async function unitTests() {
     let board = ""; for (let i = qi - 1; i >= 0; i--) if (flat[i].tipo === "pizarra") { board = flat[i].contenido; break; }
     const pizarras = flat.filter((d) => d.tipo === "pizarra").map((d) => d.contenido);
     const hablar2 = flat.filter((d) => d.tipo === "hablar").slice(0, 2).map((d) => d.texto).join(" ");
-    // `resumen` replica resumenLeccion() del frontend (2 hablars + pizarras + pregunta): es lo que se
-    // envía como `previo`, y lo que permite ROTAR (contiene el ejemplo y el ejercicio mostrados).
-    const resumen = [hablar2, ...pizarras, q ? q.texto : ""].filter(Boolean).join(" · ").slice(0, 600);
+    // `resumen` replica resumenLeccion() del frontend: EXPRESIONES primero (pizarras + pregunta) y la
+    // prosa al final, para que el ejemplo mostrado sobreviva el recorte de `previo` (el concepto que abre
+    // "enséñame [tema]" es largo). Es lo que se envía como `previo` y lo que permite ROTAR el ejemplo.
+    const resumen = [...pizarras, q ? q.texto : "", hablar2].filter(Boolean).join(" · ").slice(0, 600);
     return { tema: b.tema, modelo: b.modelo, intencion: b.intencion, lsg, flat, q, board, pizarras, hablar2, resumen,
       nPreg: flat.filter((d) => d.tipo === "preguntar").length };
   };
@@ -980,7 +981,12 @@ async function liveBoton(q) {
   if (!d) { check(`[${q}] responde 200`, false, "sin respuesta tras 4 intentos"); return; }
   check(`[${q}] determinista (fuente=local)`, d.fuente_ia === "local", `fue ${d.fuente_ia} (${d.modelo})`);
   check(`[${q}] modelo *-resuelto`, /-resuelto$/.test(d.modelo || ""), `modelo=${d.modelo}`);
-  check(`[${q}] intención = resolver`, d.intencion === "resolver", `fue ${d.intencion}`);
+  // Intención determinista: "enséñame/explícame por qué" enseña el CONCEPTO primero → "aprender";
+  // "resuelve/dame un ejercicio" → "resolver". Ambas son deterministas (fuente=local).
+  const qn = q.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const esEnsenar = /\bense[nñ]a|\baprend|explica|por que|concepto|teoria/.test(qn);
+  const espera = esEnsenar ? "aprender" : "resolver";
+  check(`[${q}] intención = ${espera}`, d.intencion === espera, `fue ${d.intencion}`);
   const p = d.pasos || [];
   const preg = p.filter((x) => x.tipo === "preguntar");
   check(`[${q}] una sola práctica calificable`, preg.length === 1 && !!(preg[0] && String(preg[0].respuesta || "").trim()), `preguntas=${preg.length} resp=${preg[0]?.respuesta}`);

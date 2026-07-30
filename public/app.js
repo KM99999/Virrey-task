@@ -85,7 +85,12 @@ function resumenLeccion(lsg) {
   const hablar = flat.filter((d) => d.tipo === "hablar").map((d) => d.texto).filter(Boolean).slice(0, 2);
   const pizarra = flat.filter((d) => d.tipo === "pizarra").map((d) => d.contenido).filter(Boolean);
   const preg = flat.filter((d) => d.tipo === "preguntar").map((d) => d.texto).filter(Boolean);
-  return [...hablar, ...pizarra, ...preg].join(" · ").slice(0, 600);
+  // Las EXPRESIONES (pizarras + pregunta) van PRIMERO y la prosa al final. El servidor recorta `previo`
+  // a 500 caracteres, y en "enséñame [tema]" el concepto que abre la lección es LARGO (>500): si el
+  // resumen empezara por esa prosa, el ejemplo mostrado (x², 2x³, la ecuación…) quedaba FUERA del recorte
+  // y "otro ejemplo" no tenía nada que evitar → repetía el MISMO ejemplo idéntico (bug reportado). Con las
+  // expresiones al frente, la rotación SIEMPRE ve lo ya mostrado y da uno distinto.
+  return [...pizarra, ...preg, ...hablar].join(" · ").slice(0, 600);
 }
 let modo = "ia"; // "ia" = temas avanzados con Gemini · "demo" = temas básicos sin IA (instantáneo)
 

@@ -66,7 +66,11 @@ app.post("/api/query", async (req, res) => {
     ? req.body.historial.filter((s) => typeof s === "string" && s.trim()).slice(-5).map((s) => s.trim().slice(0, 200))
     : [];
   // Resumen de la lección ANTERIOR (memoria): lo ya explicado, para que un "otro ejemplo" no repita.
-  const previo = typeof req.body?.previo === "string" ? req.body.previo.trim().slice(0, 500) : "";
+  // El frontend arma `previo` (resumen de lo ya mostrado) y lo recorta a 600; aquí conservamos hasta 800
+  // para NO chocar con ese límite (antes recortábamos a 500 y perdíamos el ejemplo mostrado, que queda al
+  // final del resumen → "otro ejemplo" no tenía qué evitar y repetía el mismo). No impacta el coste de IA:
+  // en la ruta determinista (los 4 botones) `previo` no se envía a Gemini, solo sirve para rotar el ejemplo.
+  const previo = typeof req.body?.previo === "string" ? req.body.previo.trim().slice(0, 800) : "";
   // Continuidad de ARTEFACTO: el EJERCICIO que está en pantalla y su respuesta ya calculada. Se usa
   // cuando el alumno pide "explícame los pasos anteriores / paso a paso" para RE-NARRAR ESE ejercicio
   // (no generar uno nuevo ni cambiar de tema).
