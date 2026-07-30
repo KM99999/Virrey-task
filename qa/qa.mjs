@@ -982,6 +982,27 @@ async function unitTests() {
   ] });
   check("pizarra CONTIENE la explicación (no solo números)", board.some((l) => l.k === "explica"), `board=${JSON.stringify(board.map((l) => l.k))}`);
 
+  // FEEDBACK sin verdad-base (camino Gemini): una pregunta FACTUAL que la IA NO resolvió (sin `respuesta`
+  // ni un board "x = N") NO debe ELOGIAR la respuesta del alumno —sería dar por buena una respuesta
+  // ERRÓNEA (p. ej. "¿es 10 primo?" → "sí")—: mensaje NEUTRAL que remite a la pizarra. Solo las preguntas
+  // de COMPRENSIÓN ("¿entendiste?") responden en positivo.
+  {
+    const mkPse = (cap) => new PSELight({ avatar: { setState() {}, setSpeaking() {} }, tts: { speak: async () => {}, cancel() {} },
+      ui: { ...uiMock, showFeedback(_c, msg) { cap.msg = msg; }, askAnswer: async () => "sí" } });
+    const facC = {};
+    await mkPse(facC).play({ escena: "t", intencion: "explicar", directivas: [
+      { tipo: "hablar", texto: "Un número primo solo se divide por 1 y por sí mismo." },
+      { tipo: "preguntar", texto: "¿Es el número 10 un número primo?" }, // sin respuesta ni board "x = N"
+    ] });
+    check("feedback FACTUAL sin verdad-base: NO elogia una respuesta (posiblemente errónea)", !!facC.msg && !/muy bien|perfecto|correcto|eso es|as[ií] es/i.test(facC.msg), `msg="${facC.msg}"`);
+    const compC = {};
+    await mkPse(compC).play({ escena: "t", intencion: "explicar", directivas: [
+      { tipo: "hablar", texto: "Repasamos la suma." },
+      { tipo: "preguntar", texto: "¿Entendiste la explicación?" },
+    ] });
+    check("feedback COMPRENSIÓN ('¿entendiste?'): responde en positivo", !!compC.msg && /perfecto|bien|sigamos/i.test(compC.msg), `msg="${compC.msg}"`);
+  }
+
   // Seguimiento "no entendí": reexplica de OTRA forma, DESDE CERO y DETALLADO (no repite, no genérico).
   const normal = processLSG(mockLSG("enséñame a restar", "aprender"), "aprender").lsg;
   const reexp = processLSG(mockLSG("enséñame a restar", "explicar", { reexplain: true }), "explicar").lsg;

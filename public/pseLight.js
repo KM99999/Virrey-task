@@ -425,12 +425,16 @@ export class PSELight {
     // El "¡Muy bien!" se reserva para preguntas de COMPRENSIÓN reales ("¿entendiste?").
     if (!expected) {
       const negativa = /^(no|nop|nel|para nada|no s[eé])\b/i.test(answer.trim());
-      const esComputacional = /cu[aá]nto|cu[aá]l es|calcul|derivada de|deriva\b|resuelv|resultado|valor de|factoriz|simplific/i.test(d.texto || "");
+      // Solo elogiamos ("¡Perfecto!") en preguntas de COMPRENSIÓN/opinión ("¿entendiste?", "¿quedó claro?",
+      // "¿te gustaría…?"), donde no hay respuesta verdadera/falsa. En CUALQUIER otra pregunta sin verdad-base
+      // deducible —una FACTUAL como "¿es 10 un número primo?" que la IA no resolvió— NO confirmamos la
+      // respuesta (diríamos "¡Muy bien!" a una respuesta ERRÓNEA): mensaje NEUTRAL que remite a la pizarra.
+      const esComprension = /entend|qued[oó]\s+claro|te\s+gustar[ií]a|te\s+gusta|de\s+acuerdo|list[oa]\b|continu|seguim|repas/i.test(d.texto || "");
       const msg = negativa
         ? "Sin problema. Puedes volver a reproducir la lección para repasarla con calma. 👍"
-        : esComputacional
-          ? "Gracias por responder. Compara tu resultado con el procedimiento resuelto en la pizarra para verificarlo. 👀"
-          : "¡Muy bien! Gracias por participar. 👏";
+        : esComprension
+          ? "¡Perfecto! Sigamos. 👍"
+          : "Gracias por tu respuesta. Compárala con lo explicado en la pizarra para verificarla. 👀";
       this.ui.showFeedback(true, msg);
       await this._speak(msg, "sonriendo", signal);
       return;
