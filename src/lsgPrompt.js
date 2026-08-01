@@ -1077,7 +1077,12 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   // concepto con un ejemplo nuevo, NO pasar a solo resolver. (Queja del cliente: pidió el concepto de
   // fracciones con otros ejemplos y el sistema mostró solo el proceso de resolución, sin el concepto.)
   // Una petición de NIVEL ("más difícil") o de resolver otra ("resuélveme otra") sí cambia a resolver.
-  const conceptoOn = pideEnsenar && (!esSeg || seguimiento === "continuacion" || seguimiento === "practicar");
+  // Si el alumno pide EXPLÍCITAMENTE un ejercicio o "dame/ponme UN ejemplo/ejercicio" (aunque sea dentro
+  // de una sesión de CONCEPTO), quiere el EJERCICIO, no que le re-expliquen el concepto. Queja del cliente:
+  // "pido que me dé EJERCICIOS y me brinda CONCEPTOS". Distinto de "otro ejemplo"/"otro" (sin verbo de
+  // pedir + "un"), que en una sesión de concepto SÍ mantiene el concepto y solo rota el ejemplo.
+  const pidePracticaExpl = /\bejercicio\b|\bpractic|\bresuelv|(dame|deme|denme|ponme|pon|quiero|quisiera|necesito|muestrame|muestra|dejame|deja)\s+(un|una)\s+(ejemplo|ejercicio)/.test(normBoton(query));
+  const conceptoOn = pideEnsenar && (!esSeg || seguimiento === "continuacion" || seguimiento === "practicar") && !pidePracticaExpl;
   const commonRet = (tema, lsg) => ({ tema, escena: lsg.escena, intencion: lsg.intencion || "resolver", modelo: `${tema}-resuelto`, lsg });
 
   // 0) ¿PIDE UN EJEMPLO APLICADO / DE LA VIDA REAL (no un cálculo numérico)? "un ejemplo de la vida

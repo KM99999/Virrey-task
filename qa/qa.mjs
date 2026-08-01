@@ -211,6 +211,16 @@ async function unitTests() {
     check(`botón [${label}] 'otro ejemplo': ejercicio NUEVO (no repite el primero)`, !!otro && (otro.q.texto !== first.q.texto || JSON.stringify(otro.pizarras) !== JSON.stringify(first.pizarras)));
     check(`botón [${label}] 'otro ejemplo': sigue siendo calificable`, !!otro && otro.nPreg === 1 && !!String(otro.q.respuesta || "").trim());
   }
+  // EN UNA SESIÓN DE CONCEPTO ("Enséñame [tema]"), pedir EXPLÍCITAMENTE "dame un ejemplo/ejercicio" debe dar
+  // el EJERCICIO, no re-explicar el concepto (queja del cliente: "pido que me dé EJERCICIOS y me brinda
+  // CONCEPTOS", estando en una sesión de concepto). Pero "otro ejemplo" SÍ mantiene el concepto (14312f1).
+  {
+    const esConcepto = (r) => !!r && /una derivada mide la rapidez/i.test((r.flat || []).filter((d) => d.tipo === "hablar").map((d) => d.texto).join(" "));
+    const ej = correrBoton({ query: "dame un ejemplo matemático de derivadas", seguimiento: "continuacion", contexto: "Enséñame derivadas", currentTopic: "Enséñame derivadas" });
+    check(`sesión concepto + "dame un ejemplo": da EJERCICIO (no re-explica concepto)`, !!ej && ej.intencion === "resolver" && !esConcepto(ej), ej ? `intención=${ej.intencion}` : "null");
+    const otroC = correrBoton({ query: "otro ejemplo", seguimiento: "continuacion", contexto: "Enséñame derivadas", currentTopic: "Enséñame derivadas" });
+    check(`sesión concepto + "otro ejemplo": MANTIENE el concepto (14312f1)`, !!otroC && otroC.intencion === "aprender", otroC ? `intención=${otroC.intencion}` : "null");
+  }
   // ── ROTACIÓN de la lección APLICADA (vida real): pedir "otro ejemplo" VARIAS veces debe RECORRER TODOS
   //    los escenarios con lecciones DISTINTAS y sin repetir dos veces seguidas. Antes idxEscenario devolvía
   //    el PRIMER escenario no-mostrado → ciclo de 2 (p.ej. pizza→dinero→pizza) que nunca llegaba al tercero
