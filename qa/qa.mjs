@@ -640,6 +640,11 @@ async function unitTests() {
   check("voz: '=' → 'igual a'", /igual a/.test(normalizeForSpeech("x = 4")));
   check("voz: '3x' → '3 equis'", /3 equis/.test(normalizeForSpeech("son 3x")));
   check("voz: 'x²' → 'equis al cuadrado'", /equis al cuadrado/.test(normalizeForSpeech("x²")));
+  // REGLA DE LA POTENCIA hablada: "xⁿ⁻¹" debe leerse "a la ene MENOS UNO" (antes el "⁻¹" quedaba crudo y
+  // la voz lo omitía → "n por x a la n", regla MAL — queja del cliente). Cubre superíndice negativo.
+  check("voz: 'xⁿ⁻¹' → 'a la ene menos uno' (no omite el -1)", /a la ene menos uno/.test(normalizeForSpeech("la derivada de xⁿ es n·xⁿ⁻¹")));
+  check("voz: 'x⁻¹' → 'a la menos uno'", /a la menos uno/.test(normalizeForSpeech("x⁻¹")));
+  check("voz: 'x³' → 'al cubo' · 'x⁴' → 'a la cuarta' (no se rompe)", /al cubo/.test(normalizeForSpeech("x³")) && /a la cuarta/.test(normalizeForSpeech("x⁴")));
   check("voz: '÷' → 'entre', '×' → 'por'", /entre/.test(normalizeForSpeech("200 ÷ 25")) && /por/.test(normalizeForSpeech("7 × 3")));
   check("voz: '20%' → '20 por ciento'", /20 por ciento/.test(normalizeForSpeech("el 20% de 50")));
   check("voz: NO rompe palabras con 'x' (exponente)", /exponente/.test(normalizeForSpeech("el exponente crece")));

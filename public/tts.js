@@ -24,11 +24,19 @@ export function normalizeForSpeech(text) {
   if (typeof text !== "string" || !text) return text;
   let s = " " + text + " ";
 
-  // 1) Exponentes (superíndices) sobre letra/número → palabras.
-  s = s.replace(/([0-9a-zñ)])\s*²/gi, "$1 al cuadrado")
-       .replace(/([0-9a-zñ)])\s*³/gi, "$1 al cubo")
-       .replace(/([0-9a-zñ)])\s*ⁿ/gi, "$1 a la ene")
-       .replace(/([0-9a-zñ)])\s*([⁴⁵⁶⁷⁸⁹])/gi, (_, b, e) => `${b} a la ${ORD_SUPER[e]}`);
+  // 1) Exponentes (superíndices) sobre letra/número → palabras. Se lee el RUN COMPLETO de superíndices,
+  //    para cubrir el exponente NEGATIVO/compuesto "xⁿ⁻¹" (regla de la potencia). Antes "ⁿ" se leía "a la
+  //    ene" pero el "⁻¹" quedaba CRUDO y la voz lo OMITÍA → la regla se oía "n por x a la n" (MAL, sin
+  //    "menos uno") — queja del cliente. Ahora "xⁿ⁻¹" → "x a la ene menos uno".
+  const SUP = { "⁰": "cero", "¹": "uno", "²": "dos", "³": "tres", "⁴": "cuatro", "⁵": "cinco", "⁶": "seis", "⁷": "siete", "⁸": "ocho", "⁹": "nueve", "ⁿ": "ene", "⁻": "menos" };
+  s = s.replace(/([0-9a-zñ)])\s*([⁰¹²³⁴⁵⁶⁷⁸⁹ⁿ⁻]+)/gi, (_, b, run) => {
+    if (run === "²") return `${b} al cuadrado`;
+    if (run === "³") return `${b} al cubo`;
+    if (ORD_SUPER[run]) return `${b} a la ${ORD_SUPER[run]}`; // ⁴…⁹ solo → ordinal (cuarta, quinta…)
+    if (run === "ⁿ") return `${b} a la ene`;
+    // exponente compuesto o negativo (ⁿ⁻¹, ⁻¹, ¹…) → cardinales, conservando el "menos"
+    return `${b} a la ${run.split("").map((c) => SUP[c] || "").filter(Boolean).join(" ")}`;
+  });
 
   // 1b) Exponente con ACENTO CIRCUNFLEJO "^" (el motor decía "circunflejo"): "x^2" → "al cuadrado",
   //     "x^3" → "al cubo", "x^n" → "elevado a la n". Cubre también "^" suelto.
