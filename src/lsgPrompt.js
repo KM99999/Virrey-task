@@ -697,12 +697,12 @@ function pasosDiv(a, b) {
     { explica: `Dividir ${a} ÷ ${b} es repartir ${a} en ${b} partes iguales. Buscamos el número que por ${b} da ${a}: como ${b} × ${q} = ${a}, cada parte es ${q}.`, escribe: `${a} ÷ ${b} = ${q}   (porque ${b} × ${q} = ${a})` },
   ] };
 }
-// Detecta un CÁLCULO concreto ("24 + 17", "6 × 7", "52 - 27", "20 ÷ 4", "20 entre 4", "6 por 7"). Solo
+// Detecta un CÁLCULO concreto ("24 + 17", "6 × 7", "52 - 27", "20 ÷ 4", "20 / 4", "20 entre 4", "6 por 7"). Solo
 // números enteros; división exacta y resta no negativa (si no, → null y lo maneja Gemini). Las fracciones
 // ("5/8 + 2/8") y ecuaciones ("2x + 5 = 15") ya se resolvieron en ramas anteriores, así que aquí no llegan.
 function extraerOperacion(text) {
   const s = String(text).replace(/\s+/g, " ").trim(); let m;
-  if (/÷/.test(s) && (m = s.match(/(\d+)\s*÷\s*(\d+)/))) { const a = +m[1], b = +m[2]; return (b && a % b === 0) ? { op: "division", a, b } : null; }
+  if (/[÷/]/.test(s) && (m = s.match(/(\d+)\s*[÷/]\s*(\d+)/))) { const a = +m[1], b = +m[2]; return (b && a % b === 0) ? { op: "division", a, b } : null; }
   if ((m = s.match(/(\d+)\s+entre\s+(\d+)/i))) { const a = +m[1], b = +m[2]; return (b && a % b === 0) ? { op: "division", a, b } : null; }
   if ((m = s.match(/(\d+)\s*(?:×|\*)\s*(\d+)/))) return { op: "multiplicacion", a: +m[1], b: +m[2] };
   if ((m = s.match(/(\d+)\s+(?:x|por)\s+(\d+)/i))) return { op: "multiplicacion", a: +m[1], b: +m[2] };

@@ -243,13 +243,21 @@ async function unitTests() {
       check(`aritmética [${q}]: intención aprender (concepto primero)`, !!r && r.intencion === "aprender", r ? r.intencion : "");
       if (r) { const real = evalOp(r.q.texto); check(`aritmética [${q}]: práctica CORRECTA (${real})`, real != null && checkAnswer(r.q.respuesta, String(real)).correct, `preg=${r.q.texto} resp=${r.q.respuesta}`); }
     }
-    for (const [q, tema, esp] of [["¿cuánto es 24 + 17?", "suma", "41"], ["52 - 27", "resta", "25"], ["6 × 7", "multiplicacion", "42"], ["20 ÷ 4", "division", "5"], ["6 por 7", "multiplicacion", "42"], ["84 entre 4", "division", "21"]]) {
+    for (const [q, tema, esp] of [["¿cuánto es 24 + 17?", "suma", "41"], ["52 - 27", "resta", "25"], ["6 × 7", "multiplicacion", "42"], ["20 ÷ 4", "division", "5"], ["6 por 7", "multiplicacion", "42"], ["84 entre 4", "division", "21"], ["Resuelve 5 / 5", "division", "1"], ["20 / 4", "division", "5"], ["84 / 4", "division", "21"]]) {
       const r = correrBoton({ query: q });
       const t = texto(r).replace(/\s+/g, " ");
       check(`aritmética concreta [${q}]: tema ${tema} y da el resultado ${esp}`, !!r && r.tema === tema && new RegExp(`=\\s*${esp}\\b`).test(t), r ? r.tema : "null");
       if (r) { const real = evalOp(r.q.texto); check(`aritmética concreta [${q}]: práctica CORRECTA`, real != null && checkAnswer(r.q.respuesta, String(real)).correct, `preg=${r.q.texto} resp=${r.q.respuesta}`); }
     }
     check(`"enséñame a sumar" NO enseña fracciones (bug del cliente)`, !/fracc|numerador|denominador/i.test(texto(correrBoton({ query: "enséñame a sumar" }))));
+    // BUG del cliente: "Resuelve 5 / 5" (con "/") caía a Gemini y no presentaba ejercicio final de práctica.
+    // La división con "/" exacta debe ir a la lección determinista y CERRAR con "Ahora te toca a ti" + práctica.
+    {
+      const r = correrBoton({ query: "Resuelve 5 / 5" });
+      check(`"5 / 5" (con "/") → división determinista (no Gemini)`, !!r && r.tema === "division", r ? r.tema : "null");
+      check(`"5 / 5" cierra con ejercicio de práctica ("Ahora te toca a ti")`, !!r && /ahora te toca a ti/i.test(texto(r)) && !!r.q?.texto);
+    }
+    check(`"9 / 4" (división NO exacta) NO es aritmética determinista → Gemini/fracción`, correrBoton({ query: "9 / 4" })?.tema !== "division");
     check(`"5/8 + 2/8" sigue siendo FRACCIONES (no aritmética)`, correrBoton({ query: "5/8 + 2/8" })?.tema === "fraccion");
     check(`"2x + 5 = 15" sigue siendo LINEAL (no aritmética)`, correrBoton({ query: "2x + 5 = 15" })?.tema === "lineal");
     // rotación en "otro ejemplo" (sesión de suma): la práctica no debe repetirse dos veces seguidas
