@@ -221,6 +221,16 @@ async function unitTests() {
     const otroC = correrBoton({ query: "otro ejemplo", seguimiento: "continuacion", contexto: "Enséñame derivadas", currentTopic: "Enséñame derivadas" });
     check(`sesión concepto + "otro ejemplo": MANTIENE el concepto (14312f1)`, !!otroC && otroC.intencion === "aprender", otroC ? `intención=${otroC.intencion}` : "null");
   }
+  // CONCEPTO DE FRACCIONES: debe explicar QUÉ ES una fracción (ejemplo concreto de partes de un todo +
+  // fracción equivalente), NO solo la fórmula de la suma (queja del cliente: "pido el concepto y solo me
+  // explican la fórmula").
+  {
+    const fc = correrBoton({ query: "Explícame el concepto de fracciones" });
+    const txt = fc ? (fc.flat || []).filter((d) => d.tipo === "hablar" || d.tipo === "pizarra").map((d) => `${d.texto || ""} ${d.contenido || ""}`).join(" ").toLowerCase() : "";
+    check(`concepto fracciones: explica QUÉ ES (ejemplo concreto de partes, no solo la fórmula)`, /pizza|porcion|partes iguales/.test(txt) && /numerador/.test(txt), txt.slice(0, 80));
+    check(`concepto fracciones: enseña fracción EQUIVALENTE (2/4 = 1/2 / la mitad)`, /2\/4\s*=\s*1\/2|la mitad/.test(txt));
+    check(`concepto fracciones: sigue con práctica de suma calificable`, !!fc && fc.nPreg === 1 && !!String(fc.q?.respuesta || "").trim());
+  }
   // ── ROTACIÓN de la lección APLICADA (vida real): pedir "otro ejemplo" VARIAS veces debe RECORRER TODOS
   //    los escenarios con lecciones DISTINTAS y sin repetir dos veces seguidas. Antes idxEscenario devolvía
   //    el PRIMER escenario no-mostrado → ciclo de 2 (p.ej. pizza→dinero→pizza) que nunca llegaba al tercero

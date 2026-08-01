@@ -530,7 +530,12 @@ export function fraccionResueltaLSG(opts) {
   if (o.concepto) {
     dir.push({ tipo: "hablar", texto: "Una fracción representa partes de un todo: el número de arriba es el numerador (las partes que tomamos) y el de abajo es el denominador (en cuántas partes iguales se divide el todo)." });
     dir.push({ tipo: "pizarra", accion: "escribir", contenido: "Fracción:  numerador / denominador" });
-    dir.push({ tipo: "hablar", texto: "Para sumar fracciones con el mismo denominador, se suman los numeradores y se mantiene el denominador. Si los denominadores son distintos, primero se igualan. Veámoslo con un ejemplo." });
+    // El cliente pidió el CONCEPTO de fracciones y solo se explicaba la fórmula (la suma). Aquí se enseña
+    // QUÉ ES una fracción con un ejemplo concreto (una pizza en partes), el significado de numerador y
+    // denominador, y fracciones EQUIVALENTES (2/4 = 1/2), ANTES de pasar a operar con ellas.
+    dir.push({ tipo: "hablar", texto: "Por ejemplo, si partes una pizza en 4 porciones iguales y tomas 1, eso es 1/4: el 4 (denominador) dice en cuántas partes se dividió, y el 1 (numerador) cuántas tomaste. Si tomas 2 de esas 4, es 2/4, que es lo mismo que la mitad, 1/2." });
+    dir.push({ tipo: "pizarra", accion: "escribir", contenido: "1/4 = una de 4 partes iguales    ·    2/4 = 1/2 (la mitad)" });
+    dir.push({ tipo: "hablar", texto: "Cuanto MÁS grande es el denominador, en más partes se divide el todo y más pequeña es cada parte: 1/8 es más chico que 1/4. Con la idea clara, veamos cómo se OPERA con fracciones: para SUMARLAS con el mismo denominador, se suman los numeradores y se mantiene el denominador; si son distintos, primero se igualan. Veámoslo con un ejemplo." });
   }
   if (!dificil) {
     dir.push(
