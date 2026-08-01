@@ -581,7 +581,7 @@ export function fraccionResueltaLSG(opts) {
 // DISTINTA y calificable para que el alumno la responda. Al pedir "otro ejemplo" se rota a un
 // ejemplo/práctica NUEVOS (evitando el anterior). Al ser funciones separadas, tocar una NO afecta
 // a las otras (antes compartían los "fixers" heurísticos de processLSG y por eso se estorbaban).
-const ESCENAS_BOTON = new Set(["lineal_resuelta", "derivada_resuelta", "factorizacion_resuelta", "fraccion_resuelta"]);
+const ESCENAS_BOTON = new Set(["lineal_resuelta", "derivada_resuelta", "factorizacion_resuelta", "fraccion_resuelta", "suma_resuelta", "resta_resuelta", "multiplicacion_resuelta", "division_resuelta"]);
 export function esEscenaBoton(escena) { return ESCENAS_BOTON.has(escena); }
 
 const normBoton = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
@@ -630,6 +630,126 @@ function elegirBoton(listas, { evitar, instancia, seguimiento, nivel } = {}) {
   if (!seguimiento) return { ejemplo: lista[0], practica: lista[1] };
   return rotarBoton(lista, evitar);
 }
+
+// ════════ ARITMÉTICA BÁSICA: suma, resta, multiplicación, división (pedida por el cliente) ════════
+// Mismo patrón EXACTO que los otros 4 temas: CONCEPTO primero (qué significa la operación) + ejemplo
+// resuelto paso a paso + PRÁCTICA calificable, con niveles fácil/normal/difícil y rotación en "otro
+// ejemplo". Determinista (0 coste de IA, siempre correcto). Antes "enséñame a sumar" caía a Gemini, que
+// lo interpretaba como "sumar fracciones" — queja del cliente.
+const SUMAS = {
+  facil: ["3 + 4", "5 + 2", "6 + 3", "4 + 5", "7 + 2", "2 + 6", "8 + 1", "5 + 4"],
+  normal: ["24 + 17", "36 + 28", "47 + 25", "58 + 36", "19 + 45", "27 + 38", "46 + 29", "53 + 19"],
+  dificil: ["234 + 178", "356 + 267", "489 + 255", "678 + 145", "527 + 398", "349 + 276"],
+};
+const RESTAS = {
+  facil: ["8 - 3", "9 - 5", "7 - 2", "6 - 4", "9 - 6", "8 - 5", "7 - 3", "9 - 4"],
+  normal: ["52 - 27", "63 - 28", "71 - 35", "84 - 46", "45 - 19", "62 - 38", "90 - 47", "73 - 58"],
+  dificil: ["503 - 278", "412 - 255", "600 - 347", "725 - 486", "834 - 567", "701 - 289"],
+};
+const MULTIS = {
+  facil: ["6 × 7", "8 × 4", "7 × 3", "9 × 6", "5 × 8", "4 × 9", "7 × 8", "6 × 9"],
+  normal: ["12 × 4", "13 × 6", "24 × 3", "15 × 7", "23 × 4", "18 × 5", "14 × 6", "27 × 3"],
+  dificil: ["23 × 14", "34 × 12", "26 × 15", "45 × 13", "18 × 24", "32 × 16"],
+};
+const DIVIS = {
+  facil: ["20 ÷ 4", "18 ÷ 3", "24 ÷ 6", "15 ÷ 5", "28 ÷ 7", "16 ÷ 4", "21 ÷ 3", "30 ÷ 5"],
+  normal: ["84 ÷ 4", "96 ÷ 6", "72 ÷ 3", "91 ÷ 7", "85 ÷ 5", "78 ÷ 6", "98 ÷ 7", "96 ÷ 8"],
+  dificil: ["144 ÷ 12", "156 ÷ 13", "288 ÷ 24", "192 ÷ 16", "225 ÷ 15", "132 ÷ 11"],
+};
+const parseAB = (s) => { const m = String(s).match(/(\d+)\s*[+\-×÷*/]\s*(\d+)/); return m ? [Number(m[1]), Number(m[2])] : [0, 0]; };
+const COLS = ["unidades", "decenas", "centenas", "millares"];
+function pasosSuma(a, b) {
+  const A = String(a).split("").reverse().map(Number), B = String(b).split("").reverse().map(Number);
+  const n = Math.max(A.length, B.length), steps = []; let carry = 0;
+  for (let i = 0; i < n; i++) {
+    const x = A[i] || 0, y = B[i] || 0, s = x + y + carry, traia = carry ? ` + ${carry} que llevábamos` : "";
+    steps.push(s >= 10
+      ? { explica: `Sumamos las ${COLS[i]}: ${x} + ${y}${traia} = ${s}. Como pasa de 9, escribimos ${s % 10} y llevamos 1.`, escribe: `${COLS[i]}: ${x} + ${y}${carry ? ` + ${carry}` : ""} = ${s}` }
+      : { explica: `Sumamos las ${COLS[i]}: ${x} + ${y}${traia} = ${s}.`, escribe: `${COLS[i]}: ${x} + ${y}${carry ? ` + ${carry}` : ""} = ${s}` });
+    carry = s >= 10 ? 1 : 0;
+  }
+  if (carry) steps.push({ explica: "Nos llevábamos 1, que va al frente.", escribe: "llevamos 1" });
+  return { texto: `${a} + ${b}`, answer: a + b, steps };
+}
+function pasosResta(a, b) {
+  const A = String(a).split("").reverse().map(Number), B = String(b).split("").reverse().map(Number);
+  const steps = []; let borrow = 0;
+  for (let i = 0; i < A.length; i++) {
+    const x = A[i] - borrow, y = B[i] || 0;
+    if (x < y) { steps.push({ explica: `Restamos las ${COLS[i]}: ${x} - ${y} no se puede, así que pedimos prestada una unidad a la columna de la izquierda (vale 10): ${x + 10} - ${y} = ${x + 10 - y}.`, escribe: `${COLS[i]}: ${x + 10} - ${y} = ${x + 10 - y}` }); borrow = 1; }
+    else { steps.push({ explica: `Restamos las ${COLS[i]}: ${x} - ${y} = ${x - y}.`, escribe: `${COLS[i]}: ${x} - ${y} = ${x - y}` }); borrow = 0; }
+  }
+  return { texto: `${a} - ${b}`, answer: a - b, steps };
+}
+function pasosMult(a, b) {
+  const big = Math.max(a, b), small = Math.min(a, b), u = big % 10, t = big - u, steps = [];
+  if (big < 10) steps.push({ explica: `Multiplicar ${a} × ${b} es sumar el ${small} un total de ${big} veces. El resultado es ${a * b}.`, escribe: `${a} × ${b} = ${a * b}` });
+  else if (u === 0) steps.push({ explica: `${a} × ${b}: multiplicamos ${big / 10} × ${small} = ${(big / 10) * small} y añadimos un cero. Resultado ${a * b}.`, escribe: `${a} × ${b} = ${a * b}` });
+  else {
+    steps.push({ explica: `Descomponemos ${big} en ${t} + ${u} y multiplicamos cada parte por ${small}.`, escribe: `${a} × ${b} = (${t} + ${u}) × ${small}` });
+    steps.push({ explica: `${t} × ${small} = ${t * small} y ${u} × ${small} = ${u * small}. Sumamos: ${t * small} + ${u * small} = ${a * b}.`, escribe: `${t * small} + ${u * small} = ${a * b}` });
+  }
+  return { texto: `${a} × ${b}`, answer: a * b, steps };
+}
+function pasosDiv(a, b) {
+  const q = a / b;
+  return { texto: `${a} ÷ ${b}`, answer: q, steps: [
+    { explica: `Dividir ${a} ÷ ${b} es repartir ${a} en ${b} partes iguales. Buscamos el número que por ${b} da ${a}: como ${b} × ${q} = ${a}, cada parte es ${q}.`, escribe: `${a} ÷ ${b} = ${q}   (porque ${b} × ${q} = ${a})` },
+  ] };
+}
+// Detecta un CÁLCULO concreto ("24 + 17", "6 × 7", "52 - 27", "20 ÷ 4", "20 entre 4", "6 por 7"). Solo
+// números enteros; división exacta y resta no negativa (si no, → null y lo maneja Gemini). Las fracciones
+// ("5/8 + 2/8") y ecuaciones ("2x + 5 = 15") ya se resolvieron en ramas anteriores, así que aquí no llegan.
+function extraerOperacion(text) {
+  const s = String(text).replace(/\s+/g, " ").trim(); let m;
+  if (/÷/.test(s) && (m = s.match(/(\d+)\s*÷\s*(\d+)/))) { const a = +m[1], b = +m[2]; return (b && a % b === 0) ? { op: "division", a, b } : null; }
+  if ((m = s.match(/(\d+)\s+entre\s+(\d+)/i))) { const a = +m[1], b = +m[2]; return (b && a % b === 0) ? { op: "division", a, b } : null; }
+  if ((m = s.match(/(\d+)\s*(?:×|\*)\s*(\d+)/))) return { op: "multiplicacion", a: +m[1], b: +m[2] };
+  if ((m = s.match(/(\d+)\s+(?:x|por)\s+(\d+)/i))) return { op: "multiplicacion", a: +m[1], b: +m[2] };
+  if ((m = s.match(/(\d+)\s*-\s*(\d+)/))) { const a = +m[1], b = +m[2]; return a >= b ? { op: "resta", a, b } : null; }
+  if ((m = s.match(/(\d+)\s*\+\s*(\d+)/))) return { op: "suma", a: +m[1], b: +m[2] };
+  return null;
+}
+const ARIT = {
+  suma: { escena: "suma_resuelta", lista: SUMAS, verbo: "sumar", pasos: pasosSuma, concepto: [
+    "Sumar es JUNTAR cantidades para saber cuántas hay en total.", "Suma:  juntar cantidades → total",
+    "Cuando los números tienen varias cifras, sumamos columna por columna, de derecha a izquierda (primero las unidades, luego las decenas…). Si una columna pasa de 9, escribimos la cifra de las unidades y LLEVAMOS 1 a la siguiente. Veámoslo con un ejemplo."] },
+  resta: { escena: "resta_resuelta", lista: RESTAS, verbo: "restar", pasos: pasosResta, concepto: [
+    "Restar es QUITAR una cantidad de otra: cuánto queda al sacar una parte.", "Resta:  quitar una cantidad de otra",
+    "Restamos columna por columna, de derecha a izquierda. Si arriba hay menos que abajo, pedimos PRESTADA una unidad a la columna de la izquierda, que vale 10. Veámoslo con un ejemplo."] },
+  multiplicacion: { escena: "multiplicacion_resuelta", lista: MULTIS, verbo: "multiplicar", pasos: pasosMult, concepto: [
+    "Multiplicar es SUMAR el mismo número varias veces: una forma rápida de sumar repetido.", "Multiplicar:  sumar el mismo número varias veces",
+    "Para multiplicar por un número de dos cifras, lo descomponemos en decenas y unidades, multiplicamos por cada parte y sumamos. Veámoslo con un ejemplo."] },
+  division: { escena: "division_resuelta", lista: DIVIS, verbo: "dividir", pasos: pasosDiv, concepto: [
+    "Dividir es REPARTIR una cantidad en partes iguales, o ver cuántas veces cabe un número en otro.", "Dividir:  repartir en partes iguales",
+    "Dividir es la operación INVERSA de multiplicar: buscamos el número que, multiplicado por el divisor, da el total. Veámoslo con un ejemplo."] },
+};
+function aritmeticaLSG(opts, cfg) {
+  const { ejemplo, practica } = elegirBoton(cfg.lista, opts);
+  const E = cfg.pasos(...parseAB(ejemplo)), P = cfg.pasos(...parseAB(practica));
+  const dir = [{ tipo: "avatar", accion: "sonreir" }];
+  if (opts.concepto) {
+    dir.push({ tipo: "hablar", texto: cfg.concepto[0] });
+    dir.push({ tipo: "pizarra", accion: "escribir", contenido: cfg.concepto[1] });
+    dir.push({ tipo: "hablar", texto: cfg.concepto[2] });
+  }
+  dir.push(
+    { tipo: "hablar", texto: `Vamos a ${cfg.verbo} ${E.texto} paso a paso.` },
+    { tipo: "pizarra", accion: "escribir", contenido: E.texto },
+    { tipo: "esperar", segundos: 1 },
+  );
+  for (const s of E.steps) { dir.push({ tipo: "hablar", texto: s.explica }); dir.push({ tipo: "pizarra", accion: "escribir", contenido: s.escribe }); }
+  dir.push({ tipo: "hablar", texto: `Así, ${E.texto} = ${E.answer}. Ahora te toca a ti.` });
+  dir.push({ tipo: "pizarra", accion: "escribir", contenido: `${P.texto} = ?` });
+  dir.push({ tipo: "preguntar", texto: `¿Cuánto es ${P.texto}? Escribe solo el número.`, respuesta: String(P.answer), esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" });
+  return { escena: cfg.escena, intencion: opts.concepto ? "aprender" : "resolver", duracion_estimada: 60, _mock: true, directivas: dir };
+}
+export function sumaResueltaLSG(opts = {}) { return aritmeticaLSG(opts, ARIT.suma); }
+export function restaResueltaLSG(opts = {}) { return aritmeticaLSG(opts, ARIT.resta); }
+export function multiplicacionResueltaLSG(opts = {}) { return aritmeticaLSG(opts, ARIT.multiplicacion); }
+export function divisionResueltaLSG(opts = {}) { return aritmeticaLSG(opts, ARIT.division); }
+const GEN_ARIT = { suma: sumaResueltaLSG, resta: restaResueltaLSG, multiplicacion: multiplicacionResueltaLSG, division: divisionResueltaLSG };
+const SIGNO_ARIT = { suma: "+", resta: "-", multiplicacion: "×", division: "÷" };
 
 // ── 1) ECUACIÓN LINEAL: resuelve una ecuación paso a paso + práctica de otra distinta. ──
 // FÁCIL: un solo paso (coeficiente 1). NORMAL: coeficiente + término independiente (dos pasos).
@@ -1179,6 +1299,26 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   if (!noLineal && (instLin || /\becuaci[oó]n(?:es)?\b|\blineal(?:es)?\b|primer grado/.test(n))) {
     // "enséñame ecuaciones lineales" (sin una ecuación concreta) → enseñar el CONCEPTO primero.
     return commonRet("lineal", linealResueltaLSG({ evitar: previo, instancia: instLin, seguimiento: esSeg, nivel, concepto: !instLin && conceptoOn }));
+  }
+
+  // 5) ARITMÉTICA BÁSICA (suma, resta, multiplicación, división). Un CÁLCULO concreto ("24 + 17", "6 × 7",
+  //    "52 - 27", "20 ÷ 4", "20 entre 4", "6 por 7") o el tema genérico ("enséñame a sumar/restar/
+  //    multiplicar/dividir"). Es lo más elemental y el cliente lo pidió explícitamente: NO debe caer a
+  //    Gemini (que interpretaba "sumar" como "sumar fracciones"). Va DESPUÉS de fracciones/lineal para que
+  //    "5/8 + 2/8" y "2x + 5 = 15" no lleguen aquí. Guard: si es ALGEBRAICO (x, polinomio…) → no es
+  //    aritmética básica (lo maneja Gemini).
+  const opInst = extraerOperacion(base);
+  const algebraico = /[a-z]\s*[²³⁴⁵⁶⁷⁸⁹]|\bx\b|\^|polinom|monomi|[aá]lgebra|variable|ecuaci|deriv|factoriz|fracc/.test(n);
+  const opTema = algebraico ? null
+    : /\bsum(a|ar|amos|as|en|arle|ale)?\b|adici[oó]n|adicionar/.test(n) ? "suma"
+    : /\brest(a|ar|as|o|ame|amos|arle)?\b|sustrac|substrac/.test(n) ? "resta"
+    : /\bmultiplic|\btablas?\s+de\s+multiplicar\b/.test(n) ? "multiplicacion"
+    : /\bdivid|divisi[oó]n|\brepart/.test(n) ? "division"
+    : null;
+  const opActivo = (opInst && opInst.op) || opTema;
+  if (opActivo) {
+    const instancia = (!esSeg && opInst && opInst.op === opActivo) ? `${opInst.a} ${SIGNO_ARIT[opActivo]} ${opInst.b}` : null;
+    return commonRet(opActivo, GEN_ARIT[opActivo]({ evitar: previo, instancia, seguimiento: esSeg, nivel, concepto: !instancia && conceptoOn }));
   }
 
   // ── RED DE SEGURIDAD: los 4 temas núcleo NUNCA caen en Gemini por un seguimiento ──

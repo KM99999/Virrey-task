@@ -231,6 +231,37 @@ async function unitTests() {
     check(`concepto fracciones: enseña fracción EQUIVALENTE (2/4 = 1/2 / la mitad)`, /2\/4\s*=\s*1\/2|la mitad/.test(txt));
     check(`concepto fracciones: sigue con práctica de suma calificable`, !!fc && fc.nPreg === 1 && !!String(fc.q?.respuesta || "").trim());
   }
+  // ── ARITMÉTICA BÁSICA (suma, resta, multiplicación, división) — pedida por el cliente. Mismo patrón que
+  //    los otros 4 temas: determinista, concepto/concreto, práctica CALIFICABLE y CORRECTA. Antes "enséñame
+  //    a sumar" caía a Gemini y enseñaba FRACCIONES (queja del cliente).
+  {
+    const evalOp = (t) => { const m = String(t).match(/(\d+)\s*([+\-×÷])\s*(\d+)/); if (!m) return null; const a = +m[1], b = +m[3]; return { "+": a + b, "-": a - b, "×": a * b, "÷": a / b }[m[2]]; };
+    const texto = (r) => (r?.flat || []).map((d) => `${d.texto || ""} ${d.contenido || ""}`).join(" ");
+    for (const [q, tema] of [["Por favor, enséñame a sumar.", "suma"], ["enséñame a restar", "resta"], ["enséñame a multiplicar", "multiplicacion"], ["enséñame a dividir", "division"]]) {
+      const r = correrBoton({ query: q });
+      check(`aritmética [${q}]: determinista, tema ${tema}`, !!r && r.tema === tema, r ? r.tema : "null (Gemini)");
+      check(`aritmética [${q}]: intención aprender (concepto primero)`, !!r && r.intencion === "aprender", r ? r.intencion : "");
+      if (r) { const real = evalOp(r.q.texto); check(`aritmética [${q}]: práctica CORRECTA (${real})`, real != null && checkAnswer(r.q.respuesta, String(real)).correct, `preg=${r.q.texto} resp=${r.q.respuesta}`); }
+    }
+    for (const [q, tema, esp] of [["¿cuánto es 24 + 17?", "suma", "41"], ["52 - 27", "resta", "25"], ["6 × 7", "multiplicacion", "42"], ["20 ÷ 4", "division", "5"], ["6 por 7", "multiplicacion", "42"], ["84 entre 4", "division", "21"]]) {
+      const r = correrBoton({ query: q });
+      const t = texto(r).replace(/\s+/g, " ");
+      check(`aritmética concreta [${q}]: tema ${tema} y da el resultado ${esp}`, !!r && r.tema === tema && new RegExp(`=\\s*${esp}\\b`).test(t), r ? r.tema : "null");
+      if (r) { const real = evalOp(r.q.texto); check(`aritmética concreta [${q}]: práctica CORRECTA`, real != null && checkAnswer(r.q.respuesta, String(real)).correct, `preg=${r.q.texto} resp=${r.q.respuesta}`); }
+    }
+    check(`"enséñame a sumar" NO enseña fracciones (bug del cliente)`, !/fracc|numerador|denominador/i.test(texto(correrBoton({ query: "enséñame a sumar" }))));
+    check(`"5/8 + 2/8" sigue siendo FRACCIONES (no aritmética)`, correrBoton({ query: "5/8 + 2/8" })?.tema === "fraccion");
+    check(`"2x + 5 = 15" sigue siendo LINEAL (no aritmética)`, correrBoton({ query: "2x + 5 = 15" })?.tema === "lineal");
+    // rotación en "otro ejemplo" (sesión de suma): la práctica no debe repetirse dos veces seguidas
+    let prevPreg = "", rep = 0, prev = "";
+    const s0 = correrBoton({ query: "enséñame a sumar" }); prev = s0.resumen; prevPreg = s0.q.texto;
+    for (let i = 0; i < 4; i++) {
+      const r = correrBoton({ query: "otro ejemplo", seguimiento: "continuacion", contexto: "enséñame a sumar", previo: prev });
+      if (r && r.q.texto === prevPreg) rep++;
+      prevPreg = r ? r.q.texto : prevPreg; prev = r ? r.resumen : prev;
+    }
+    check(`aritmética "otro ejemplo": rota sin repetir consecutivo`, rep === 0, `rep=${rep}`);
+  }
   // ── ROTACIÓN de la lección APLICADA (vida real): pedir "otro ejemplo" VARIAS veces debe RECORRER TODOS
   //    los escenarios con lecciones DISTINTAS y sin repetir dos veces seguidas. Antes idxEscenario devolvía
   //    el PRIMER escenario no-mostrado → ciclo de 2 (p.ej. pizza→dinero→pizza) que nunca llegaba al tercero

@@ -23,7 +23,7 @@ const TIPOS_VALIDOS = new Set([
 // CONFIABLES para SALTARSE los "fixers" heurísticos de práctica (fixPracticeAnswer, enforceSingleQuestion),
 // que se diseñaron para reparar la salida imperfecta de Gemini. Al no aplicarlos, cada botón queda
 // AISLADO: cambiar la lógica de reparación de un tema no puede alterar los otros tres.
-const ESCENAS_CONFIABLES = new Set(["lineal_resuelta", "derivada_resuelta", "factorizacion_resuelta", "fraccion_resuelta"]);
+const ESCENAS_CONFIABLES = new Set(["lineal_resuelta", "derivada_resuelta", "factorizacion_resuelta", "fraccion_resuelta", "suma_resuelta", "resta_resuelta", "multiplicacion_resuelta", "division_resuelta"]);
 
 // Etiquetas de control válidas para si_correcto / si_incorrecto.
 const CONTROL_LABELS = new Set(["continuar", "felicitar", "mostrar_otro_ejemplo"]);
