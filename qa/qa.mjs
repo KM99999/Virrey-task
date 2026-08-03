@@ -264,6 +264,16 @@ async function unitTests() {
         !!r && r.tema === tema && !/undefined/i.test(texto(r)) && new RegExp(`=\\s*${esp}\\b`).test(texto(r).replace(/\s+/g, " ")),
         r ? (/undefined/i.test(texto(r)) ? "tiene UNDEFINED" : r.tema) : "null");
     }
+    // La PRÁCTICA debe tener el MISMO número de dígitos que el EJEMPLO que escribió el alumno (cliente:
+    // ejemplo de 7 dígitos y práctica "47 + 25"). Y ser válida (resta no negativa, división exacta).
+    const perfil = (t) => { const m = String(t).match(/(\d+)\s*[+\-×÷]\s*(\d+)/); return m ? `${m[1].length}x${m[2].length}` : "?"; };
+    for (const q of ["2876390 + 2817200", "87654321 + 12345678", "99999999 - 11111111", "12000000 ÷ 8", "12345678 ÷ 6", "24 + 17", "144 ÷ 12"]) {
+      const r = correrBoton({ query: q });
+      if (!r) { check(`práctica mismo tamaño [${q}]: determinista`, false, "null"); continue; }
+      const pr = (r.q.texto.match(/(\d+\s*[+\-×÷]\s*\d+)/) || [])[1] || "";
+      check(`práctica mismo tamaño [${q}]: práctica ${perfil(pr)} = ejemplo ${perfil(q)}`, perfil(pr) === perfil(q), `preg=${pr}`);
+      check(`práctica mismo tamaño [${q}]: práctica CORRECTA`, !!pr && checkAnswer(r.q.respuesta, String(evalOp(pr))).correct, `resp=${r.q.respuesta}`);
+    }
     // BUG del cliente: "Resuelve 5 / 5" (con "/") caía a Gemini y no presentaba ejercicio final de práctica.
     // La división con "/" exacta debe ir a la lección determinista y CERRAR con "Ahora te toca a ti" + práctica.
     {

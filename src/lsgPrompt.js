@@ -757,8 +757,52 @@ const ARIT = {
     "Dividir es REPARTIR una cantidad en partes iguales, o ver cuántas veces cabe un número en otro.", "Dividir:  repartir en partes iguales",
     "Dividir es la operación INVERSA de multiplicar: buscamos el número que, multiplicado por el divisor, da el total. Veámoslo con un ejemplo."] },
 };
+// Genera una PRÁCTICA con el MISMO número de dígitos que el ejemplo (a, b) que escribió el alumno, para
+// cada operación. Antes, al escribir un cálculo grande ("2876390 + 2817200"), la práctica salía de los
+// presets pequeños ("47 + 25"), inconsistente con el ejemplo. (Pedido del cliente: misma cantidad de
+// dígitos.) Determinista (misma consulta → misma práctica) vía Math.imul. Resta NO negativa; división EXACTA.
+function practicaMismoTamano(op, a, b) {
+  const lo = (L) => (L <= 1 ? 1 : Math.pow(10, L - 1));
+  const hi = (L) => Math.pow(10, L) - 1;
+  const La = String(Math.abs(a)).length, Lb = String(Math.abs(b)).length;
+  let s = (Math.imul(a % 1000000, 131) + Math.imul(b % 1000000, 17) + 7) >>> 0;
+  const rnd = (L, evitar) => {
+    const l = lo(L), span = hi(L) - l + 1;
+    s = (Math.imul(s, 1103515245) + 12345) >>> 0;
+    let v = l + (s % span);
+    if (v === evitar) v = l + ((s + 1) % span);
+    return v;
+  };
+  if (op === "suma") return `${rnd(La, a)} + ${rnd(Lb, b)}`;
+  if (op === "resta") {
+    let x = rnd(La, a), y = rnd(Lb, b);
+    if (x < y) { const t = x; x = y; y = t; }
+    if (x === y) y = Math.max(lo(Lb), y - 1);
+    return `${x} - ${y}`;
+  }
+  if (op === "multiplicacion") return `${rnd(La, a)} × ${rnd(Lb, b)}`;
+  if (op === "division") {
+    // dividendo de La dígitos, divisor de Lb dígitos, división EXACTA: a' = b' × q'. Si el divisor no deja
+    // sitio para un cociente ≥ 2 (La ≤ Lb), se acorta el divisor una cifra.
+    const Lb2 = Lb >= La ? Math.max(1, La - 1) : Lb;
+    const b2 = rnd(Lb2, b) || 2;
+    const qMin = Math.max(2, Math.ceil(lo(La) / b2));
+    const qMax = Math.max(qMin, Math.floor(hi(La) / b2));
+    s = (Math.imul(s, 1103515245) + 12345) >>> 0;
+    const q = qMin + (s % (qMax - qMin + 1));
+    return `${b2 * q} ÷ ${b2}`;
+  }
+  return null;
+}
 function aritmeticaLSG(opts, cfg) {
-  const { ejemplo, practica } = elegirBoton(cfg.lista, opts);
+  let { ejemplo, practica } = elegirBoton(cfg.lista, opts);
+  // Si el alumno ESCRIBIÓ el cálculo (instancia), la práctica debe tener el MISMO número de dígitos que su
+  // ejemplo (no un preset chico). Cliente: ejemplo de 7 dígitos y práctica "47 + 25".
+  if (opts.instancia) {
+    const [ea, eb] = parseAB(ejemplo);
+    const gen = practicaMismoTamano(cfg.escena.replace(/_resuelta$/, ""), ea, eb);
+    if (gen) practica = gen;
+  }
   const E = cfg.pasos(...parseAB(ejemplo)), P = cfg.pasos(...parseAB(practica));
   if (opts.practica) return practicaLSG(cfg.escena, {
     recordatorio: `Recuerda: para ${cfg.verbo}, ${cfg.rec}`,
