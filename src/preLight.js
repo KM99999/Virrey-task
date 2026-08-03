@@ -1151,7 +1151,16 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
   // debe convertir la práctica en una ECUACIÓN LINEAL, aunque aparezca una lineal INCIDENTAL al hallar
   // raíces ("x + 3 = 0"): sería off-topic (una lección de factorizar x²-9 no debe pedir "resuelve x+4=10").
   // Las derivadas tienen su propia rama (step 0), así que este gate solo desactiva la vía LINEAL.
-  const temaNoLineal = flat.some((d) => /factoriz|diferencia de cuadrados|binomi|cuadr[aá]tic|[²³⁴⁵⁶⁷⁸⁹]|\)\s*\(/i.test(`${d.texto || ""} ${d.contenido || ""}`));
+  // NO-LINEAL = cualquier tema MÁS ALLÁ de una ecuación lineal de una variable: factorización/cuadráticas,
+  // pero también SISTEMAS (dos variables), logaritmos, integrales, trigonometría, matrices, exponenciales.
+  // En esos temas NO se debe fabricar/calificar una práctica LINEAL a partir de una ecuación lineal
+  // INCIDENTAL del desarrollo (p.ej. "2x = 4" al resolver un sistema) — era el bug del "2x = 6" pegado a un
+  // sistema/logaritmo/integral. `log[₀-₉(_]` capta "log₂("; el tablero con dos variables capta "x + y = 3".
+  const _txtTodo = flat.map((d) => `${d.texto || ""} ${d.contenido || ""}`).join(" ");
+  const _boardTodo = flat.filter((d) => d.tipo === "pizarra").map((d) => String(d.contenido || "")).join(" ");
+  const temaNoLineal =
+    /factoriz|diferencia de cuadrados|binomi|cuadr[aá]tic|[²³⁴⁵⁶⁷⁸⁹]|\)\s*\(|\bsistema\b|matriz|matricial|\bintegral|∫|logaritm|log\s*[₀-₉(_]|trigonometr|\bseno\b|\bcoseno\b|\btangente\b|exponencial/i.test(_txtTodo)
+    || /[a-z]\s*[+\-]\s*[a-z]\s*=/i.test(_boardTodo);
   // La ecuación ORIGINAL del ejercicio (la primera pizarra que es una ecuación LINEAL real, no la solución).
   const ecOriginal = temaNoLineal ? undefined
     : flat.map((d) => d.contenido).find((c) => c && solveLinearFromText(c) !== null && !esResuelta(c));
@@ -1265,13 +1274,17 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
   if (temaNoLineal && !esLeccionDerivadas) {
     const fac = computeFactorization(q.texto) || (board ? computeFactorization(board) : null);
     if (fac) { setResp(fac); return; }
-    // La práctica NO es factorizable. Si el ENUNCIADO DE LA PREGUNTA es una ecuación LINEAL OFF-TOPIC
-    // (p.ej. cerrar una lección de CUADRÁTICAS con "¿Cuánto es 3x + 5 = 14?"), NO la mostramos: sería un
-    // ejercicio de otro tema. Se reemplaza por una pregunta de comprensión. Una práctica ON-TOPIC
-    // (cuadrática/factorización, con x²) NO es lineal → se conserva (solo se le quita la nota; no se puede
-    // calificar deterministamente). Se mira SOLO el texto de la pregunta (el board suele ser la SOLUCIÓN
-    // "x = -2, x = -5", que solveLinearFromText leería como lineal por error).
-    if (solveLinearFromText(q.texto) !== null) {
+    // La práctica NO es factorizable y el tema NO es lineal. No podemos calificarla de forma FIABLE, así que
+    // NUNCA le ponemos un número de los pasos 1-3 (marcaría mal una respuesta correcta). Dos casos:
+    //  · La pregunta es ON-TOPIC (tiene una potencia x²/xⁿ o un producto de binomios, p.ej. una cuadrática
+    //    "x²+3x+2=0"): se CONSERVA como ejercicio (solo sin nota) — es del tema, aunque no sea calificable.
+    //  · La pregunta NO es del tema (una LINEAL off-topic "3x+5=14", o un cálculo que no sabemos verificar
+    //    como "log₂(16)" o texto basura "área de una nube"): se vuelve de COMPRENSIÓN neutral, para no dejar
+    //    un ejercicio incoherente/sin respuesta. (Quejas del cliente: "2x=6" pegado a un sistema; "log₂(16)"
+    //    sin respuesta; "Área de una nube = ? → 5".)
+    const enTema = /[a-z]\s*(?:\^\s*[2-9]|[²³⁴⁵⁶⁷⁸⁹])|\)\s*\(/i.test(q.texto);
+    const yaComprension = /entendiste|comprendiste|te gustar|quieres practicar|alguna duda|qued[oó]\s+claro/i.test(q.texto);
+    if (!enTema && !yaComprension) {
       q.texto = "¿Entendiste la explicación?";
       const pp = pasos.find((x) => x.tipo === "preguntar"); if (pp) pp.texto = q.texto;
     }

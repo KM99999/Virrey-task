@@ -750,6 +750,29 @@ async function unitTests() {
     { tipo: "preguntar", texto: "¿Cuál es la solución de x² + 3x + 2 = 0?" }] }, "resolver");
   const qqq = quadQuad.pasos.find((p) => p.tipo === "preguntar");
   check("cuadrática: práctica cuadrática on-topic se conserva (no se reemplaza)", /x²|x\^2/.test(qqq.texto));
+  // ── RUTA GEMINI en TEMAS FUERA DEL MOTOR (sistemas, logaritmos, integrales): PRE Light no puede verificar
+  //    la matemática, así que NO debe (a) pegar una práctica LINEAL incidental ("2x = 6" en un sistema),
+  //    ni (b) dejar un EJERCICIO sin respuesta calificable ("¿Cuánto es log₂(16)?"), ni (c) texto basura
+  //    ("Área de una nube → 5"). En todos esos casos cierra con una pregunta de COMPRENSIÓN neutral.
+  //    (Quejas reiteradas del cliente: lecciones incoherentes en la ruta de IA.)
+  const noQ = (p) => !(p.respuesta && String(p.respuesta).trim());
+  const sist = processLSG({ escena: "resolver_sistema", intencion: "resolver", directivas: [
+    { tipo: "hablar", texto: "Resolvemos el sistema x + y = 3 y x - y = 1." },
+    { tipo: "pizarra", accion: "escribir", contenido: "x + y = 3" }, { tipo: "pizarra", accion: "escribir", contenido: "x - y = 1" },
+    { tipo: "pizarra", accion: "escribir", contenido: "2x = 4" }, { tipo: "pizarra", accion: "escribir", contenido: "x = 2" },
+    { tipo: "preguntar", texto: "Ahora resuélvelo tú: x = 2. ¿Cuánto vale x?" }] }, "resolver");
+  const sq = sist.pasos.find((p) => p.tipo === "preguntar");
+  check("sistema (Gemini): NO pega práctica lineal '2x = 6' ni ejercicio, cierra en comprensión", noQ(sq) && !/2x\s*=\s*6/.test(sq.texto) && /entend/i.test(sq.texto) && !sist.pasos.some((p) => p.tipo === "pizarra" && /2x\s*=\s*6/.test(p.contenido || "")));
+  const logs = processLSG({ escena: "aprender_logaritmos", intencion: "aprender", directivas: [
+    { tipo: "hablar", texto: "El logaritmo es el exponente." }, { tipo: "pizarra", accion: "escribir", contenido: "log₂(8) = 3" },
+    { tipo: "preguntar", texto: "¿Cuánto es log₂(16)?" }] }, "aprender");
+  const lq = logs.pasos.find((p) => p.tipo === "preguntar");
+  check("logaritmos (Gemini): NO deja ejercicio SIN respuesta, cierra en comprensión", noQ(lq) && /entend/i.test(lq.texto));
+  const integ = processLSG({ escena: "aprender_integral", intencion: "aprender", directivas: [
+    { tipo: "hablar", texto: "Una integral es una suma. Área bajo y=2 entre x=1 y x=3 es 4." }, { tipo: "pizarra", accion: "escribir", contenido: "∫ 2 dx = 4" },
+    { tipo: "preguntar", texto: "Área de una nube = ?", respuesta: "5" }] }, "aprender");
+  const iq = integ.pasos.find((p) => p.tipo === "preguntar");
+  check("integral (Gemini): descarta la respuesta basura, cierra en comprensión", noQ(iq) && /entend/i.test(iq.texto));
   check("hint: fracciones → denominador", /denominador/.test(buildHint("¿2/5 + 1/5?", "2/5 + 1/5", 1)));
   check("hint: problema verbal → fórmula", /f[oó]rmula|operaci/.test(buildHint("¿velocidad?", "Distancia = 200, Tiempo = 25", 1)));
   // Estructuralmente NO puede revelar la respuesta: buildHint no recibe el valor esperado y su
