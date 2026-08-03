@@ -325,6 +325,38 @@ async function unitTests() {
       if (r) check(`derivada 'diferente a la rapidez' ["${q}"]: NO repite el ejemplo del COCHE/velocidad`, !/coche/i.test(escenarioDe(r)), escenarioDe(r).slice(0, 40));
     }
   }
+  // ── PRACTICAR (queja del cliente: "le pido ejercicios para yo resolverlos y me sigue enseñando / no
+  //    obedece"). Cuando el alumno pide EJERCICIOS para resolverlos ÉL: intención "practicar", NO se
+  //    resuelve paso a paso, y se entrega un reto calificable. Los CONTROLES (concepto/resolver/"un
+  //    ejercicio" singular) NO deben cambiar. La dificultad por texto ("más complejos") sube el nivel.
+  {
+    const flatHablar = (r) => r.flat.filter((d) => d.tipo === "hablar").map((d) => d.texto).join(" ");
+    const esPracticar = (r) => !!r && /a practicar.*resuelvas t[uú]/i.test(flatHablar(r));
+    const resuelvePaso = (r) => /vamos a (resolver|dividir|sumar|restar|multiplicar|derivar|factorizar)|paso a paso/i.test(flatHablar(r));
+    const PRAC = [
+      ["division", "dame ejercicios de división para que yo los resuelva", {}],
+      ["division", "enséñame ejercicios más complejos, como dividir números de 8 dígitos", {}],
+      ["fraccion", "quiero practicar fracciones", {}],
+      ["derivada", "dame ejercicios de derivadas para practicar", {}],
+      ["factorizacion", "ponme ejercicios de factorización para resolverlos yo", {}],
+      ["lineal", "dame ejemplos más complejos para yo resolverlos", { seguimiento: "practicar", contexto: "6x + 5x - 8 = 25", currentTopic: "ecuaciones lineales" }],
+    ];
+    for (const [tema, q, ex] of PRAC) {
+      const r = correrBoton({ query: q, ...ex });
+      check(`practicar [${q}]: despacha al tema ${tema}`, !!r && r.tema === tema, r ? r.tema : "null");
+      if (!r) continue;
+      check(`practicar [${q}]: intención = practicar`, r.intencion === "practicar", r.intencion);
+      check(`practicar [${q}]: NO resuelve paso a paso (da ejercicios)`, esPracticar(r) && !resuelvePaso(r));
+      check(`practicar [${q}]: entrega un reto CALIFICABLE`, r.nPreg === 1 && !!r.q && checkAnswer(r.q.respuesta, r.q.respuesta).correct === true, `nPreg=${r.nPreg} resp=${r.q?.respuesta}`);
+    }
+    // Dificultad por TEXTO: "más complejos" → nivel difícil (ecuación con términos que agrupar).
+    const rDif = correrBoton({ query: "dame ejercicios más complejos para resolverlos yo", seguimiento: "practicar", contexto: "ecuaciones lineales", currentTopic: "ecuaciones lineales" });
+    check(`practicar 'más complejos': usa nivel difícil`, !!rDif && /\dx.*[+\-].*\dx/.test(JSON.stringify(rDif.pizarras)), rDif ? JSON.stringify(rDif.pizarras).slice(0, 60) : "null");
+    // CONTROLES que NO deben cambiar:
+    check(`control: "enséñame a dividir" sigue siendo CONCEPTO (aprender)`, correrBoton({ query: "enséñame a dividir" })?.intencion === "aprender");
+    check(`control: "resuelve 20 ÷ 4" sigue siendo RESOLVER`, correrBoton({ query: "resuelve 20 ÷ 4" })?.intencion === "resolver");
+    check(`control: "dame un ejercicio de fracciones" (singular) NO es practicar`, correrBoton({ query: "dame un ejercicio de fracciones" })?.intencion !== "practicar");
+  }
   // ── RECUPERACIÓN DE TEMA desde el HISTORIAL: "otro ejemplo" SIN tema activo (contexto/currentTopic/
   //    seguimiento vacíos) pero con el tema en el HISTORIAL de conversación debe seguir siendo DETERMINISTA
   //    (reconstruye el tema del historial), no caer a Gemini. Caso real: el alumno recarga la página (se

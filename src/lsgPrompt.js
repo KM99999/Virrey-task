@@ -524,6 +524,12 @@ export function fraccionResueltaLSG(opts) {
   const A = dificil ? distintoDen(eA) : mismoDen(eA);
   const B = dificil ? distintoDen(eB) : mismoDen(eB);
 
+  if (o.practica) return practicaLSG("fraccion_resuelta", {
+    recordatorio: dificil
+      ? "Recuerda: si los denominadores son DISTINTOS, primero iguálalos (busca el mínimo común denominador), convierte cada fracción y luego suma los numeradores; al final, simplifica."
+      : "Recuerda: con el MISMO denominador, suma los numeradores y deja el denominador igual; luego simplifica si se puede.",
+    reto1: A.texto, preg: `¿Cuánto es ${A.texto}? Escríbelo en su forma más simple.`, resp: A.final, reto2: B.texto,
+  });
   const dir = [{ tipo: "avatar", accion: "sonreir" }];
   // ENSEÑAR el tema ("enséñame fracciones"): primero el CONCEPTO (qué es una fracción) y la REGLA,
   // igual que en los otros temas, para no saltar directo al ejercicio (paridad con lineal/derivadas/factoriz.).
@@ -631,6 +637,25 @@ function elegirBoton(listas, { evitar, instancia, seguimiento, nivel } = {}) {
   return rotarBoton(lista, evitar);
 }
 
+// ── PRACTICAR: el alumno pide EJERCICIOS para resolverlos ÉL MISMO (no que se los resuelvan ni que le
+// re-expliquen el concepto). Queja del cliente: "pido ejercicios para yo resolverlos y me sigue enseñando".
+// Presenta 2 retos SIN resolverlos, con un breve recordatorio del método, y CALIFICA el primero (el
+// segundo queda como reto extra). Si el alumno se traba, puede pedir "resuélvelo" y pasa a modo resolver.
+// Cada generador núcleo delega aquí cuando opts.practica es true (misma "escena confiable" → PRE Light la
+// respeta). La intención resultante es "practicar" (una de las 4 del acuerdo), no "resolver".
+function practicaLSG(escena, { recordatorio, reto1, preg: pregTxt, resp, reto2 }) {
+  const dir = [
+    { tipo: "avatar", accion: "sonreir" },
+    { tipo: "hablar", texto: "¡A practicar! Estos ejercicios son para que los resuelvas TÚ. Tómate tu tiempo y escribe tu respuesta abajo; si te trabas, dime «resuélvelo» y lo hacemos juntos." },
+  ];
+  if (recordatorio) dir.push({ tipo: "hablar", texto: recordatorio });
+  dir.push({ tipo: "pizarra", accion: "escribir", contenido: `Ejercicio 1:  ${reto1}` });
+  if (reto2) dir.push({ tipo: "pizarra", accion: "escribir", contenido: `Ejercicio 2 (extra):  ${reto2}` });
+  dir.push({ tipo: "hablar", texto: "Empieza por el Ejercicio 1 y escribe tu respuesta." });
+  dir.push({ tipo: "preguntar", texto: pregTxt, respuesta: String(resp), esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" });
+  return { escena, intencion: "practicar", duracion_estimada: 45, _mock: true, directivas: dir };
+}
+
 // ════════ ARITMÉTICA BÁSICA: suma, resta, multiplicación, división (pedida por el cliente) ════════
 // Mismo patrón EXACTO que los otros 4 temas: CONCEPTO primero (qué significa la operación) + ejemplo
 // resuelto paso a paso + PRÁCTICA calificable, con niveles fácil/normal/difícil y rotación en "otro
@@ -711,22 +736,30 @@ function extraerOperacion(text) {
   return null;
 }
 const ARIT = {
-  suma: { escena: "suma_resuelta", lista: SUMAS, verbo: "sumar", pasos: pasosSuma, concepto: [
+  suma: { escena: "suma_resuelta", lista: SUMAS, verbo: "sumar", pasos: pasosSuma,
+    rec: "suma columna por columna de derecha a izquierda; si una columna pasa de 9, escribes las unidades y llevas 1.", concepto: [
     "Sumar es JUNTAR cantidades para saber cuántas hay en total.", "Suma:  juntar cantidades → total",
     "Cuando los números tienen varias cifras, sumamos columna por columna, de derecha a izquierda (primero las unidades, luego las decenas…). Si una columna pasa de 9, escribimos la cifra de las unidades y LLEVAMOS 1 a la siguiente. Veámoslo con un ejemplo."] },
-  resta: { escena: "resta_resuelta", lista: RESTAS, verbo: "restar", pasos: pasosResta, concepto: [
+  resta: { escena: "resta_resuelta", lista: RESTAS, verbo: "restar", pasos: pasosResta,
+    rec: "resta columna por columna de derecha a izquierda; si arriba hay menos que abajo, pides prestada una unidad (vale 10) a la columna de la izquierda.", concepto: [
     "Restar es QUITAR una cantidad de otra: cuánto queda al sacar una parte.", "Resta:  quitar una cantidad de otra",
     "Restamos columna por columna, de derecha a izquierda. Si arriba hay menos que abajo, pedimos PRESTADA una unidad a la columna de la izquierda, que vale 10. Veámoslo con un ejemplo."] },
-  multiplicacion: { escena: "multiplicacion_resuelta", lista: MULTIS, verbo: "multiplicar", pasos: pasosMult, concepto: [
+  multiplicacion: { escena: "multiplicacion_resuelta", lista: MULTIS, verbo: "multiplicar", pasos: pasosMult,
+    rec: "descompón el número de dos cifras en decenas y unidades, multiplica cada parte y suma los resultados.", concepto: [
     "Multiplicar es SUMAR el mismo número varias veces: una forma rápida de sumar repetido.", "Multiplicar:  sumar el mismo número varias veces",
     "Para multiplicar por un número de dos cifras, lo descomponemos en decenas y unidades, multiplicamos por cada parte y sumamos. Veámoslo con un ejemplo."] },
-  division: { escena: "division_resuelta", lista: DIVIS, verbo: "dividir", pasos: pasosDiv, concepto: [
+  division: { escena: "division_resuelta", lista: DIVIS, verbo: "dividir", pasos: pasosDiv,
+    rec: "busca el número que, multiplicado por el divisor, da el total (la división es la inversa de multiplicar).", concepto: [
     "Dividir es REPARTIR una cantidad en partes iguales, o ver cuántas veces cabe un número en otro.", "Dividir:  repartir en partes iguales",
     "Dividir es la operación INVERSA de multiplicar: buscamos el número que, multiplicado por el divisor, da el total. Veámoslo con un ejemplo."] },
 };
 function aritmeticaLSG(opts, cfg) {
   const { ejemplo, practica } = elegirBoton(cfg.lista, opts);
   const E = cfg.pasos(...parseAB(ejemplo)), P = cfg.pasos(...parseAB(practica));
+  if (opts.practica) return practicaLSG(cfg.escena, {
+    recordatorio: `Recuerda: para ${cfg.verbo}, ${cfg.rec}`,
+    reto1: E.texto, preg: `¿Cuánto es ${E.texto}? Escribe solo el número.`, resp: E.answer, reto2: P.texto,
+  });
   const dir = [{ tipo: "avatar", accion: "sonreir" }];
   if (opts.concepto) {
     dir.push({ tipo: "hablar", texto: cfg.concepto[0] });
@@ -764,6 +797,10 @@ export function linealResueltaLSG(opts = {}) {
   const lista = listaNivel(LINEALES, opts.nivel);
   const sol = solveLinearSteps(ejemplo) || solveLinearSteps(lista[0]);
   const solP = solveLinearSteps(practica) || solveLinearSteps(lista[1]);
+  if (opts.practica) return practicaLSG("lineal_resuelta", {
+    recordatorio: "Recuerda: para hallar la incógnita, despéjala pasando los números al otro lado con la operación inversa (lo que suma, resta; lo que multiplica, divide), hasta dejar la x sola.",
+    reto1: sol.original, preg: `¿Cuánto vale ${sol.varName} en ${sol.original}? Escribe solo el número.`, resp: sol.answer, reto2: solP.original,
+  });
   const dir = [{ tipo: "avatar", accion: "sonreir" }];
   // ENSEÑAR el tema ("enséñame ecuaciones lineales"): primero el CONCEPTO y la REGLA, no saltar directo
   // a resolver un ejercicio (queja del cliente: "pido que me enseñe y de frente va a los ejercicios").
@@ -807,6 +844,10 @@ export function derivadaResueltaLSG(opts = {}) {
   const { ejemplo, practica } = elegirBoton(DERIVADAS, opts);
   const derE = computeDerivative("derivada de " + ejemplo) || "0";
   const derP = computeDerivative("derivada de " + practica) || "0";
+  if (opts.practica) return practicaLSG("derivada_resuelta", {
+    recordatorio: "Recuerda la regla de la potencia: baja el exponente multiplicando delante y réstale 1 (la derivada de xⁿ es n·xⁿ⁻¹). En un polinomio, deriva término a término.",
+    reto1: ejemplo, preg: `¿Cuál es la derivada de ${ejemplo}?`, resp: derE, reto2: practica,
+  });
   const pm = partesMonomio(ejemplo);
   // Un POLINOMIO (varios términos) no tiene un único exponente que "bajar": se deriva TÉRMINO A TÉRMINO.
   // Sin esta rama, un ejemplo difícil ("3x⁴ - 2x²") se explicaba como si fuera una recta (texto sin sentido).
@@ -952,6 +993,10 @@ export function factorizacionResueltaLSG(opts = {}) {
   }
   const facE = computeFactorization(ejemplo);
   const facP = computeFactorization(practica);
+  if (opts.practica) return practicaLSG("factorizacion_resuelta", {
+    recordatorio: "Recuerda la diferencia de cuadrados: a² - b² = (a - b)(a + b). Identifica a y b (las raíces de cada cuadrado) y aplica la regla.",
+    reto1: ejemplo, preg: `¿Cómo se factoriza ${ejemplo}? Escríbelo como producto de dos paréntesis.`, resp: facE, reto2: practica,
+  });
   const dir = [{ tipo: "avatar", accion: "sonreir" }];
   // ENSEÑAR el tema ("enséñame factorización"): primero el CONCEPTO (qué es factorizar) y la REGLA, y
   // LUEGO el ejemplo — no saltar directo a resolver (misma queja del cliente que en derivadas).
@@ -1169,6 +1214,8 @@ function temaNucleo(text) {
   return null;
 }
 const GEN_APLICADA = { derivada: derivadaAplicadaLSG, lineal: linealAplicadaLSG, fraccion: fraccionAplicadaLSG, factorizacion: factorizacionAplicadaLSG };
+// Generadores RESUELTOS (paso a paso) por tema núcleo; también sirven en modo PRACTICAR (opts.practica).
+const GEN_RESUELTA = { derivada: derivadaResueltaLSG, lineal: linealResueltaLSG, fraccion: fraccionResueltaLSG, factorizacion: factorizacionResueltaLSG };
 
 export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", currentTopic = "", previo = "", historial = [] } = {}) {
   // RECUPERACIÓN DE TEMA desde el HISTORIAL. Si la consulta es un "otro ejemplo" / "otra vez" / "resuélveme
@@ -1188,7 +1235,14 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   // "más fácil"/"más difícil" son seguimientos de NIVEL del tema activo: se mantiene el tema y se cambia
   // la lista de ejercicios a la del nivel pedido (antes caían a Gemini y devolvían algo trivial).
   const SEG_NIVEL = { mas_facil: "facil", mas_dificil: "dificil" };
-  const nivel = SEG_NIVEL[seguimiento] || "normal";
+  // NIVEL también por TEXTO libre: "dame ejercicios MÁS COMPLEJOS", "algo más difícil", "números de 8
+  // dígitos", "más avanzados" → nivel difícil; "más fácil/sencillo/básico" → fácil. (Queja del cliente:
+  // pedía ejercicios "más complejos, como dividir números de 8 dígitos" y recibía uno trivial.)
+  const nqNivel = normBoton(query);
+  const nivel = SEG_NIVEL[seguimiento]
+    || (/\bmas\s+f[aá]cil|sencill|b[aá]sic|\bsimple/.test(nqNivel) ? "facil"
+      : /\bmas\s+(dif[ií]cil|complej|complicad|avanzad|dur)|\bcomplej|\bavanzad|\bdif[ií]cil|\d+\s*d[ií]gitos|numeros?\s+grandes|\bmas\s+grandes/.test(nqNivel) ? "dificil"
+      : "normal");
   const esSeg = SEG_OTRO.has(seguimiento) || !!SEG_NIVEL[seguimiento];
   // En un seguimiento el tema es el ACTIVO (contexto); en una pulsación nueva, la propia consulta.
   const base = (esSeg && (contexto || currentTopic)) ? (contexto || currentTopic) : query;
@@ -1206,8 +1260,23 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   // de una sesión de CONCEPTO), quiere el EJERCICIO, no que le re-expliquen el concepto. Queja del cliente:
   // "pido que me dé EJERCICIOS y me brinda CONCEPTOS". Distinto de "otro ejemplo"/"otro" (sin verbo de
   // pedir + "un"), que en una sesión de concepto SÍ mantiene el concepto y solo rota el ejemplo.
-  const pidePracticaExpl = /\bejercicio\b|\bpractic|\bresuelv|(dame|deme|denme|ponme|pon|quiero|quisiera|necesito|muestrame|muestra|dejame|deja)\s+(un|una)\s+(ejemplo|ejercicio)/.test(normBoton(query));
+  const pidePracticaExpl = /\bejercicios?\b|\bpractic|\bresuelv|(dame|deme|denme|ponme|pon|quiero|quisiera|necesito|muestrame|muestra|dejame|deja)\s+(un|una)\s+(ejemplo|ejercicio)/.test(normBoton(query));
   const conceptoOn = pideEnsenar && (!esSeg || seguimiento === "continuacion" || seguimiento === "practicar") && !pidePracticaExpl;
+  // PRACTICAR: el alumno pide EJERCICIOS para resolverlos ÉL MISMO — no que se los resuelvan ni que le
+  // re-expliquen el concepto. Señales: el botón "otro ejercicio" (seguimiento), "quiero practicar", "para
+  // practicar / que yo resuelva / yo mismo / por mi cuenta / para yo resolverlos", o mencionar "ejercicios/
+  // problemas" (plural). Se EXCLUYE si pide la SOLUCIÓN (eso es resolver). Alineado con el clasificador.
+  // Queja del cliente: "le pido ejercicios para yo resolverlos y me sigue enseñando / no obedece".
+  const nPract = normBoton(query);
+  const pideSolucion = /\b(la solucion|el resultado|la respuesta|resuelveme|dame el valor|dame la solucion)\b/.test(nPract);
+  const pidePracticar = !pideSolucion && (
+    seguimiento === "practicar"
+    || /\bpractic/.test(nPract)
+    || /\bpara\s+(practicar|ejercitar|reforzar)\b/.test(nPract)
+    || /\bpara\s+que\s+(?:yo|tu)?\s*(?:lo|la|los|las)?\s*(?:resuelva|resuelvas|practique|trabaje|intente)\b|\bque\s+yo\s*(?:lo|la|los|las)?\s*resuelv/.test(nPract)
+    || /\bpara\s+(?:yo\s+)?resolver(?:l[oa]s?)?\b|\bpor\s+mi\s+cuenta\b|\byo\s+mism[oa]\b/.test(nPract)
+    || /\bejercicios\b|\bproblemas\b/.test(nPract)
+  );
   const commonRet = (tema, lsg) => ({ tema, escena: lsg.escena, intencion: lsg.intencion || "resolver", modelo: `${tema}-resuelto`, lsg });
 
   // 0) ¿PIDE UN EJEMPLO APLICADO / DE LA VIDA REAL (no un cálculo numérico)? "un ejemplo de la vida
@@ -1255,7 +1324,7 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   if (/deriv/.test(n)) {
     if (/\b(sen|sin|cos|tan|cot|sec|csc|log|ln|exp|ra[ií]z|sqrt)\b|√|e\s*\^/.test(n)) return null;
     const instancia = extraerMonomio(base);
-    return commonRet("derivada", derivadaResueltaLSG({ evitar: previo, instancia, seguimiento: esSeg, nivel, concepto: conceptoOn }));
+    return commonRet("derivada", derivadaResueltaLSG({ evitar: previo, instancia, seguimiento: esSeg, nivel, concepto: conceptoOn, practica: pidePracticar }));
   }
 
   // 2) FACTORIZACIÓN (diferencia de cuadrados). Con una expresión concreta NO factorizable así
@@ -1268,7 +1337,7 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
     // alumno (p. ej. pedir "factoriza x³ - 8" y ver "x² - 9") — incoherente, del tipo de queja del cliente.
     // Solo el pedido GENÉRICO ("enséñame factorización", "ejercicio de factorización") usa un preset.
     if (!instancia && /[a-z]\s*(?:\^\s*\d|[²³⁴⁵⁶⁷⁸⁹])/i.test(base)) return null;
-    return commonRet("factorizacion", factorizacionResueltaLSG({ evitar: previo, instancia, seguimiento: esSeg, nivel, concepto: conceptoOn }));
+    return commonRet("factorizacion", factorizacionResueltaLSG({ evitar: previo, instancia, seguimiento: esSeg, nivel, concepto: conceptoOn, practica: pidePracticar }));
   }
 
   // 3) FRACCIONES. El tema genérico ("ejercicio/ejemplo de fracciones", "enséñame fracciones") O una SUMA
@@ -1282,7 +1351,7 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
     // ejemplo") se IGNORA y se ROTA (igual que los otros temas), si no repetiría siempre la misma suma.
     const instFrac = esSeg ? null : fracInst;
     // "enséñame fracciones" (sin fracción concreta) → CONCEPTO primero; con fracción concreta → resolver ESA.
-    return commonRet("fraccion", fraccionResueltaLSG({ evitar: evitarFrac, nivel, concepto: !instFrac && conceptoOn, instancia: instFrac }));
+    return commonRet("fraccion", fraccionResueltaLSG({ evitar: evitarFrac, nivel, concepto: !instFrac && conceptoOn, instancia: instFrac, practica: pidePracticar }));
   }
 
   // 4) ECUACIÓN LINEAL. Una ecuación lineal concreta ("2x + 5 = 15") o el tema genérico ("ecuación lineal").
@@ -1298,7 +1367,7 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   const instLin = solBase ? solBase.original : null;
   if (!noLineal && (instLin || /\becuaci[oó]n(?:es)?\b|\blineal(?:es)?\b|primer grado/.test(n))) {
     // "enséñame ecuaciones lineales" (sin una ecuación concreta) → enseñar el CONCEPTO primero.
-    return commonRet("lineal", linealResueltaLSG({ evitar: previo, instancia: instLin, seguimiento: esSeg, nivel, concepto: !instLin && conceptoOn }));
+    return commonRet("lineal", linealResueltaLSG({ evitar: previo, instancia: instLin, seguimiento: esSeg, nivel, concepto: !instLin && conceptoOn, practica: pidePracticar }));
   }
 
   // 5) ARITMÉTICA BÁSICA (suma, resta, multiplicación, división). Un CÁLCULO concreto ("24 + 17", "6 × 7",
@@ -1318,7 +1387,19 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   const opActivo = (opInst && opInst.op) || opTema;
   if (opActivo) {
     const instancia = (!esSeg && opInst && opInst.op === opActivo) ? `${opInst.a} ${SIGNO_ARIT[opActivo]} ${opInst.b}` : null;
-    return commonRet(opActivo, GEN_ARIT[opActivo]({ evitar: previo, instancia, seguimiento: esSeg, nivel, concepto: !instancia && conceptoOn }));
+    return commonRet(opActivo, GEN_ARIT[opActivo]({ evitar: previo, instancia, seguimiento: esSeg, nivel, concepto: !instancia && conceptoOn, practica: pidePracticar }));
+  }
+
+  // ── PRACTICAR con tema núcleo ACTIVO pero SIN nombrarlo en la consulta ──
+  // "dame ejercicios más complejos para yo resolverlos" dentro de una sesión de ecuaciones lineales: no
+  // nombra el tema, así que las ramas 1-5 no dispararon, pero el alumno quiere EJERCICIOS del tema activo
+  // para resolverlos ÉL. Se entregan en modo PRACTICAR (retos sin resolver, calificables), en vez de
+  // re-enseñar o caer a Gemini. (Queja del cliente: "pido ejercicios para yo resolverlos y me sigue enseñando".)
+  if (pidePracticar) {
+    const temaP = temaNucleo(base) || temaNucleo(contexto) || temaNucleo(currentTopic);
+    if (temaP && GEN_RESUELTA[temaP]) {
+      return commonRet(temaP, GEN_RESUELTA[temaP]({ evitar: previo, seguimiento: esSeg, nivel, practica: true }));
+    }
   }
 
   // ── RED DE SEGURIDAD: los 4 temas núcleo NUNCA caen en Gemini por un seguimiento ──
