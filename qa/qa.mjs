@@ -293,6 +293,15 @@ async function unitTests() {
     }
     check(`división decimal PEQUEÑA "5 / 8" NO se secuestra (→ Gemini)`, correrBoton({ query: "5 / 8" }) === null);
     check(`división decimal PEQUEÑA "7 / 3" NO se secuestra (→ Gemini)`, correrBoton({ query: "7 / 3" }) === null);
+    // PRECISIÓN de multiplicación grande: el producto de 8×8 dígitos supera 2^53 y `a*b` daba una cifra MAL
+    // (99999999 × 99999999 → …0 en vez de …1). Debe mostrar el valor EXACTO (BigInt). Verificación independiente.
+    for (const [a, b] of [[99999999, 99999999], [87654321, 4321], [123456, 654321]]) {
+      const r = correrBoton({ query: `${a} × ${b}` });
+      const exacto = (BigInt(a) * BigInt(b)).toString();
+      check(`mult grande [${a} × ${b}]: producto EXACTO ${exacto}`, !!r && texto(r).replace(/\s+/g, " ").includes(`= ${exacto}`), r ? "no muestra exacto" : "null");
+    }
+    // GUARDA de tamaño: operandos de 13+ cifras → NO deterministas (Number ya pierde precisión) → Gemini.
+    check(`operando de 13+ cifras "1234567890123 + 1" → NO determinista`, correrBoton({ query: "1234567890123 + 1" }) === null);
     // BUG del cliente: "Resuelve 5 / 5" (con "/") caía a Gemini y no presentaba ejercicio final de práctica.
     // La división con "/" exacta debe ir a la lección determinista y CERRAR con "Ahora te toca a ti" + práctica.
     {

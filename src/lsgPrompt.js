@@ -711,14 +711,18 @@ function pasosResta(a, b) {
   return { texto: `${a} - ${b}`, answer: a - b, steps };
 }
 function pasosMult(a, b) {
+  // Productos EXACTOS con BigInt: con números grandes (p. ej. 8 × 8 dígitos → 16 cifras) el producto supera
+  // el entero seguro de JS (2^53) y `a * b` daba una cifra MAL (99999999 × 99999999 → …0 en vez de …1).
+  const M = (x, y) => (BigInt(x) * BigInt(y)).toString();
   const big = Math.max(a, b), small = Math.min(a, b), u = big % 10, t = big - u, steps = [];
-  if (big < 10) steps.push({ explica: `Multiplicar ${a} × ${b} es sumar el ${small} un total de ${big} veces. El resultado es ${a * b}.`, escribe: `${a} × ${b} = ${a * b}` });
-  else if (u === 0) steps.push({ explica: `${a} × ${b}: multiplicamos ${big / 10} × ${small} = ${(big / 10) * small} y añadimos un cero. Resultado ${a * b}.`, escribe: `${a} × ${b} = ${a * b}` });
+  const prod = M(a, b);
+  if (big < 10) steps.push({ explica: `Multiplicar ${a} × ${b} es sumar el ${small} un total de ${big} veces. El resultado es ${prod}.`, escribe: `${a} × ${b} = ${prod}` });
+  else if (u === 0) steps.push({ explica: `${a} × ${b}: multiplicamos ${big / 10} × ${small} = ${M(big / 10, small)} y añadimos un cero. Resultado ${prod}.`, escribe: `${a} × ${b} = ${prod}` });
   else {
     steps.push({ explica: `Descomponemos ${big} en ${t} + ${u} y multiplicamos cada parte por ${small}.`, escribe: `${a} × ${b} = (${t} + ${u}) × ${small}` });
-    steps.push({ explica: `${t} × ${small} = ${t * small} y ${u} × ${small} = ${u * small}. Sumamos: ${t * small} + ${u * small} = ${a * b}.`, escribe: `${t * small} + ${u * small} = ${a * b}` });
+    steps.push({ explica: `${t} × ${small} = ${M(t, small)} y ${u} × ${small} = ${M(u, small)}. Sumamos: ${M(t, small)} + ${M(u, small)} = ${prod}.`, escribe: `${M(t, small)} + ${M(u, small)} = ${prod}` });
   }
-  return { texto: `${a} × ${b}`, answer: a * b, steps };
+  return { texto: `${a} × ${b}`, answer: prod, steps };
 }
 function pasosDiv(a, b) {
   if (a % b === 0) {
@@ -749,8 +753,14 @@ function pasosDiv(a, b) {
 // DIVISIÓN: exacta de cualquier tamaño; NO exacta (con decimales) solo si el dividendo es GRANDE (≥ 1000),
 // para no secuestrar cosas tipo "5/8" o "7/3" que suelen ser fracciones (esas siguen yendo a Gemini/fracciones).
 const divOK = (a, b) => !!b && (a % b === 0 || a >= 1000);
+// Máximo de dígitos por operando en la ruta determinista: más allá, `Number()` ya pierde precisión al
+// parsear (2^53 ≈ 16 dígitos) y el resultado/calificación no serían fiables → lo maneja Gemini. 12 cubre de
+// sobra los "8 dígitos" que pidió el cliente y deja margen (suma/resta/división exactas dentro de este rango).
+const LMAX_ARIT = 12;
 function extraerOperacion(text) {
   const s = String(text).replace(/\s+/g, " ").trim(); let m;
+  // Rechaza operandos con demasiadas cifras (evita respuestas imprecisas por el límite de enteros de JS).
+  if (new RegExp(`\\d{${LMAX_ARIT + 1},}`).test(s)) return null;
   if (/[÷/]/.test(s) && (m = s.match(/(\d+)\s*[÷/]\s*(\d+)/))) { const a = +m[1], b = +m[2]; return divOK(a, b) ? { op: "division", a, b } : null; }
   if ((m = s.match(/(\d+)\s+entre\s+(\d+)/i))) { const a = +m[1], b = +m[2]; return divOK(a, b) ? { op: "division", a, b } : null; }
   if ((m = s.match(/(\d+)\s*(?:×|\*)\s*(\d+)/))) return { op: "multiplicacion", a: +m[1], b: +m[2] };
