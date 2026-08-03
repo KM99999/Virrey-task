@@ -387,7 +387,6 @@ async function unitTests() {
     const resuelvePaso = (r) => /vamos a (resolver|dividir|sumar|restar|multiplicar|derivar|factorizar)|paso a paso/i.test(flatHablar(r));
     const PRAC = [
       ["division", "dame ejercicios de división para que yo los resuelva", {}],
-      ["division", "enséñame ejercicios más complejos, como dividir números de 8 dígitos", {}],
       ["fraccion", "quiero practicar fracciones", {}],
       ["derivada", "dame ejercicios de derivadas para practicar", {}],
       ["factorizacion", "ponme ejercicios de factorización para resolverlos yo", {}],
@@ -422,6 +421,32 @@ async function unitTests() {
     }
     // GUARDA: una pregunta CONCEPTUAL con "para resolver" NO debe forzar practicar ("cómo se hace para resolver").
     check(`control: "¿cómo se resuelve una ecuación?" NO es practicar`, correrBoton({ query: "¿cómo se resuelve una ecuación lineal?", currentTopic: "ecuaciones lineales" })?.intencion !== "practicar");
+    // VERBO ENSEÑAR = ENSEÑAR, no dejar ejercicios (queja del cliente: "le digo que me ENSEÑE y me deja
+    // ejercicios"). El verbo "enséñame/muéstrame" NO debe activar práctica por el mero plural "ejercicios".
+    const div = { seguimiento: "continuacion", contexto: "enséñame a dividir", currentTopic: "división" };
+    for (const [q, ex] of [["enséñame ejercicios más complejos", div], ["muéstrame ejercicios de división", {}], ["enséñame ejercicios más complejos, como dividir números de 8 dígitos", {}]]) {
+      const r = correrBoton({ query: q, ...ex });
+      check(`enseñar [${q.slice(0, 34)}…]: NO es practicar (enseña)`, !!r && r.intencion !== "practicar", r ? r.tema + "/" + r.intencion : "null");
+      if (r) check(`enseñar [${q.slice(0, 34)}…]: no "deja ejercicios" (no es modo práctica)`, !/a practicar.*resuelvas t[uú]/i.test(r.flat.filter((d) => d.tipo === "hablar").map((d) => d.texto).join(" ")));
+    }
+  }
+  // ── DERIVADA "diferente a la rapidez/velocidad": debe dar un ejemplo NO de velocidad (la pendiente de una
+  //    rampa —geométrico— o el costo marginal —económico—), no repetir la idea de rapidez. (Queja del
+  //    cliente: "diferente a la rapidez y me muestra lo mismo"; los ejemplos eran todos de velocidad.)
+  {
+    const noVelObj = (r) => { const h = r.flat.find((d) => d.tipo === "hablar" && /Veámoslo con/.test(d.texto || "")); return h ? (h.texto.match(/Veámoslo con ([^:]+):/) || [])[1] : ""; };
+    for (const q of ["Enséñame con otro ejemplo diferente a la rapidez", "otro ejemplo diferente a la velocidad", "un ejemplo de derivadas que no sea de velocidad"]) {
+      const r = correrBoton({ query: q, contexto: "Enséñame derivadas", currentTopic: "derivadas" });
+      check(`derivada 'diferente a la rapidez' [${q.slice(0, 34)}…]: es derivada aplicada`, !!r && r.tema === "derivada", r ? r.tema : "null (Gemini)");
+      if (!r) continue;
+      const hablar = r.flat.filter((d) => d.tipo === "hablar").map((d) => d.texto).join(" ");
+      check(`derivada 'diferente a la rapidez' [${q.slice(0, 34)}…]: escenario NO de velocidad (${noVelObj(r)})`, /rampa|f[aá]brica|pendiente|inclinaci|costo marginal/i.test(hablar));
+      check(`derivada 'diferente a la rapidez' [${q.slice(0, 34)}…]: NO menciona "rapidez"/"velocidad"`, !/rapidez|velocidad/i.test(hablar));
+      check(`derivada 'diferente a la rapidez' [${q.slice(0, 34)}…]: práctica calificable`, r.nPreg === 1 && checkAnswer(r.q.respuesta, r.q.respuesta).correct === true);
+    }
+    // el PRIMER ejemplo aplicado normal (sin exclusión) sigue siendo el coche (velocidad) — canónico.
+    const r0 = correrBoton({ query: "dame un ejemplo de derivadas de la vida cotidiana" });
+    check(`derivada aplicada canónica (sin exclusión) sigue siendo el coche/velocidad`, !!r0 && /coche/i.test(r0.flat.map((d) => d.texto || "").join(" ")));
   }
   // ── RECUPERACIÓN DE TEMA desde el HISTORIAL: "otro ejemplo" SIN tema activo (contexto/currentTopic/
   //    seguimiento vacíos) pero con el tema en el HISTORIAL de conversación debe seguir siendo DETERMINISTA

@@ -1030,29 +1030,60 @@ function idxEscenario(list, evitarRaw, keyOf) {
 // dónde ir (crecimiento de una planta, llenado de un tanque). Cada uno usa la fórmula t² (derivada 2t):
 // solo cambia el CONTEXTO, las UNIDADES y el tiempo. El `key` incluye la palabra del tipo ("velocidad",
 // "crecimiento", "caudal") para que la exclusión por tipo funcione. Unidades con palabra completa (TTS).
+// Escenarios de la derivada en la vida real. Todos usan la fórmula t²→2t (solo cambia el CONTEXTO, la
+// VARIABLE y las unidades). Se distinguen por `speed`: los tres primeros son de tipo VELOCIDAD/rapidez de
+// cambio; los dos últimos son NO-velocidad (la pendiente de una rampa —geométrico— y el costo marginal
+// —económico—). Así, cuando el alumno pide un ejemplo "diferente a la rapidez/velocidad" hay a dónde ir.
+// `punto(n)` da la frase natural del instante ("a los 5 segundos" / "cuando avanzas 4 metros" / "al
+// producir el artículo 5"), para no leer "t = 5" en voz alta. Unidades con PALABRA completa (por el TTS).
 const DERIV_VIDA = [
-  { key: "coche velocidad posicion rapidez rapido movimiento", obj: "un coche", mag: "posición", sym: "s", rate: "velocidad", uMag: "metros", uRate: "metros por segundo", tSg: "segundo", tPl: "segundos", verbo: "avanza",
-    tabla: "en 1 segundo avanza 1 metro, en 2 segundos 4 metros, en 3 segundos 9 metros", tE: 2, tP: 5 },
-  { key: "planta crecimiento altura", obj: "una planta", mag: "altura", sym: "h", rate: "rapidez de crecimiento", uMag: "centímetros", uRate: "centímetros por día", tSg: "día", tPl: "días", verbo: "crece",
-    tabla: "en 1 día mide 1 centímetro, en 2 días 4 centímetros, en 3 días 9 centímetros", tE: 2, tP: 4 },
-  { key: "tanque caudal volumen llenado agua", obj: "un tanque que se llena de agua", mag: "cantidad de agua", sym: "V", rate: "rapidez de llenado", uMag: "litros", uRate: "litros por minuto", tSg: "minuto", tPl: "minutos", verbo: "sube",
-    tabla: "en 1 minuto hay 1 litro, en 2 minutos 4 litros, en 3 minutos 9 litros", tE: 3, tP: 5 },
+  { key: "coche velocidad posicion rapidez rapido movimiento", speed: true,
+    def: "Una derivada mide la RAPIDEZ con la que algo cambia: en cada instante indica qué tan rápido crece o decrece una cantidad.",
+    obj: "un coche", mag: "posición", sym: "s", varSym: "t", varDesc: "el tiempo t", rate: "La velocidad",
+    uMag: "metros", uRate: "metros por segundo", tabla: "a 1 segundo avanza 1 metro, a 2 segundos 4 metros, a 3 segundos 9 metros",
+    obs: "Cada segundo avanza más, así que va cada vez más rápido.", punto: (n) => `a los ${n} segundos`, tE: 2, tP: 5 },
+  { key: "planta crecimiento altura rapidez rapido", speed: true,
+    def: "Una derivada mide la RAPIDEZ con la que algo cambia: en cada instante indica cuánto crece o decrece una cantidad.",
+    obj: "una planta", mag: "altura", sym: "h", varSym: "t", varDesc: "el tiempo t", rate: "La rapidez de crecimiento",
+    uMag: "centímetros", uRate: "centímetros por día", tabla: "al día 1 mide 1 centímetro, al día 2 mide 4, al día 3 mide 9",
+    obs: "Cada día crece más que el anterior.", punto: (n) => `al día ${n}`, tE: 2, tP: 4 },
+  { key: "tanque caudal volumen llenado agua rapidez", speed: true,
+    def: "Una derivada mide la RAPIDEZ con la que algo cambia: en cada instante indica cuánto sube o baja una cantidad.",
+    obj: "un tanque que se llena de agua", mag: "cantidad de agua", sym: "V", varSym: "t", varDesc: "el tiempo t", rate: "La rapidez de llenado",
+    uMag: "litros", uRate: "litros por minuto", tabla: "al minuto 1 hay 1 litro, al minuto 2 hay 4, al minuto 3 hay 9",
+    obs: "Cada minuto entra más agua que en el anterior.", punto: (n) => `al minuto ${n}`, tE: 3, tP: 5 },
+  // NO-velocidad (GEOMÉTRICO): la derivada como la PENDIENTE / inclinación de una rampa. Nada de tiempo.
+  { key: "rampa tobogan pendiente inclinacion altura geometria subida cuesta", speed: false,
+    def: "Una derivada mide la INCLINACIÓN (la pendiente) de una curva: en cada punto indica cuánto sube por cada paso que avanzas.",
+    obj: "una rampa", mag: "altura", sym: "h", varSym: "x", varDesc: "la distancia horizontal x", rate: "La inclinación (la pendiente)",
+    uMag: "metros de alto", uRate: "metros de subida por metro de avance", tabla: "al avanzar 1 metro tiene 1 metro de alto, al avanzar 2 tiene 4, al avanzar 3 tiene 9",
+    obs: "Cuanto más avanzas, más empinada se vuelve.", punto: (n) => `cuando has avanzado ${n} metros`, tE: 2, tP: 4 },
+  // NO-velocidad (ECONÓMICO): la derivada como COSTO MARGINAL (lo que cuesta producir uno más). Nada de tiempo.
+  { key: "costo marginal produccion dinero economia articulos fabrica precio gasto", speed: false,
+    def: "Una derivada mide cuánto CAMBIA una cantidad por cada unidad más: en economía es el costo de fabricar uno más (costo marginal).",
+    obj: "una fábrica", mag: "costo total", sym: "C", varSym: "q", varDesc: "la cantidad producida q", rate: "El costo marginal (lo que cuesta el siguiente)",
+    uMag: "soles", uRate: "soles por artículo adicional", tabla: "con 1 artículo el costo es 1 sol, con 2 es 4, con 3 es 9",
+    obs: "Cada artículo extra cuesta un poco más que el anterior.", punto: (n) => `al producir el artículo número ${n}`, tE: 2, tP: 5 },
 ];
 export function derivadaAplicadaLSG(opts = {}) {
-  const c = DERIV_VIDA[idxEscenario(DERIV_VIDA, opts.evitar, (s) => s.key)];
-  const vE = 2 * c.tE;                  // valor de la razón de cambio en el instante del ejemplo (t² → 2t)
-  const vP = 2 * c.tP;                  // valor en la práctica (respuesta calificable)
+  // Si el alumno EXCLUYE la rapidez/velocidad ("otro ejemplo diferente a la rapidez"), se elige un escenario
+  // que NO sea de velocidad (la pendiente de una rampa, el costo marginal). Queja del cliente: todos los
+  // ejemplos de derivadas eran de velocidad/rapidez.
+  const soloNoVel = /rapidez|velocidad|rapido|speed/.test(canonExpr(opts.evitar || ""));
+  const pool = soloNoVel ? DERIV_VIDA.filter((s) => !s.speed) : DERIV_VIDA;
+  const c = pool[idxEscenario(pool, opts.evitar, (s) => s.key)];
+  const vE = 2 * c.tE, vP = 2 * c.tP;   // t²→2t: valor de la derivada en el ejemplo y en la práctica
   const dir = [
     { tipo: "avatar", accion: "sonreir" },
-    { tipo: "hablar", texto: "Una derivada mide la RAPIDEZ con la que algo cambia: en cada instante indica qué tan rápido crece o decrece una cantidad." },
-    { tipo: "hablar", texto: `Veámoslo con ${c.obj}: su ${c.mag} después de un tiempo t sigue la fórmula t², medida en ${c.uMag}. Fíjate: ${c.tabla}. Cada ${c.tSg} ${c.verbo} más, así que va cada vez más rápido.` },
-    { tipo: "pizarra", accion: "escribir", contenido: `${c.mag}: ${c.sym}(t) = t²  (${c.uMag})` },
-    { tipo: "hablar", texto: `La ${c.rate} en cada instante es la derivada de la ${c.mag}. Derivamos t² con la regla de la potencia —bajamos el exponente multiplicando y le restamos 1— y queda 2t.` },
-    { tipo: "pizarra", accion: "escribir", contenido: `derivada: ${c.sym}'(t) = 2t  (${c.uRate})` },
-    { tipo: "hablar", texto: `Por ejemplo, a los ${c.tE} ${c.tPl} vale 2 × ${c.tE} = ${vE} ${c.uRate}. La derivada da el valor EXACTO en ese instante, no un promedio.` },
+    { tipo: "hablar", texto: c.def },
+    { tipo: "hablar", texto: `Veámoslo con ${c.obj}: su ${c.mag} según ${c.varDesc} sigue la fórmula ${c.varSym}², en ${c.uMag}. Fíjate: ${c.tabla}. ${c.obs}` },
+    { tipo: "pizarra", accion: "escribir", contenido: `${c.mag}: ${c.sym}(${c.varSym}) = ${c.varSym}²  (${c.uMag})` },
+    { tipo: "hablar", texto: `${c.rate} en cada punto es la derivada de ${c.mag}. Derivamos ${c.varSym}² con la regla de la potencia —bajamos el exponente multiplicando y le restamos 1— y queda 2${c.varSym}.` },
+    { tipo: "pizarra", accion: "escribir", contenido: `derivada: ${c.sym}'(${c.varSym}) = 2${c.varSym}  (${c.uRate})` },
+    { tipo: "hablar", texto: `Por ejemplo, ${c.punto(c.tE)} vale 2 × ${c.tE} = ${vE} ${c.uRate}. La derivada da el valor EXACTO en ese punto, no un promedio.` },
     { tipo: "hablar", texto: "Como ves, la derivada mide a qué ritmo cambian las cosas del día a día. Ahora te toca a ti." },
-    { tipo: "pizarra", accion: "escribir", contenido: `derivada = 2t.   Halla su valor a los ${c.tP} ${c.tPl}.` },
-    { tipo: "preguntar", texto: `Si la razón de cambio es 2t, ¿cuánto vale a los ${c.tP} ${c.tPl}? Escribe solo el número.`, respuesta: String(vP), esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
+    { tipo: "pizarra", accion: "escribir", contenido: `derivada = 2${c.varSym}.   Halla su valor ${c.punto(c.tP)}.` },
+    { tipo: "preguntar", texto: `Si la derivada es 2${c.varSym}, ¿cuánto vale ${c.punto(c.tP)}? Escribe solo el número.`, respuesta: String(vP), esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
   ];
   return { escena: "derivada_resuelta", intencion: "aprender", duracion_estimada: 80, _mock: true, directivas: dir };
 }
@@ -1352,6 +1383,13 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   // "explícame…") en vez de resolver un ejercicio concreto? En ese caso la lección debe empezar por el
   // CONCEPTO y la REGLA (no saltar directo a resolver un ejercicio) — queja del cliente.
   const pideEnsenar = /\bense[nñ]a|\baprend|expl[ií]ca|qu[eé]\s+(es|son)\b|c[oó]mo\s+se\b|concepto|teor[ií]a/.test(n);
+  // VERBO de ENSEÑAR explícito ("enséñame/muéstrame/explícame"): el alumno pide que le ENSEÑEN (que le
+  // expliquen), no que le dejen ejercicios. Queja del cliente: "le digo que me ENSEÑE y me deja ejercicios".
+  // Con este verbo NO se activa el modo práctica por el mero plural "ejercicios", y se mantiene la enseñanza
+  // (concepto + ejemplo resuelto con el porqué). Solo una señal EXPLÍCITA de "para que yo resuelva" cambia a práctica.
+  // OJO: se lee de la CONSULTA ACTUAL (query), NO de `n` (que en un seguimiento es el contexto/tema y siempre
+  // trae "enséñame X"): si no, en una sesión de concepto un "dame un ejemplo" se tomaría como enseñar.
+  const verboEnsenar = /\bense[nñ]a\w*|\bmuestra\w*|\bexpl[ií]ca\w*/.test(normBoton(query));
   // MODO APRENDER que se MANTIENE en un seguimiento: si el tema se abrió con "enséñame/explícame/el
   // concepto de [tema]" (n = contexto en un seguimiento), un "otro ejemplo" debe seguir ENSEÑANDO el
   // concepto con un ejemplo nuevo, NO pasar a solo resolver. (Queja del cliente: pidió el concepto de
@@ -1362,7 +1400,7 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   // "pido que me dé EJERCICIOS y me brinda CONCEPTOS". Distinto de "otro ejemplo"/"otro" (sin verbo de
   // pedir + "un"), que en una sesión de concepto SÍ mantiene el concepto y solo rota el ejemplo.
   const pidePracticaExpl = /\bejercicios?\b|\bpractic|\bresuelv|(dame|deme|denme|ponme|pon|quiero|quisiera|necesito|muestrame|muestra|dejame|deja)\s+(un|una)\s+(ejemplo|ejercicio)/.test(normBoton(query));
-  const conceptoOn = pideEnsenar && (!esSeg || seguimiento === "continuacion" || seguimiento === "practicar") && !pidePracticaExpl;
+  const conceptoOn = pideEnsenar && (!esSeg || seguimiento === "continuacion" || seguimiento === "practicar") && (!pidePracticaExpl || verboEnsenar);
   // PRACTICAR: el alumno pide EJERCICIOS para resolverlos ÉL MISMO — no que se los resuelvan ni que le
   // re-expliquen el concepto. Señales: el botón "otro ejercicio" (seguimiento), "quiero practicar", "para
   // practicar / que yo resuelva / yo mismo / por mi cuenta / para yo resolverlos", o mencionar "ejercicios/
@@ -1382,7 +1420,7 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
     || /\bpractic/.test(nPract)
     || /\bpara\s+(practicar|ejercitar|reforzar)\b/.test(nPract)
     || /\bpor\s+mi\s+cuenta\b|\byo\s+mism[oa]\b/.test(nPract)
-    || /\bejercicios\b|\bproblemas\b/.test(nPract)
+    || (/\bejercicios\b|\bproblemas\b/.test(nPract) && !verboEnsenar)
     || (finalidadResolver && !preguntaConceptual)
   );
   const commonRet = (tema, lsg) => ({ tema, escena: lsg.escena, intencion: lsg.intencion || "resolver", modelo: `${tema}-resuelto`, lsg });
@@ -1405,7 +1443,13 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   const excluir = extraerExclusion(query);
   const pideOtroDiferente = !!excluir || /\b(otr[oa]|diferente|distint[oa]|nuev[oa])\b/.test(nQ);
   const ctxAplicado = esContextoAplicado(`${previo} ${contexto} ${currentTopic}`);
-  if (pideAplicado || (ctxAplicado && pideOtroDiferente)) {
+  // Si el alumno EXCLUYE la rapidez/velocidad ("otro ejemplo diferente a la rapidez") en un tema de
+  // DERIVADAS, va a la lección APLICADA (que elegirá un escenario NO de velocidad: rampa/costo marginal),
+  // aunque el contexto activo fuera el concepto. Queja del cliente: pedía "diferente a la rapidez" y le
+  // repetían la misma idea de velocidad una y otra vez.
+  const excluyeVelocidad = /rapidez|velocidad|rapido/.test(canonExpr(excluir));
+  const temaDeriv = /deriv/.test(nQ) || /deriv/.test(ctxTema);
+  if (pideAplicado || (ctxAplicado && pideOtroDiferente) || (excluyeVelocidad && temaDeriv)) {
     // `evitar` combina el resumen previo (lo ya mostrado) + lo que el alumno pide EXCLUIR, para que la
     // rotación de escenario salte tanto lo anterior como lo excluido.
     const evitarAp = `${previo} ${excluir}`.trim();
