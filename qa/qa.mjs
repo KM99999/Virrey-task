@@ -313,6 +313,18 @@ async function unitTests() {
     check(`derivada aplicada [${label}]: la respuesta se califica bien`, !!r.q && checkAnswer(r.q.respuesta, r.q.respuesta).correct === true);
     check(`derivada aplicada [${label}]: sin igualdad numérica corrupta en pizarra`, !r.pizarras.some((p) => /=\s*(?:$|[.,;])/.test(p) || /\(\s*[+×\-]/.test(p)));
   }
+  // ── EXCLUSIÓN "diferente a la RAPIDEZ" (queja del cliente): el primer ejemplo aplicado de derivadas es
+  //    el COCHE (velocidad = "rapidez"); si el alumno pide uno DIFERENTE a la rapidez, NO debe repetir el
+  //    coche. Antes fallaba porque la palabra que ve el alumno ("rapidez") no estaba en la clave del
+  //    escenario (que solo tenía "velocidad"/"posición"), así que la exclusión no saltaba el coche.
+  {
+    const escenarioDe = (r) => (r?.flat?.find((d) => d.tipo === "hablar" && /Veámoslo con/.test(d.texto || ""))?.texto || "");
+    for (const q of ["dame un ejemplo de la vida cotidiana diferente a la Rapidéz", "otro ejemplo diferente a la velocidad", "un ejemplo de la vida real distinto al de la rapidez"]) {
+      const r = correrBoton({ query: q, contexto: "Enséñame derivadas de la vida cotidiana", currentTopic: "derivadas" });
+      check(`derivada 'diferente a la rapidez' ["${q}"]: sigue en derivada aplicada`, !!r && r.tema === "derivada", r ? r.tema : "null");
+      if (r) check(`derivada 'diferente a la rapidez' ["${q}"]: NO repite el ejemplo del COCHE/velocidad`, !/coche/i.test(escenarioDe(r)), escenarioDe(r).slice(0, 40));
+    }
+  }
   // ── RECUPERACIÓN DE TEMA desde el HISTORIAL: "otro ejemplo" SIN tema activo (contexto/currentTopic/
   //    seguimiento vacíos) pero con el tema en el HISTORIAL de conversación debe seguir siendo DETERMINISTA
   //    (reconstruye el tema del historial), no caer a Gemini. Caso real: el alumno recarga la página (se

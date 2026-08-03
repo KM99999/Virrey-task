@@ -889,7 +889,7 @@ function idxEscenario(list, evitarRaw, keyOf) {
 // solo cambia el CONTEXTO, las UNIDADES y el tiempo. El `key` incluye la palabra del tipo ("velocidad",
 // "crecimiento", "caudal") para que la exclusión por tipo funcione. Unidades con palabra completa (TTS).
 const DERIV_VIDA = [
-  { key: "coche velocidad posicion", obj: "un coche", mag: "posición", sym: "s", rate: "velocidad", uMag: "metros", uRate: "metros por segundo", tSg: "segundo", tPl: "segundos", verbo: "avanza",
+  { key: "coche velocidad posicion rapidez rapido movimiento", obj: "un coche", mag: "posición", sym: "s", rate: "velocidad", uMag: "metros", uRate: "metros por segundo", tSg: "segundo", tPl: "segundos", verbo: "avanza",
     tabla: "en 1 segundo avanza 1 metro, en 2 segundos 4 metros, en 3 segundos 9 metros", tE: 2, tP: 5 },
   { key: "planta crecimiento altura", obj: "una planta", mag: "altura", sym: "h", rate: "rapidez de crecimiento", uMag: "centímetros", uRate: "centímetros por día", tSg: "día", tPl: "días", verbo: "crece",
     tabla: "en 1 día mide 1 centímetro, en 2 días 4 centímetros, en 3 días 9 centímetros", tE: 2, tP: 4 },
