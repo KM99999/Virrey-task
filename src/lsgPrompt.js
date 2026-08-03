@@ -682,15 +682,19 @@ const DIVIS = {
   dificil: ["144 ÷ 12", "156 ÷ 13", "288 ÷ 24", "192 ÷ 16", "225 ÷ 15", "132 ÷ 11"],
 };
 const parseAB = (s) => { const m = String(s).match(/(\d+)\s*[+\-×÷*/]\s*(\d+)/); return m ? [Number(m[1]), Number(m[2])] : [0, 0]; };
-const COLS = ["unidades", "decenas", "centenas", "millares"];
+// Nombre de cada columna (de derecha a izquierda). Escala a números grandes (8+ dígitos): antes el arreglo
+// tenía solo 4 nombres y a partir del 5.º dígito la pizarra mostraba "undefined" (p. ej. sumar/restar de 8
+// dígitos). Más allá de lo nombrado, se rotula por posición. (Detectado al probar "números de 8 dígitos".)
+const COLS = ["unidades", "decenas", "centenas", "millares", "decenas de millar", "centenas de millar", "millones", "decenas de millón", "centenas de millón", "millares de millón"];
+const colName = (i) => COLS[i] || `posición ${i + 1} (desde la derecha)`;
 function pasosSuma(a, b) {
   const A = String(a).split("").reverse().map(Number), B = String(b).split("").reverse().map(Number);
   const n = Math.max(A.length, B.length), steps = []; let carry = 0;
   for (let i = 0; i < n; i++) {
     const x = A[i] || 0, y = B[i] || 0, s = x + y + carry, traia = carry ? ` + ${carry} que llevábamos` : "";
     steps.push(s >= 10
-      ? { explica: `Sumamos las ${COLS[i]}: ${x} + ${y}${traia} = ${s}. Como pasa de 9, escribimos ${s % 10} y llevamos 1.`, escribe: `${COLS[i]}: ${x} + ${y}${carry ? ` + ${carry}` : ""} = ${s}` }
-      : { explica: `Sumamos las ${COLS[i]}: ${x} + ${y}${traia} = ${s}.`, escribe: `${COLS[i]}: ${x} + ${y}${carry ? ` + ${carry}` : ""} = ${s}` });
+      ? { explica: `Sumamos las ${colName(i)}: ${x} + ${y}${traia} = ${s}. Como pasa de 9, escribimos ${s % 10} y llevamos 1.`, escribe: `${colName(i)}: ${x} + ${y}${carry ? ` + ${carry}` : ""} = ${s}` }
+      : { explica: `Sumamos las ${colName(i)}: ${x} + ${y}${traia} = ${s}.`, escribe: `${colName(i)}: ${x} + ${y}${carry ? ` + ${carry}` : ""} = ${s}` });
     carry = s >= 10 ? 1 : 0;
   }
   if (carry) steps.push({ explica: "Nos llevábamos 1, que va al frente.", escribe: "llevamos 1" });
@@ -701,8 +705,8 @@ function pasosResta(a, b) {
   const steps = []; let borrow = 0;
   for (let i = 0; i < A.length; i++) {
     const x = A[i] - borrow, y = B[i] || 0;
-    if (x < y) { steps.push({ explica: `Restamos las ${COLS[i]}: ${x} - ${y} no se puede, así que pedimos prestada una unidad a la columna de la izquierda (vale 10): ${x + 10} - ${y} = ${x + 10 - y}.`, escribe: `${COLS[i]}: ${x + 10} - ${y} = ${x + 10 - y}` }); borrow = 1; }
-    else { steps.push({ explica: `Restamos las ${COLS[i]}: ${x} - ${y} = ${x - y}.`, escribe: `${COLS[i]}: ${x} - ${y} = ${x - y}` }); borrow = 0; }
+    if (x < y) { steps.push({ explica: `Restamos las ${colName(i)}: ${x} - ${y} no se puede, así que pedimos prestada una unidad a la columna de la izquierda (vale 10): ${x + 10} - ${y} = ${x + 10 - y}.`, escribe: `${colName(i)}: ${x + 10} - ${y} = ${x + 10 - y}` }); borrow = 1; }
+    else { steps.push({ explica: `Restamos las ${colName(i)}: ${x} - ${y} = ${x - y}.`, escribe: `${colName(i)}: ${x} - ${y} = ${x - y}` }); borrow = 0; }
   }
   return { texto: `${a} - ${b}`, answer: a - b, steps };
 }

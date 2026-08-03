@@ -250,6 +250,20 @@ async function unitTests() {
       if (r) { const real = evalOp(r.q.texto); check(`aritmética concreta [${q}]: práctica CORRECTA`, real != null && checkAnswer(r.q.respuesta, String(real)).correct, `preg=${r.q.texto} resp=${r.q.respuesta}`); }
     }
     check(`"enséñame a sumar" NO enseña fracciones (bug del cliente)`, !/fracc|numerador|denominador/i.test(texto(correrBoton({ query: "enséñame a sumar" }))));
+    // NÚMEROS GRANDES (8 dígitos): el arreglo de columnas antes solo tenía 4 nombres y la pizarra mostraba
+    // "undefined" desde el 5.º dígito en suma/resta. Debe rotular bien y dar el resultado exacto. (Cliente
+    // pidió "dividir números de 8 dígitos"; al probarlo se detectó el defecto en suma/resta.)
+    for (const [q, tema, esp] of [
+      ["¿cuánto es 87654321 + 12345678?", "suma", "99999999"],
+      ["99999999 - 11111111", "resta", "88888888"],
+      ["12345678 ÷ 6", "division", "2057613"],
+      ["12000000 ÷ 8", "division", "1500000"],
+    ]) {
+      const r = correrBoton({ query: q });
+      check(`números grandes [${q}]: tema ${tema}, sin "undefined", resultado ${esp}`,
+        !!r && r.tema === tema && !/undefined/i.test(texto(r)) && new RegExp(`=\\s*${esp}\\b`).test(texto(r).replace(/\s+/g, " ")),
+        r ? (/undefined/i.test(texto(r)) ? "tiene UNDEFINED" : r.tema) : "null");
+    }
     // BUG del cliente: "Resuelve 5 / 5" (con "/") caía a Gemini y no presentaba ejercicio final de práctica.
     // La división con "/" exacta debe ir a la lección determinista y CERRAR con "Ahora te toca a ti" + práctica.
     {
