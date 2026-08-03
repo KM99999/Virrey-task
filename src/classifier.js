@@ -83,9 +83,13 @@ function pideQueLeDenEjercicio(norm) {
     return false;
   }
   // Verbo de "entrégame/genera/déjame" seguido (cerca) de un sustantivo de problema.
-  const daProblema = /\b(dame|damelos?|dejame|deja|quiero|necesito|proponme|propon|ponme|pon|genera|generame|crea|creame|hazme|haz|brindame|plantea|planteame|sugiere|sugiereme|regalame|facilitame|pasame|pasa)\b[\s\S]{0,30}\b(ejercicio|ejercicios|ecuacion|ecuaciones|problema|problemas)\b/;
+  const daProblema = /\b(dame|damelos?|deme|denme|dejame|deja|quiero|quisiera|necesito|proponme|propon|ponme|pon|genera|generame|crea|creame|hazme|haz|brindame|brinde|plantea|planteame|sugiere|sugiereme|regalame|facilitame|faciliteme|facilite|proporcioname|proporcioneme|proporcione|pasame|pasa|muestrame|muestra)\b[\s\S]{0,40}\b(ejemplo|ejemplos|ejercicio|ejercicios|ecuacion|ecuaciones|problema|problemas)\b/;
   const paraPracticar = /\bpara (practicar|ejercitar|reforzar)\b/;
-  const paraQueYoResuelva = /\bpara que (yo|tu)?\s*(lo|la|los|las)?\s*(resuelva|resuelvas|practique|trabaje|intente)\b|\bque yo\s*(lo|la|los|las)?\s*resuelva\b/;
+  // "para que (yo/pueda/lo pueda) resolver(lo)", "para poder resolverlo", "para resolver": finalidad de que
+  // el alumno lo resuelva ÉL. Antes solo casaba "para que yo resuelva" — perdía "para que PUEDA resolver".
+  const paraQueYoResuelva = /\bpara\s+(?:que\s+)?(?:yo|tu|usted|el|ella|nosotros|uno)?\s*(?:lo|la|los|las)?\s*(?:pueda|puedas|podamos|poder|pued\w*)?\s*(?:lo|la|los|las)?\s*(?:resolver\w*|resuelv\w*|practicar|practiqu\w*|ejercit\w*)\b/;
+  // OJO: el daProblema exige un verbo de "entregar" + sustantivo de problema; combinado con la finalidad
+  // "para que pueda resolver" cubre "proporcióneme un ejemplo para que pueda resolver el problema".
   return daProblema.test(norm) || paraPracticar.test(norm) || paraQueYoResuelva.test(norm);
 }
 

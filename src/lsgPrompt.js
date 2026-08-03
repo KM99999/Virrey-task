@@ -1370,13 +1370,20 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   // Queja del cliente: "le pido ejercicios para yo resolverlos y me sigue enseñando / no obedece".
   const nPract = normBoton(query);
   const pideSolucion = /\b(la solucion|el resultado|la respuesta|resuelveme|dame el valor|dame la solucion)\b/.test(nPract);
+  // Pregunta CONCEPTUAL ("¿qué es…?", "¿cómo se…?", "¿por qué…?"): NO forzar práctica por un "para resolver"
+  // que en realidad es finalidad de una explicación ("cómo se hace para resolver…").
+  const preguntaConceptual = /\bque\s+(es|son)\b|\bcomo\s+se\b|\bpor\s+que\b|\bpara\s+que\s+sirve|\bconcepto\s+de\b|\bqu[eé]\s+significa/.test(nPract);
+  // FINALIDAD de resolver/practicar UNO MISMO: "para que (yo/pueda/lo pueda) resolver(lo)", "para poder
+  // resolverlo", "para resolver". Antes solo casaba "para que yo resuelva" — se perdía "para que PUEDA
+  // resolver" (queja del cliente: "proporcióneme un ejemplo para que pueda resolver el problema" iba a Gemini).
+  const finalidadResolver = /\bpara\s+(?:que\s+)?(?:yo|tu|usted|el|ella|nosotros|uno)?\s*(?:lo|la|los|las)?\s*(?:pueda|puedas|podamos|poder|pued\w*)?\s*(?:lo|la|los|las)?\s*(?:resolver\w*|resuelv\w*|practicar|practiqu\w*|ejercit\w*)\b/.test(nPract);
   const pidePracticar = !pideSolucion && (
     seguimiento === "practicar"
     || /\bpractic/.test(nPract)
     || /\bpara\s+(practicar|ejercitar|reforzar)\b/.test(nPract)
-    || /\bpara\s+que\s+(?:yo|tu)?\s*(?:lo|la|los|las)?\s*(?:resuelva|resuelvas|practique|trabaje|intente)\b|\bque\s+yo\s*(?:lo|la|los|las)?\s*resuelv/.test(nPract)
-    || /\bpara\s+(?:yo\s+)?resolver(?:l[oa]s?)?\b|\bpor\s+mi\s+cuenta\b|\byo\s+mism[oa]\b/.test(nPract)
+    || /\bpor\s+mi\s+cuenta\b|\byo\s+mism[oa]\b/.test(nPract)
     || /\bejercicios\b|\bproblemas\b/.test(nPract)
+    || (finalidadResolver && !preguntaConceptual)
   );
   const commonRet = (tema, lsg) => ({ tema, escena: lsg.escena, intencion: lsg.intencion || "resolver", modelo: `${tema}-resuelto`, lsg });
 

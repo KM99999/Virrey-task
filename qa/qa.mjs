@@ -408,6 +408,20 @@ async function unitTests() {
     check(`control: "enséñame a dividir" sigue siendo CONCEPTO (aprender)`, correrBoton({ query: "enséñame a dividir" })?.intencion === "aprender");
     check(`control: "resuelve 20 ÷ 4" sigue siendo RESOLVER`, correrBoton({ query: "resuelve 20 ÷ 4" })?.intencion === "resolver");
     check(`control: "dame un ejercicio de fracciones" (singular) NO es practicar`, correrBoton({ query: "dame un ejercicio de fracciones" })?.intencion !== "practicar");
+    // FINALIDAD "para que PUEDA resolver": el alumno pide un ejemplo para resolverlo ÉL. Antes solo casaba
+    // "para que yo resuelva" y esto iba a Gemini, que devolvía una lección incoherente (terminaba con un
+    // "2x = 6" suelto tras verificar x=5). Con tema núcleo activo → practicar determinista y coherente.
+    for (const q of [
+      "Por favor, proporcióneme un ejemplo para que pueda resolver el problema.",
+      "dame un ejemplo para poder resolverlo yo",
+      "un ejercicio para que lo pueda resolver",
+    ]) {
+      const r = correrBoton({ query: q, currentTopic: "Resuelve 2x + 5 = 15" });
+      check(`finalidad 'pueda resolver' [${q.slice(0, 32)}…]: practicar determinista (no Gemini)`, !!r && r.intencion === "practicar", r ? r.tema + "/" + r.intencion : "null (Gemini)");
+      if (r) check(`finalidad 'pueda resolver' [${q.slice(0, 32)}…]: sin "2x = 6" suelto`, !r.pizarras.some((p) => /^\s*2x\s*=\s*6\s*$/.test(p)));
+    }
+    // GUARDA: una pregunta CONCEPTUAL con "para resolver" NO debe forzar practicar ("cómo se hace para resolver").
+    check(`control: "¿cómo se resuelve una ecuación?" NO es practicar`, correrBoton({ query: "¿cómo se resuelve una ecuación lineal?", currentTopic: "ecuaciones lineales" })?.intencion !== "practicar");
   }
   // ── RECUPERACIÓN DE TEMA desde el HISTORIAL: "otro ejemplo" SIN tema activo (contexto/currentTopic/
   //    seguimiento vacíos) pero con el tema en el HISTORIAL de conversación debe seguir siendo DETERMINISTA
