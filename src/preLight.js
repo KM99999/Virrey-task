@@ -1344,6 +1344,22 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
     const f = solveFractionFromText(q.texto);
     if (f) setResp(f);
   }
+
+  // GUARDA FINAL universal (ruta IA): si tras TODO lo anterior la pregunta sigue siendo un EJERCICIO de
+  // cálculo SIN respuesta verificable, se vuelve de COMPRENSIÓN. Nunca se entrega un ejercicio que el motor
+  // no sabe calificar (cerraría con un cuadro de respuesta que no evalúa nada, o con la respuesta —posible-
+  // mente errónea— de la IA). Se respetan: las preguntas de comprensión y las ON-TOPIC con potencias/
+  // binomios (cuadráticas), que se conservan como ejercicio sin nota. Cierra toda la clase de "ejercicio
+  // incoherente / sin respuesta" en temas que el motor determinista no cubre.
+  if (!(q.respuesta && String(q.respuesta).trim())) {
+    const esComprension = /entendiste|comprendiste|te gustar|quieres practicar|alguna duda|qued[oó]\s+claro/i.test(q.texto);
+    const enTema = /[a-z]\s*(?:\^\s*[2-9]|[²³⁴⁵⁶⁷⁸⁹])|\)\s*\(/i.test(q.texto);
+    const esEjercicioCalc = /\d/.test(q.texto) && /(cu[aá]nt|cu[aá]l|calcul|resultad|\bvale\b|resuelv|hall|despej|[aá]rea|per[ií]metro|volumen)/i.test(q.texto);
+    if (esEjercicioCalc && !esComprension && !enTema) {
+      q.texto = "¿Entendiste la explicación?";
+      const pp = pasos.find((x) => x.tipo === "preguntar"); if (pp) pp.texto = q.texto;
+    }
+  }
 }
 
 function estimateDuration(pasos) {
