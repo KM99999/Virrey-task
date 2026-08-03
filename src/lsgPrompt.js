@@ -828,13 +828,21 @@ function practicaMismoTamano(op, a, b, exacta = true) {
       const xb = lo(La) + 1;
       return `${xb % yb === 0 ? xb + 1 : xb} ÷ ${yb}`;
     }
-    // EXACTA: a' = b' × q'. Si el divisor no deja sitio para un cociente ≥ 2 (La ≤ Lb), se acorta una cifra.
-    const Lb2 = Lb >= La ? Math.max(1, La - 1) : Lb;
-    const b2 = rnd(Lb2, b) || 2;
+    // EXACTA: a' = b' × q', con a' de La dígitos y b' de Lb dígitos (MISMO tamaño que el ejemplo) y q' ≥ 2.
+    // El divisor se elige en [2, hi(La)/2] para que b'×2 aún tenga La dígitos → así conserva sus Lb cifras
+    // (antes se acortaba el divisor y "78 ÷ 39" daba práctica "78 ÷ 6"). Solo si ni el menor divisor de Lb
+    // cifras cabe (Lb > La, dividendo < divisor — inusual) se acorta una cifra.
+    const upper = Math.floor(hi(La) / 2);
+    let Lb2 = Lb;
+    if (lo(Lb2) > upper) Lb2 = Math.max(1, La - 1);
+    const bLo = Math.max(2, lo(Lb2)), bHi = Math.max(bLo, Math.min(hi(Lb2), upper));
+    s = (Math.imul(s, 1103515245) + 12345) >>> 0;
+    const b2 = bLo + (s % (bHi - bLo + 1));
     const qMin = Math.max(2, Math.ceil(lo(La) / b2));
     const qMax = Math.max(qMin, Math.floor(hi(La) / b2));
     s = (Math.imul(s, 1103515245) + 12345) >>> 0;
-    const q = qMin + (s % (qMax - qMin + 1));
+    let q = qMin + (s % (qMax - qMin + 1));
+    if (b2 === Math.abs(b) && b2 * q === Math.abs(a)) q = q < qMax ? q + 1 : (q > qMin ? q - 1 : q); // ≠ ejemplo
     return `${b2 * q} ÷ ${b2}`;
   }
   return null;

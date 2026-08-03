@@ -267,7 +267,9 @@ async function unitTests() {
     // La PRÁCTICA debe tener el MISMO número de dígitos que el EJEMPLO que escribió el alumno (cliente:
     // ejemplo de 7 dígitos y práctica "47 + 25"). Y ser válida (resta no negativa, división exacta).
     const perfil = (t) => { const m = String(t).match(/(\d+)\s*[+\-×÷]\s*(\d+)/); return m ? `${m[1].length}x${m[2].length}` : "?"; };
-    for (const q of ["2876390 + 2817200", "87654321 + 12345678", "99999999 - 11111111", "12000000 ÷ 8", "12345678 ÷ 6", "24 + 17", "144 ÷ 12"]) {
+    // Incluye divisiones donde el DIVISOR está cerca del dividendo en nº de cifras (78÷39, 812÷203) y casos
+    // pequeños (8÷4, 6÷3): antes la práctica acortaba el divisor ("78 ÷ 39" → "78 ÷ 6"). Debe conservar el tamaño.
+    for (const q of ["2876390 + 2817200", "87654321 + 12345678", "99999999 - 11111111", "12000000 ÷ 8", "12345678 ÷ 6", "24 + 17", "144 ÷ 12", "78 ÷ 39", "812 ÷ 203", "8 ÷ 4", "6 ÷ 3", "525 ÷ 105"]) {
       const r = correrBoton({ query: q });
       if (!r) { check(`práctica mismo tamaño [${q}]: determinista`, false, "null"); continue; }
       const pr = (r.q.texto.match(/(\d+\s*[+\-×÷]\s*\d+)/) || [])[1] || "";
