@@ -274,6 +274,25 @@ async function unitTests() {
       check(`práctica mismo tamaño [${q}]: práctica ${perfil(pr)} = ejemplo ${perfil(q)}`, perfil(pr) === perfil(q), `preg=${pr}`);
       check(`práctica mismo tamaño [${q}]: práctica CORRECTA`, !!pr && checkAnswer(r.q.respuesta, String(evalOp(pr))).correct, `resp=${r.q.respuesta}`);
     }
+    // DIVISIÓN NO EXACTA (con decimales): "453726 / 79042" iba a Gemini y proponía una práctica exacta y
+    // chica ("125 ÷ 5"). Debe ser DETERMINISTA, resolver a un decimal (≈), y proponer una práctica del MISMO
+    // tamaño y TAMBIÉN con decimales (calificable). (Queja del cliente: "el problema es más fácil, difiere en
+    // los decimales".) Las divisiones NO exactas PEQUEÑAS (5/8, 7/3) siguen yendo a Gemini (no se secuestran).
+    const perfilDiv = (t) => { const m = String(t).match(/(\d+)\s*÷\s*(\d+)/); return m ? `${m[1].length}x${m[2].length}` : "?"; };
+    const truncar1 = (a, b) => a % b === 0 ? a / b : Math.floor(a / b) + Math.floor(((a % b) * 10) / b) / 10;
+    for (const [q, perf] of [["453726 / 79042", "6x5"], ["453726 ÷ 79042", "6x5"], ["987654 / 3212", "6x4"]]) {
+      const r = correrBoton({ query: q });
+      check(`división decimal [${q}]: DETERMINISTA (no Gemini), tema división`, !!r && r.tema === "division", r ? r.tema : "null (Gemini)");
+      if (!r) continue;
+      check(`división decimal [${q}]: el EJEMPLO se resuelve con "≈" (decimal)`, /≈/.test(texto(r)));
+      const pr = (r.q.texto.match(/(\d+\s*÷\s*\d+)/) || [])[1] || "";
+      const pm = pr.match(/(\d+)\s*÷\s*(\d+)/);
+      check(`división decimal [${q}]: práctica ${perfilDiv(pr)} = ejemplo ${perf}`, perfilDiv(pr) === perf, `preg=${pr}`);
+      check(`división decimal [${q}]: práctica TAMBIÉN no exacta (con decimales)`, !!pm && (+pm[1]) % (+pm[2]) !== 0, `preg=${pr}`);
+      check(`división decimal [${q}]: respuesta de práctica CORRECTA (1 decimal)`, !!pm && checkAnswer(r.q.respuesta, String(truncar1(+pm[1], +pm[2]))).correct, `resp=${r.q.respuesta}`);
+    }
+    check(`división decimal PEQUEÑA "5 / 8" NO se secuestra (→ Gemini)`, correrBoton({ query: "5 / 8" }) === null);
+    check(`división decimal PEQUEÑA "7 / 3" NO se secuestra (→ Gemini)`, correrBoton({ query: "7 / 3" }) === null);
     // BUG del cliente: "Resuelve 5 / 5" (con "/") caía a Gemini y no presentaba ejercicio final de práctica.
     // La división con "/" exacta debe ir a la lección determinista y CERRAR con "Ahora te toca a ti" + práctica.
     {

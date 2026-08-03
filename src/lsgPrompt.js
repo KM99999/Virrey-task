@@ -721,18 +721,38 @@ function pasosMult(a, b) {
   return { texto: `${a} × ${b}`, answer: a * b, steps };
 }
 function pasosDiv(a, b) {
-  const q = a / b;
-  return { texto: `${a} ÷ ${b}`, answer: q, steps: [
-    { explica: `Dividir ${a} ÷ ${b} es repartir ${a} en ${b} partes iguales. Buscamos el número que por ${b} da ${a}: como ${b} × ${q} = ${a}, cada parte es ${q}.`, escribe: `${a} ÷ ${b} = ${q}   (porque ${b} × ${q} = ${a})` },
+  if (a % b === 0) {
+    const q = a / b;
+    return { texto: `${a} ÷ ${b}`, answer: q, exacta: true, steps: [
+      { explica: `Dividir ${a} ÷ ${b} es repartir ${a} en ${b} partes iguales. Buscamos el número que por ${b} da ${a}: como ${b} × ${q} = ${a}, cada parte es ${q}.`, escribe: `${a} ÷ ${b} = ${q}   (porque ${b} × ${q} = ${a})` },
+    ] };
+  }
+  // NO exacta → división larga hasta UN decimal (aproximado, como se ve en la escuela). Se calcula la parte
+  // entera, el resto, y un decimal bajando un cero. El resultado es TRUNCADO a un decimal (coincide con los
+  // pasos mostrados). Antes estas divisiones caían a Gemini, que daba una práctica de otro tamaño/tipo.
+  const entero = Math.floor(a / b);
+  const prod = b * entero;
+  const resto = a - prod;
+  const resto10 = resto * 10;
+  const dec = Math.floor(resto10 / b);
+  const aprox = entero + dec / 10;
+  return { texto: `${a} ÷ ${b}`, answer: aprox, exacta: false, aproximado: true, steps: [
+    { explica: `¿Cuántas veces cabe ${b} en ${a}? Cabe ${entero} veces, porque ${b} × ${entero} = ${prod} (y ${b} × ${entero + 1} ya se pasa de ${a}).`, escribe: `${b} × ${entero} = ${prod}` },
+    { explica: `Restamos: ${a} − ${prod} = ${resto}. Como ${resto} es menor que ${b}, la división no es exacta: para sacar un decimal, bajamos un cero y dividimos ${resto10} entre ${b}.`, escribe: `${a} − ${prod} = ${resto}` },
+    { explica: `${resto10} ÷ ${b} cabe ${dec} veces (${b} × ${dec} = ${b * dec}). Ese es el primer decimal.`, escribe: `${resto10} ÷ ${b} ≈ ${dec}` },
+    { explica: `Así, con un decimal, ${a} ÷ ${b} ≈ ${entero}.${dec}.`, escribe: `${a} ÷ ${b} ≈ ${entero}.${dec}` },
   ] };
 }
 // Detecta un CÁLCULO concreto ("24 + 17", "6 × 7", "52 - 27", "20 ÷ 4", "20 / 4", "20 entre 4", "6 por 7"). Solo
-// números enteros; división exacta y resta no negativa (si no, → null y lo maneja Gemini). Las fracciones
-// ("5/8 + 2/8") y ecuaciones ("2x + 5 = 15") ya se resolvieron en ramas anteriores, así que aquí no llegan.
+// números enteros; resta no negativa (si no, → null y lo maneja Gemini). Las fracciones ("5/8 + 2/8") y
+// ecuaciones ("2x + 5 = 15") ya se resolvieron en ramas anteriores, así que aquí no llegan.
+// DIVISIÓN: exacta de cualquier tamaño; NO exacta (con decimales) solo si el dividendo es GRANDE (≥ 1000),
+// para no secuestrar cosas tipo "5/8" o "7/3" que suelen ser fracciones (esas siguen yendo a Gemini/fracciones).
+const divOK = (a, b) => !!b && (a % b === 0 || a >= 1000);
 function extraerOperacion(text) {
   const s = String(text).replace(/\s+/g, " ").trim(); let m;
-  if (/[÷/]/.test(s) && (m = s.match(/(\d+)\s*[÷/]\s*(\d+)/))) { const a = +m[1], b = +m[2]; return (b && a % b === 0) ? { op: "division", a, b } : null; }
-  if ((m = s.match(/(\d+)\s+entre\s+(\d+)/i))) { const a = +m[1], b = +m[2]; return (b && a % b === 0) ? { op: "division", a, b } : null; }
+  if (/[÷/]/.test(s) && (m = s.match(/(\d+)\s*[÷/]\s*(\d+)/))) { const a = +m[1], b = +m[2]; return divOK(a, b) ? { op: "division", a, b } : null; }
+  if ((m = s.match(/(\d+)\s+entre\s+(\d+)/i))) { const a = +m[1], b = +m[2]; return divOK(a, b) ? { op: "division", a, b } : null; }
   if ((m = s.match(/(\d+)\s*(?:×|\*)\s*(\d+)/))) return { op: "multiplicacion", a: +m[1], b: +m[2] };
   if ((m = s.match(/(\d+)\s+(?:x|por)\s+(\d+)/i))) return { op: "multiplicacion", a: +m[1], b: +m[2] };
   if ((m = s.match(/(\d+)\s*-\s*(\d+)/))) { const a = +m[1], b = +m[2]; return a >= b ? { op: "resta", a, b } : null; }
@@ -760,8 +780,10 @@ const ARIT = {
 // Genera una PRÁCTICA con el MISMO número de dígitos que el ejemplo (a, b) que escribió el alumno, para
 // cada operación. Antes, al escribir un cálculo grande ("2876390 + 2817200"), la práctica salía de los
 // presets pequeños ("47 + 25"), inconsistente con el ejemplo. (Pedido del cliente: misma cantidad de
-// dígitos.) Determinista (misma consulta → misma práctica) vía Math.imul. Resta NO negativa; división EXACTA.
-function practicaMismoTamano(op, a, b) {
+// dígitos.) Determinista (misma consulta → misma práctica) vía Math.imul. Resta NO negativa. La división
+// conserva el TIPO del ejemplo: si el ejemplo es EXACTO, la práctica es exacta; si da DECIMALES, la práctica
+// también da decimales (mismo nº de dígitos) — el cliente notó que el ejemplo era decimal y la práctica no.
+function practicaMismoTamano(op, a, b, exacta = true) {
   const lo = (L) => (L <= 1 ? 1 : Math.pow(10, L - 1));
   const hi = (L) => Math.pow(10, L) - 1;
   const La = String(Math.abs(a)).length, Lb = String(Math.abs(b)).length;
@@ -782,8 +804,21 @@ function practicaMismoTamano(op, a, b) {
   }
   if (op === "multiplicacion") return `${rnd(La, a)} × ${rnd(Lb, b)}`;
   if (op === "division") {
-    // dividendo de La dígitos, divisor de Lb dígitos, división EXACTA: a' = b' × q'. Si el divisor no deja
-    // sitio para un cociente ≥ 2 (La ≤ Lb), se acorta el divisor una cifra.
+    if (!exacta) {
+      // División NO exacta (con decimales) del mismo tamaño: dividendo de La dígitos, divisor de Lb, con
+      // resto (a' % b' ≠ 0) y primer decimal ≥ 1 (para que se vea claramente el decimal). Intentos acotados.
+      for (let k = 0; k < 20; k++) {
+        const x = rnd(La, a), y = rnd(Lb, b) || 3;
+        if (y <= 1 || x % y === 0) continue;
+        if (Math.floor(((x % y) * 10) / y) < 1) continue; // primer decimal 0 → no se aprecia
+        return `${x} ÷ ${y}`;
+      }
+      // Respaldo determinista garantizado NO exacto: dividendo terminado en 1 sobre un divisor par.
+      const yb = Math.max(3, rnd(Lb, b) | 1);
+      const xb = lo(La) + 1;
+      return `${xb % yb === 0 ? xb + 1 : xb} ÷ ${yb}`;
+    }
+    // EXACTA: a' = b' × q'. Si el divisor no deja sitio para un cociente ≥ 2 (La ≤ Lb), se acorta una cifra.
     const Lb2 = Lb >= La ? Math.max(1, La - 1) : Lb;
     const b2 = rnd(Lb2, b) || 2;
     const qMin = Math.max(2, Math.ceil(lo(La) / b2));
@@ -794,19 +829,27 @@ function practicaMismoTamano(op, a, b) {
   }
   return null;
 }
+// Enunciado de la pregunta de práctica según el tipo (exacta → "solo el número"; con decimales → "un decimal").
+const pregArit = (P) => P.aproximado
+  ? `¿Cuánto es ${P.texto}? Como no es exacta, da el resultado con UN decimal (por ejemplo, ${P.answer}).`
+  : `¿Cuánto es ${P.texto}? Escribe solo el número.`;
 function aritmeticaLSG(opts, cfg) {
   let { ejemplo, practica } = elegirBoton(cfg.lista, opts);
+  const op = cfg.escena.replace(/_resuelta$/, "");
   // Si el alumno ESCRIBIÓ el cálculo (instancia), la práctica debe tener el MISMO número de dígitos que su
-  // ejemplo (no un preset chico). Cliente: ejemplo de 7 dígitos y práctica "47 + 25".
+  // ejemplo (no un preset chico) y —en división— el MISMO tipo (exacta o con decimales). Cliente: ejemplo de
+  // 7 dígitos y práctica "47 + 25"; y ejemplo con decimales pero práctica exacta ("125 ÷ 5").
   if (opts.instancia) {
     const [ea, eb] = parseAB(ejemplo);
-    const gen = practicaMismoTamano(cfg.escena.replace(/_resuelta$/, ""), ea, eb);
+    const ejExacta = op !== "division" || ea % eb === 0;
+    const gen = practicaMismoTamano(op, ea, eb, ejExacta);
     if (gen) practica = gen;
   }
   const E = cfg.pasos(...parseAB(ejemplo)), P = cfg.pasos(...parseAB(practica));
+  const eq = E.aproximado ? "≈" : "=";
   if (opts.practica) return practicaLSG(cfg.escena, {
     recordatorio: `Recuerda: para ${cfg.verbo}, ${cfg.rec}`,
-    reto1: E.texto, preg: `¿Cuánto es ${E.texto}? Escribe solo el número.`, resp: E.answer, reto2: P.texto,
+    reto1: E.texto, preg: pregArit(E), resp: E.answer, reto2: P.texto,
   });
   const dir = [{ tipo: "avatar", accion: "sonreir" }];
   if (opts.concepto) {
@@ -820,9 +863,9 @@ function aritmeticaLSG(opts, cfg) {
     { tipo: "esperar", segundos: 1 },
   );
   for (const s of E.steps) { dir.push({ tipo: "hablar", texto: s.explica }); dir.push({ tipo: "pizarra", accion: "escribir", contenido: s.escribe }); }
-  dir.push({ tipo: "hablar", texto: `Así, ${E.texto} = ${E.answer}. Ahora te toca a ti.` });
+  dir.push({ tipo: "hablar", texto: `Así, ${E.texto} ${eq} ${E.answer}. Ahora te toca a ti.` });
   dir.push({ tipo: "pizarra", accion: "escribir", contenido: `${P.texto} = ?` });
-  dir.push({ tipo: "preguntar", texto: `¿Cuánto es ${P.texto}? Escribe solo el número.`, respuesta: String(P.answer), esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" });
+  dir.push({ tipo: "preguntar", texto: pregArit(P), respuesta: String(P.answer), esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" });
   return { escena: cfg.escena, intencion: opts.concepto ? "aprender" : "resolver", duracion_estimada: 60, _mock: true, directivas: dir };
 }
 export function sumaResueltaLSG(opts = {}) { return aritmeticaLSG(opts, ARIT.suma); }
