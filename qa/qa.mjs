@@ -373,13 +373,31 @@ async function unitTests() {
       previo = r.resumen;
     }
     check(`derivada aplicada: rota por los 5 escenarios (no se atasca en 3)`, set.size >= 5, `distintos=${set.size}: ${[...set].join(", ")}`);
-    // 3) falso negativo: x en ambos lados
-    for (const [eq, esp] of [["5x - 7 = 2x + 5", "4"], ["x + 3 = 2x", "3"], ["3x + 2 = x + 10", "4"], ["4x = 2x + 6", "3"]]) {
+    // 3) falso negativo: x en ambos lados (incl. NEGATIVAS y FRACCIONARIAS → respuesta exacta, no decimal)
+    const gemPreg = (eq, resp) => {
       const g = processLSG({ escena: "resolver_ecuacion", intencion: "practicar", directivas: [
         { tipo: "pizarra", accion: "escribir", contenido: eq },
-        { tipo: "preguntar", texto: `¿Cuánto vale x en la ecuación ${eq}?`, esperar_respuesta: true }] }, "practicar");
-      const pg = g.pasos.find((p) => p.tipo === "preguntar");
+        { tipo: "preguntar", texto: `¿Cuánto vale x en la ecuación ${eq}?`, esperar_respuesta: true, ...(resp !== undefined ? { respuesta: resp } : {}) }] }, "practicar");
+      return g.pasos.find((p) => p.tipo === "preguntar");
+    };
+    for (const [eq, esp] of [["5x - 7 = 2x + 5", "4"], ["x + 3 = 2x", "3"], ["3x + 2 = x + 10", "4"], ["4x = 2x + 6", "3"], ["2x + 8 = 3x - 2", "10"], ["2x + 2 = 3x - 7", "9"], ["7x = 3", "3/7"], ["3x = 7", "7/3"], ["3x - 6 = x + 9", "15/2"]]) {
+      const pg = gemPreg(eq);
       check(`falso negativo [${eq}]: respuesta correcta ${esp} se califica BIEN`, checkAnswer(esp, pg.respuesta).correct === true, `PRE Light resp=${pg.respuesta}`);
+    }
+    // Aunque la IA meta una respuesta ERRÓNEA, PRE Light la corrige (no confía a ciegas).
+    const pgMala = gemPreg("5x - 7 = 2x + 5", "999");
+    check(`falso negativo: PRE Light corrige una respuesta ERRÓNEA de la IA`, checkAnswer("4", pgMala.respuesta).correct === true, `resp=${pgMala.respuesta}`);
+    // OFF-TOPIC con notación de función (trig/log): NUNCA califica con el número (posiblemente malo) de la IA.
+    for (const [board, preg, mala] of [["sen(30) = 0.5", "¿Cuánto es sen(90)?", "90"], ["log₂(8) = 3", "¿Cuánto es log₂(16)?", "8"]]) {
+      const g = processLSG({ escena: "aprender", intencion: "aprender", directivas: [
+        { tipo: "pizarra", accion: "escribir", contenido: board },
+        { tipo: "preguntar", texto: preg, esperar_respuesta: true, respuesta: mala }] }, "aprender");
+      const p = g.pasos.find((x) => x.tipo === "preguntar");
+      check(`off-topic función [${preg}]: NO conserva la respuesta sin verificar de la IA`, !(p.respuesta && String(p.respuesta).trim()) || /entend/i.test(p.texto), `resp=${p.respuesta}`);
+    }
+    // Un VERBO de enseñar gana a una sesión de práctica (seguimiento="practicar").
+    for (const q of ["enséñame más", "explícame otra vez", "muéstrame el concepto"]) {
+      check(`verbo enseñar en sesión práctica ["${q}"]: NO es practicar`, correrBoton({ query: q, seguimiento: "practicar", contexto: "Enséñame derivadas", currentTopic: "derivadas" })?.intencion !== "practicar");
     }
   }
   // ── EJEMPLO APLICADO / DE LA VIDA REAL de DERIVADAS (queja del cliente): pedir "un ejemplo de la vida

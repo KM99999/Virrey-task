@@ -110,9 +110,13 @@ export function solveLinearFromText(text) {
   const coef = Li.coef - Ri.coef;
   const konst = Ri.konst - Li.konst;
   if (coef === 0) return null;
-  const x = konst / coef;
-  if (!Number.isFinite(x)) return null;
-  return Number.isInteger(x) ? String(x) : String(Math.round(x * 1000) / 1000);
+  if (!Number.isFinite(konst / coef)) return null;
+  // Resultado EXACTO: entero o fracción reducida ("7x = 3" → "3/7"), NO un decimal redondeado ("0.429").
+  // Antes redondeaba a 3 decimales y un alumno que respondía "3/7" (o el decimal exacto) salía MAL
+  // calificado — la misma clase de FALSO NEGATIVO. Coherente con la ruta determinista (solveLinearSteps).
+  if (konst % coef === 0) return String(konst / coef);
+  const g = gcd(konst, coef); let nn = konst / g, dd = coef / g; if (dd < 0) { nn = -nn; dd = -dd; }
+  return `${nn}/${dd}`;
 }
 
 const gcd = (a, b) => { a = Math.abs(a); b = Math.abs(b); while (b) { [a, b] = [b, a % b]; } return a || 1; };
@@ -1165,6 +1169,9 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
   const _boardTodo = flat.filter((d) => d.tipo === "pizarra").map((d) => String(d.contenido || "")).join(" ");
   const temaNoLineal =
     /factoriz|diferencia de cuadrados|binomi|cuadr[aá]tic|[²³⁴⁵⁶⁷⁸⁹]|\)\s*\(|\bsistema\b|matriz|matricial|\bintegral|∫|logaritm|log\s*[₀-₉(_]|trigonometr|\bseno\b|\bcoseno\b|\btangente\b|exponencial/i.test(_txtTodo)
+    // Notación de FUNCIÓN (trig/log/raíz/límite): sen(…), cos(…), tan(…), ln(…), log(…), √, lim. El motor no
+    // las calcula → tema no lineal → nunca se confía en la respuesta (posiblemente errónea) de la IA.
+    || /\b(sen|sin|cos|tan|cot|sec|csc|ln|log|arc\w+)\s*\(|√|\blim\b|\bderivada\s+de\s+(sen|cos|tan|log|ln|e\^)/i.test(_txtTodo)
     || /[a-z]\s*[+\-]\s*[a-z]\s*=/i.test(_boardTodo);
   // La ecuación ORIGINAL del ejercicio (la primera pizarra que es una ecuación LINEAL real, no la solución).
   const ecOriginal = temaNoLineal ? undefined

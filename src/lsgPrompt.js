@@ -1443,7 +1443,7 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
     && !/\bejercicios?\b|\bproblemas?\b|\bpractic/.test(nPract)
     && !finalidadResolver;
   const pidePracticar = !pideSolucion && !pideEjemploVer && (
-    seguimiento === "practicar"
+    (seguimiento === "practicar" && !verboEnsenar)  // un VERBO de enseñar ("enséñame más") gana a la sesión de práctica
     || /\bpractic/.test(nPract)
     || /\bpara\s+(practicar|ejercitar|reforzar)\b/.test(nPract)
     || /\bpor\s+mi\s+cuenta\b|\byo\s+mism[oa]\b/.test(nPract)
