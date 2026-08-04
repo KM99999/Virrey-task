@@ -460,6 +460,36 @@ async function unitTests() {
       const pract1 = (preg1.texto.match(/en (.+?)\?/) || [])[1] || "";
       check(`un lado [2x + 5 = 15] (motor determinista): la práctica sigue siendo de un solo lado`, !esDos(pract1), `práctica=${pract1}`);
     }
+
+    // 7) OTROS PARSERS con menos/rayas UNICODE (la corrección de guiones debía cubrir TODA la clase, no solo
+    //    el solver lineal). Defectos encontrados en auditoría: computeDerivative daba una derivada BASURA
+    //    ("126x⁴¹") con "−"; factorización/fracciones/aritmética devolvían null en vez del resultado.
+    check(`unicode dash: computeDerivative('3x⁴ − 2x²') = 12x³ - 4x`, computeDerivative("derivada de 3x⁴ − 2x²") === "12x³ - 4x", `→ ${computeDerivative("derivada de 3x⁴ − 2x²")}`);
+    check(`unicode dash: computeFactorization('x² − 9') = (x - 3)(x + 3)`, computeFactorization("x² − 9") === "(x - 3)(x + 3)", `→ ${computeFactorization("x² − 9")}`);
+    check(`unicode dash: solveFractionFromText('1/2 − 1/4') = 1/4`, solveFractionFromText("1/2 − 1/4") === "1/4", `→ ${solveFractionFromText("1/2 − 1/4")}`);
+    check(`unicode dash: computeAnswer('50 − 8') = 42`, computeAnswer("50 − 8") === "42", `→ ${computeAnswer("50 − 8")}`);
+
+    // 8) COMA DECIMAL española: "0,5x = 4" NO debe MUTILAR la ecuación a "5x = 4" (respuesta falsa 4/5). El
+    //    coeficiente decimal no es soportado → null (seguro, cae a comprensión). Un decimal en la CONSTANTE
+    //    ("3x = 7,5") sí se resuelve bien (x = 2.5). Antes la coma partía el número y resolvía otra ecuación.
+    check(`coma decimal: '0,5x = 4' → null (no mutila a 5x=4, no da 4/5)`, solveLinearFromText("0,5x = 4") === null, `→ ${solveLinearFromText("0,5x = 4")}`);
+    check(`coma decimal: solveLinearSteps('0,5x = 4') → null (no muestra '5x = 4')`, solveLinearSteps("0,5x = 4") === null, `→ ${solveLinearSteps("0,5x = 4")?.original}`);
+    check(`coma decimal en constante: '3x = 7,5' → 5/2 (correcto)`, checkAnswer(solveLinearFromText("3x = 7,5"), "5/2").correct === true, `→ ${solveLinearFromText("3x = 7,5")}`);
+
+    // 9) checkAnswer tolera el REDONDEO correcto de una respuesta no entera (anti-falso-negativo), sin aflojar
+    //    enteros ni aceptar decimales incorrectos.
+    check(`grading: '2.333' == 7/3 (redondeo correcto)`, checkAnswer("2.333", "7/3").correct === true);
+    check(`grading: '2.33' == 7/3 (redondeo correcto)`, checkAnswer("2.33", "7/3").correct === true);
+    check(`grading: '2.4' ≠ 7/3 (redondeo incorrecto)`, checkAnswer("2.4", "7/3").correct === false);
+    check(`grading: '4.1' ≠ 4 (no afloja enteros)`, checkAnswer("4.1", "4").correct === false);
+    check(`grading: '2' ≠ 7/3 (entero suelto no vale)`, checkAnswer("2", "7/3").correct === false);
+
+    // 10) El PUNTO MEDIO de multiplicación ('·' y variantes) se reconoce igual que '×'/'*' (antes '6 · 7'
+    //     caía a Gemini en vez de dar la lección determinista de multiplicación).
+    for (const mul of ["·", "∙", "⋅", "×", "*"]) {
+      const lM = leccionBotonLSG({ query: `6 ${mul} 7` });
+      check(`multiplicación con '${mul}': lección determinista (no cae a Gemini)`, !!lM && lM.escena === "multiplicacion_resuelta", lM ? `escena=${lM.escena}` : "null");
+    }
   }
   // ── EJEMPLO APLICADO / DE LA VIDA REAL de DERIVADAS (queja del cliente): pedir "un ejemplo de la vida
   //    cotidiana" o "con la variación de la velocidad" NO debe devolver un cálculo/ejercicio numérico

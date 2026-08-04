@@ -69,7 +69,10 @@ function tieneCoeficienteRecortado(text, index) {
 
 export function solveLinearFromText(text) {
   if (typeof text !== "string") return null;
-  const t = normDashes(text.toLowerCase());
+  // Coma decimal española ("0,5") → punto ("0.5"). Sin esto "0,5x = 4" MUTILABA la ecuación: la coma partía
+  // el número y el motor resolvía "5x = 4" (mostrando esa ecuación equivocada) → respuesta falsa. Al unificar,
+  // "0,5x = 4" se comporta como "0.5x = 4" (coeficiente decimal → null, cae a comprensión: honesto, no falso).
+  const t = normDashes(text.toLowerCase()).replace(/(\d),(\d)/g, "$1.$2");
   // Una ecuación LINEAL no tiene POTENCIAS ni PRODUCTOS de binomios. Si hay exponentes (x², x³, x^n,
   // superíndices) o paréntesis de factorización, NO es lineal → null. Evita interpretar un paso de
   // factorización ("En x² - 9: a = x, b = 3") como si fuera una ecuación con solución 3 (regresión que
@@ -136,6 +139,7 @@ const gcd = (a, b) => { a = Math.abs(a); b = Math.abs(b); while (b) { [a, b] = [
 // Devuelve la fracción como "n/m" (o entero) o null si no hay una operación así.
 export function solveFractionFromText(text) {
   if (typeof text !== "string") return null;
+  text = normDashes(text); // "1/2 − 1/4" (menos unicode) debe restar igual que con "-" ASCII
   const m = text.match(/(\d+)\s*\/\s*(\d+)\s*([+\-])\s*(\d+)\s*\/\s*(\d+)/);
   if (!m) return null;
   const n1 = +m[1], d1 = +m[2], op = m[3], n2 = +m[4], d2 = +m[5];
@@ -196,7 +200,7 @@ function evalExpr(expr) {
 // etc. no se soportan → se devuelve null y NO se califica con un número, en vez de fingir).
 export function computeDerivative(text) {
   if (typeof text !== "string") return null;
-  let t = text.toLowerCase();
+  let t = normDashes(text.toLowerCase()); // sin esto "3x⁴ − 2x²" (menos unicode) daba una derivada BASURA ("126x⁴¹ + 2x")
   if (!/deriv|d\s*\/\s*dx/.test(t)) return null;
   // Superíndices Unicode → "^n" para un solo parser.
   t = t.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]+/g, (m) => "^" + [...m].map((c) => "⁰¹²³⁴⁵⁶⁷⁸⁹".indexOf(c)).join(""));
@@ -246,7 +250,7 @@ export function computeDerivative(text) {
 // enteras (así NO se arriesga a calificar mal: mejor sin nota que con un número inventado como "3").
 export function computeFactorization(text) {
   if (typeof text !== "string") return null;
-  const t = text.toLowerCase().replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]+/g, (m) => "^" + [...m].map((c) => "⁰¹²³⁴⁵⁶⁷⁸⁹".indexOf(c)).join(""));
+  const t = normDashes(text.toLowerCase()).replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]+/g, (m) => "^" + [...m].map((c) => "⁰¹²³⁴⁵⁶⁷⁸⁹".indexOf(c)).join(""));
   // "c v^2 - d": coeficiente opcional, variable (una letra), al cuadrado, RESTA (diferencia), nº positivo.
   const m = t.match(/(\d*)\s*\*?\s*([a-z])\s*\^\s*2\s*-\s*(\d+)/);
   if (!m) return null;
@@ -312,6 +316,7 @@ function ejercicioDerivadaSimple(dirs) {
 // Calcula la respuesta EXACTA del ejercicio descrito en el texto, o null si no lo reconoce.
 export function computeAnswer(text) {
   if (typeof text !== "string" || !text.trim()) return null;
+  text = normDashes(text); // "50 − 8" (menos unicode) debe restar; sin esto el regex aritmético ASCII no casaba → null
   // Derivada (regla de la potencia) → respuesta simbólica exacta.
   const der = computeDerivative(text);
   if (der != null) return der;
@@ -409,7 +414,8 @@ export function computeAnswer(text) {
 // Devuelve { original, steps:[{explica, escribe}], answer, varName } o null.
 export function solveLinearSteps(text) {
   if (typeof text !== "string") return null;
-  const t = normDashes(text.toLowerCase());
+  // Coma decimal española → punto (ver nota en solveLinearFromText): evita mutilar "0,5x = 4" a "5x = 4".
+  const t = normDashes(text.toLowerCase()).replace(/(\d),(\d)/g, "$1.$2");
   // Una ecuación LINEAL no tiene POTENCIAS ni PRODUCTOS de binomios. Sin este guard, una CUADRÁTICA
   // ("x² + 2x = 15") "resolvía" su resto lineal ("2x = 15" → 7.5), dando una solución FALSA a una
   // cuadrática (visible en modo demo). Mismo criterio que solveLinearFromText.

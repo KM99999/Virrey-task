@@ -179,7 +179,19 @@ export function checkAnswer(student, expected) {
   const va = numFrom(a);
   const vb = numFrom(b);
   if (Number.isFinite(va) && Number.isFinite(vb)) {
-    return { known: true, correct: Math.abs(va - vb) < 1e-9 };
+    if (Math.abs(va - vb) < 1e-9) return { known: true, correct: true };
+    // El alumno pudo REDONDEAR una respuesta no entera (p.ej. 7/3 → "2.33" o "2.333"). Aceptamos SU decimal
+    // si es el redondeo CORRECTO del valor exacto a la cantidad de decimales que escribió, y el esperado NO es
+    // entero. Así no se marca MAL una respuesta bien redondeada (falso negativo, la queja nº1 del cliente),
+    // sin aflojar la calificación de enteros ni aceptar decimales genuinamente incorrectos ("2.4" para 7/3).
+    const dm = a.match(/\.(\d+)/);
+    const dec = dm ? dm[1].length : 0;
+    if (dec > 0 && !Number.isInteger(vb)) {
+      const p = Math.pow(10, dec);
+      const rounded = Math.round(vb * p) / p;
+      if (Math.abs(va - rounded) < 1e-9) return { known: true, correct: true };
+    }
+    return { known: true, correct: false };
   }
   // Tolerancia de texto para respuestas cortas: una contiene a la otra (p.ej. alumno "sumar 7" vs
   // esperado "sumar 7 a ambos lados"). PERO el match no puede PARTIR un número: "restar 3" no debe

@@ -304,7 +304,7 @@ function detectarOperacion(query) {
   // Si hay exponentes o potencias (x², x^2, x³) es ÁLGEBRA, no una operación simple:
   // evita leer "x^2 - 9" como "2 - 9". Eso lo maneja la diferencia de cuadrados.
   if (/[\^²³]/.test(raw)) return null;
-  const n = raw.replace(/[x×]/g, "*").replace(/÷/g, "/");
+  const n = raw.replace(/[x×·∙⋅]/g, "*").replace(/÷/g, "/");
   const m = n.match(/(-?\d+(?:\.\d+)?)\s*([+\-*/])\s*(-?\d+(?:\.\d+)?)/);
   if (!m) return null;
   const a = Number(m[1]), op = m[2], b = Number(m[3]);
@@ -763,7 +763,7 @@ function extraerOperacion(text) {
   if (new RegExp(`\\d{${LMAX_ARIT + 1},}`).test(s)) return null;
   if (/[÷/]/.test(s) && (m = s.match(/(\d+)\s*[÷/]\s*(\d+)/))) { const a = +m[1], b = +m[2]; return divOK(a, b) ? { op: "division", a, b } : null; }
   if ((m = s.match(/(\d+)\s+entre\s+(\d+)/i))) { const a = +m[1], b = +m[2]; return divOK(a, b) ? { op: "division", a, b } : null; }
-  if ((m = s.match(/(\d+)\s*(?:×|\*)\s*(\d+)/))) return { op: "multiplicacion", a: +m[1], b: +m[2] };
+  if ((m = s.match(/(\d+)\s*(?:×|\*|·|∙|⋅)\s*(\d+)/))) return { op: "multiplicacion", a: +m[1], b: +m[2] };
   if ((m = s.match(/(\d+)\s+(?:x|por)\s+(\d+)/i))) return { op: "multiplicacion", a: +m[1], b: +m[2] };
   if ((m = s.match(/(\d+)\s*-\s*(\d+)/))) { const a = +m[1], b = +m[2]; return a >= b ? { op: "resta", a, b } : null; }
   if ((m = s.match(/(\d+)\s*\+\s*(\d+)/))) return { op: "suma", a: +m[1], b: +m[2] };
