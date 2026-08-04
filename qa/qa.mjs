@@ -330,7 +330,7 @@ async function unitTests() {
   //    y, al compartir números, se veía como "repite el mismo ejemplo" (bug reportado por el cliente).
   for (const [label, abrir, expTema, minDistintos] of [
     ["fracciones",    "dame un ejemplo de fracciones de la vida real",            "fraccion",      3],
-    ["derivadas",     "dame un ejemplo de derivadas de la vida cotidiana",        "derivada",      3],
+    ["derivadas",     "dame un ejemplo de derivadas de la vida cotidiana",        "derivada",      5],
     ["lineal",        "dame un ejemplo de ecuaciones lineales de la vida cotidiana", "lineal",     3],
     ["factorización", "dame un ejemplo de factorización de la vida real",         "factorizacion", 2],
   ]) {
@@ -347,6 +347,40 @@ async function unitTests() {
     check(`aplicado [${label}]: siempre el mismo tema determinista`, temaOk);
     check(`aplicado [${label}]: 'otro ejemplo' NO repite la lección dos veces seguidas`, !repiteConsec);
     check(`aplicado [${label}]: recorre ≥${minDistintos} ejemplos DISTINTOS`, new Set(sigs).size >= minDistintos, `distintos=${new Set(sigs).size} de ${sigs.length}`);
+  }
+  // ── QUEJAS DEL CLIENTE (ronda derivadas): 1) "dame otro ejemplo" = EJEMPLO resuelto, NO ejercicio de
+  //    práctica; 2) la derivada aplicada rota por los 5 escenarios (no 3); 3) FALSO NEGATIVO: una ecuación
+  //    con x en AMBOS lados ("5x - 7 = 2x + 5") debe calificar bien la respuesta correcta.
+  {
+    const txt = (r) => (r?.flat || []).map((d) => `${d.texto || ""} ${d.contenido || ""}`).join(" ");
+    // 1) "ejemplo" vs "ejercicio"
+    const ctxDer = { seguimiento: "practicar", contexto: "Enséñame derivadas", currentTopic: "derivadas" };
+    for (const q of ["dame otro ejemplo", "dame otro ejemplo diferente", "muéstrame otro ejemplo"]) {
+      const r = correrBoton({ query: q, ...ctxDer });
+      check(`ejemplo/ejercicio ["${q}"]: es EJEMPLO (aprender/resolver), NO práctica`, !!r && r.intencion !== "practicar" && !/a practicar.*resuelvas t[uú]/i.test(txt(r)), r ? r.intencion : "null");
+    }
+    for (const q of ["dame un ejercicio más complejo", "quiero practicar", "dame ejercicios para resolverlos yo"]) {
+      const r = correrBoton({ query: q, ...ctxDer });
+      check(`ejemplo/ejercicio ["${q}"]: es PRÁCTICA`, !!r && r.intencion === "practicar", r ? r.intencion : "null");
+    }
+    // 2) rotación aplicada = 5 escenarios distintos (coche, planta, tanque, rampa, fábrica)
+    let previo = "", set = new Set();
+    for (let i = 0; i < 6; i++) {
+      const r = correrBoton({ query: i === 0 ? "dame un ejemplo de derivadas de la vida real" : "otro ejemplo", seguimiento: i === 0 ? "" : "continuacion", contexto: "Enséñame derivadas", currentTopic: "derivadas", previo });
+      if (!r) break;
+      const obj = (r.flat.find((d) => /Veámoslo con/.test(d.texto || ""))?.texto.match(/Veámoslo con ([^:]+):/) || [])[1];
+      if (obj) set.add(obj);
+      previo = r.resumen;
+    }
+    check(`derivada aplicada: rota por los 5 escenarios (no se atasca en 3)`, set.size >= 5, `distintos=${set.size}: ${[...set].join(", ")}`);
+    // 3) falso negativo: x en ambos lados
+    for (const [eq, esp] of [["5x - 7 = 2x + 5", "4"], ["x + 3 = 2x", "3"], ["3x + 2 = x + 10", "4"], ["4x = 2x + 6", "3"]]) {
+      const g = processLSG({ escena: "resolver_ecuacion", intencion: "practicar", directivas: [
+        { tipo: "pizarra", accion: "escribir", contenido: eq },
+        { tipo: "preguntar", texto: `¿Cuánto vale x en la ecuación ${eq}?`, esperar_respuesta: true }] }, "practicar");
+      const pg = g.pasos.find((p) => p.tipo === "preguntar");
+      check(`falso negativo [${eq}]: respuesta correcta ${esp} se califica BIEN`, checkAnswer(esp, pg.respuesta).correct === true, `PRE Light resp=${pg.respuesta}`);
+    }
   }
   // ── EJEMPLO APLICADO / DE LA VIDA REAL de DERIVADAS (queja del cliente): pedir "un ejemplo de la vida
   //    cotidiana" o "con la variación de la velocidad" NO debe devolver un cálculo/ejercicio numérico

@@ -83,7 +83,10 @@ function pideQueLeDenEjercicio(norm) {
     return false;
   }
   // Verbo de "entrégame/genera/déjame" seguido (cerca) de un sustantivo de problema.
-  const daProblema = /\b(dame|damelos?|deme|denme|dejame|deja|quiero|quisiera|necesito|proponme|propon|ponme|pon|genera|generame|crea|creame|hazme|haz|brindame|brinde|plantea|planteame|sugiere|sugiereme|regalame|facilitame|faciliteme|facilite|proporcioname|proporcioneme|proporcione|pasame|pasa|muestrame|muestra)\b[\s\S]{0,40}\b(ejemplo|ejemplos|ejercicio|ejercicios|ecuacion|ecuaciones|problema|problemas)\b/;
+  // OJO: "ejemplo/ejemplos" NO va aquí — pedir "dame otro ejemplo" es querer un EJEMPLO RESUELTO para verlo,
+  // no práctica (queja del cliente: "dame otro ejemplo" le lanzaba un ejercicio). El caso "un ejemplo PARA
+  // QUE PUEDA RESOLVER" lo capta `paraQueYoResuelva` (la finalidad), no el sustantivo "ejemplo".
+  const daProblema = /\b(dame|damelos?|deme|denme|dejame|deja|quiero|quisiera|necesito|proponme|propon|ponme|pon|genera|generame|crea|creame|hazme|haz|brindame|brinde|plantea|planteame|sugiere|sugiereme|regalame|facilitame|faciliteme|facilite|proporcioname|proporcioneme|proporcione|pasame|pasa|muestrame|muestra)\b[\s\S]{0,40}\b(ejercicio|ejercicios|ecuacion|ecuaciones|problema|problemas)\b/;
   const paraPracticar = /\bpara (practicar|ejercitar|reforzar)\b/;
   // "para que (yo/pueda/lo pueda) resolver(lo)", "para poder resolverlo", "para resolver": finalidad de que
   // el alumno lo resuelva ÉL. Antes solo casaba "para que yo resuelva" — perdía "para que PUEDA resolver".

@@ -253,13 +253,25 @@ function pideResolverOtro(q) {
   return otro.test(n) && cosa.test(n) && resolver.test(n);
 }
 
+// "Resuélvela / resuelve la ecuación / muéstrame la solución": quiere ver RESUELTO el ejercicio que YA está
+// en pantalla, NO uno nuevo. (Queja del cliente: "le dije que resuelva la ecuación y, en lugar de
+// resolverla, cambió a un ejercicio nuevo".) Solo si NO trae una expresión/tema nuevo (si nombra uno, es
+// una consulta nueva, p.ej. "resuelve 2x + 5 = 15").
+function pideResolverActual(q) {
+  const n = q.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+  if (nombraOtroTema(q)) return false;                 // trae una ecuación concreta / otro tema → nueva
+  if (/\d/.test(n) && /[a-z]/.test(n)) return false;    // parece una expresión concreta nueva (p.ej. "3x=9")
+  return /\bresuelve(la|lo|las|los|mela|melo)\b|resuelve\s+(la|el|este|esta|ese|esa)\s+(ecuacion|ejercicio|problema|operacion)|resuelve\s+(la\s+ecuacion|el\s+ejercicio)|muestra\w*\s*(me)?\s*(la|el)?\s*(solucion|resultado|respuesta)|dame\s+(la|el)?\s*(solucion|resultado|respuesta)|cual\s+es\s+(la|el)\s+(respuesta|resultado|solucion)|como\s+(se\s+resuelve|queda|termina)/.test(n);
+}
+
 // Clasifica el tipo de SEGUIMIENTO del tema activo (o null si es un tema nuevo).
 function clasificarSeguimiento(q) {
-  // "Explícame los pasos" del ejercicio actual → desglosar ESE ejercicio (solo si hay uno guardado).
-  // Se comprueba PRIMERO: si no, la palabra "ejercicio(s)" haría que el clasificador lo tomara como
-  // "practicar" y generara ejercicios NUEVOS (el defecto reportado). Sin ejercicio guardado, se
-  // trata como "reexplicar" (re-enseñar el tema).
+  // "Explícame los pasos" o "resuélvela" del ejercicio actual → desglosar ESE ejercicio (solo si hay uno
+  // guardado). Se comprueba PRIMERO: si no, la palabra "ejercicio(s)" haría que el clasificador lo tomara
+  // como "practicar" y generara ejercicios NUEVOS (el defecto reportado). Sin ejercicio guardado, "pide
+  // pasos" se trata como "reexplicar"; "resuélvela" sin ejercicio guardado cae al flujo normal.
   if (pidePasos(q)) return lastExercise ? "desglosar" : "reexplicar";
+  if (pideResolverActual(q) && lastExercise) return "desglosar";
   const aj = ajusteNivel(q);            // "mas_facil" | "mas_dificil"
   if (aj) return aj;
   if (esSeguimiento(q)) return "reexplicar"; // "no entendí", "otra vez", "de otra forma"…
@@ -522,7 +534,16 @@ async function submitQuery() {
       body: JSON.stringify(body),
     });
 
-    const data = await res.json();
+    // Se lee como TEXTO y se parsea con cuidado: si el servidor (o un proxy/tiempo de espera de Render)
+    // devuelve una página HTML de error ("<!DOCTYPE html>…"), res.json() lanzaría "Unexpected token '<'"
+    // y el alumno vería ese error crudo. En su lugar, mensaje claro y reintentable. (Defecto reportado.)
+    const raw = await res.text();
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      throw new Error("El servidor tardó en responder o no está disponible en este momento. Espera unos segundos y vuelve a intentarlo.");
+    }
     if (!res.ok) {
       throw new Error(data.error || `Error ${res.status}`);
     }

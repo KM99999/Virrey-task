@@ -65,47 +65,52 @@ export function solveLinearFromText(text) {
   // factorización ("En x² - 9: a = x, b = 3") como si fuera una ecuación con solución 3 (regresión que
   // metía prácticas lineales sin sentido, p.ej. "e - 2 = 5", en lecciones de factorización).
   if (/[²³⁴⁵⁶⁷⁸⁹]|\^|x\s*[*·]\s*x|\)\s*\(/i.test(text)) return null;
-  // Ecuación lineal compacta: términos (coef·var o número) unidos por + / -, = número.
-  // Captura toda la parte izquierda (varios términos), p.ej. "3x + x", "2x - 3".
-  const m = t.match(
-    /((?:[+-]\s*)?(?:\d*[a-z]|\d+(?:\.\d+)?)(?:\s*[+-]\s*(?:\d*[a-z]|\d+(?:\.\d+)?))*)\s*=\s*(-?\d+(?:\.\d+)?)(?![a-z0-9.])/
-  );
+  // Ecuación lineal: LADO = LADO. Cada lado es una suma de términos (coef·var o números). Se admite la
+  // variable en AMBOS lados ("5x - 7 = 2x + 5" → 4): antes el lado derecho solo podía ser un número, así que
+  // esas ecuaciones daban null y se calificaban MAL (defecto reportado por el cliente: respuesta correcta
+  // marcada como incorrecta). El "cuerpo" de cada lado admite varios términos con + / -.
+  const lado = "(?:[+-]\\s*)?(?:\\d*[a-z]|\\d+(?:\\.\\d+)?)(?:\\s*[+-]\\s*(?:\\d*[a-z]|\\d+(?:\\.\\d+)?))*";
+  const m = t.match(new RegExp(`(${lado})\\s*=\\s*(${lado})`));
   if (!m) return null;
   if (tieneCoeficienteRecortado(t, m.index)) return null;
-  const lhs = m[1];
-  const c = Number(m[2]);
-  if (!Number.isFinite(c)) return null;
+  const lhs = m[1], rhs = m[2];
 
-  // Debe haber exactamente UNA variable (rechaza multivariable y expresiones raras).
-  const letters = new Set((lhs.match(/[a-z]/g) || []));
+  // Debe haber exactamente UNA variable en TODA la ecuación (rechaza sistemas/multivariable "x + y = 3").
+  const letters = new Set(((lhs + rhs).match(/[a-z]/g) || []));
   if (letters.size !== 1) return null;
   const v = [...letters][0];
 
-  // Sumar términos semejantes: coeficiente total de la variable y constante total.
-  let expr = lhs.replace(/\s+/g, "");
-  if (!/^[+-]/.test(expr)) expr = "+" + expr;
-  const terms = expr.match(/[+-](?:\d*[a-z]|\d+(?:\.\d+)?)/g);
-  if (!terms) return null;
-
-  let coef = 0;
-  let konst = 0;
-  for (const term of terms) {
-    const sign = term[0] === "-" ? -1 : 1;
-    const body = term.slice(1);
-    if (body.includes(v)) {
-      const num = body.replace(v, "");
-      const k = num === "" ? 1 : Number(num);
-      if (!Number.isFinite(k)) return null; // p.ej. "x²" → no lineal
-      coef += sign * k;
-    } else {
-      const k = Number(body);
-      if (!Number.isFinite(k)) return null;
-      konst += sign * k;
+  // Suma los términos semejantes de un lado: devuelve { coef (de la variable), konst } o null.
+  const parseLado = (side) => {
+    let expr = side.replace(/\s+/g, "");
+    if (!/^[+-]/.test(expr)) expr = "+" + expr;
+    const terms = expr.match(/[+-](?:\d*[a-z]|\d+(?:\.\d+)?)/g);
+    if (!terms) return null;
+    let coef = 0, konst = 0;
+    for (const term of terms) {
+      const sign = term[0] === "-" ? -1 : 1;
+      const body = term.slice(1);
+      if (body.includes(v)) {
+        const num = body.replace(v, "");
+        const k = num === "" ? 1 : Number(num);
+        if (!Number.isFinite(k)) return null;
+        coef += sign * k;
+      } else {
+        const k = Number(body);
+        if (!Number.isFinite(k)) return null;
+        konst += sign * k;
+      }
     }
-  }
-  if (coef === 0) return null;
+    return { coef, konst };
+  };
+  const Li = parseLado(lhs), Ri = parseLado(rhs);
+  if (!Li || !Ri) return null;
 
-  const x = (c - konst) / coef;
+  // (coefL - coefR)·x = (konstR - konstL)
+  const coef = Li.coef - Ri.coef;
+  const konst = Ri.konst - Li.konst;
+  if (coef === 0) return null;
+  const x = konst / coef;
   if (!Number.isFinite(x)) return null;
   return Number.isInteger(x) ? String(x) : String(Math.round(x * 1000) / 1000);
 }
