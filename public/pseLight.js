@@ -54,6 +54,11 @@ export function extractExpectedAnswer(timeline, questionIndex) {
 export function normalizeAnswer(s) {
   return String(s || "")
     .toLowerCase()
+    // Guiones/menos unicode ("−" U+2212, "–", "—", "‐"…) → "-" ASCII: si el alumno escribe una respuesta
+    // NEGATIVA con el "signo menos" real ("−4"), Number("−4") es NaN y se calificaba MAL una respuesta
+    // correcta. Misma clase de bug que rompía el parseo del solver.
+    .replace(/[‐-―−⁃﹘﹣－]/g, "-")
+    .replace(/­/g, "")
     .replace(/\s+/g, "")
     .replace(",", ".")
     .replace(/[.]+$/, "")

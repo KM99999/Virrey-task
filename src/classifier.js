@@ -42,6 +42,11 @@ function normalize(text) {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
+    // Guiones/menos unicode (U+2212 "−", U+2013 "–", U+2014 "—", U+2010…) → "-" ASCII, y quita el guion
+    // suave U+00AD. Sin esto una ecuación tecleada con "−" no se reconocía como matemática (misma clase de
+    // bug que rompía el parseo del solver). Guion suave invisible fuera.
+    .replace(/[‐-―−⁃﹘﹣－]/g, "-")
+    .replace(/­/g, "")
     .replace(/\s+/g, " ")
     .trim();
 }

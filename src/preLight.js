@@ -18,6 +18,16 @@ const TIPOS_VALIDOS = new Set([
   "avatar", "hablar", "esperar", "pizarra", "puntero", "preguntar",
 ]);
 
+// Normaliza los GUIONES/MENOS unicode a "-" ASCII. Los teclados, navegadores y correctores producen a
+// menudo el "signo menos" U+2212 ("−"), la raya U+2013/U+2014 ("–"/"—") o el guion U+2010, que NO son el
+// "-" ASCII. Sin esto, "5x − 7 = 2x + 5" (con U+2212) se parseaba como "7 = 2x + 5" — el motor DESCARTABA
+// "5x −" y resolvía la ecuación EQUIVOCADA (x=1 en vez de 4) y la pizarra mostraba la ecuación mutilada.
+// Es una CLASE de bug: afecta a TODO parseo (lineal, aritmética, factorización, calificación), no a un caso.
+// Se aplica en el chokepoint de cada parser. También quita el guion suave U+00AD (invisible).
+export function normDashes(s) {
+  return String(s == null ? "" : s).replace(/[‐-―−⁃﹘﹣－]/g, "-").replace(/­/g, "");
+}
+
 // Escenas DETERMINISTAS de los 4 botones (lección de "Tu consulta"): su ejemplo resuelto y su
 // práctica calificable ya vienen CORRECTOS y auto-contenidos desde el generador. Se marcan como
 // CONFIABLES para SALTARSE los "fixers" heurísticos de práctica (fixPracticeAnswer, enforceSingleQuestion),
@@ -59,7 +69,7 @@ function tieneCoeficienteRecortado(text, index) {
 
 export function solveLinearFromText(text) {
   if (typeof text !== "string") return null;
-  const t = text.toLowerCase();
+  const t = normDashes(text.toLowerCase());
   // Una ecuación LINEAL no tiene POTENCIAS ni PRODUCTOS de binomios. Si hay exponentes (x², x³, x^n,
   // superíndices) o paréntesis de factorización, NO es lineal → null. Evita interpretar un paso de
   // factorización ("En x² - 9: a = x, b = 3") como si fuera una ecuación con solución 3 (regresión que
@@ -399,7 +409,7 @@ export function computeAnswer(text) {
 // Devuelve { original, steps:[{explica, escribe}], answer, varName } o null.
 export function solveLinearSteps(text) {
   if (typeof text !== "string") return null;
-  const t = text.toLowerCase();
+  const t = normDashes(text.toLowerCase());
   // Una ecuación LINEAL no tiene POTENCIAS ni PRODUCTOS de binomios. Sin este guard, una CUADRÁTICA
   // ("x² + 2x = 15") "resolvía" su resto lineal ("2x = 15" → 7.5), dando una solución FALSA a una
   // cuadrática (visible en modo demo). Mismo criterio que solveLinearFromText.
@@ -508,6 +518,9 @@ function rhsToRat(rhs) {
 }
 export function corregirIgualdades(texto) {
   if (typeof texto !== "string" || !texto.includes("=")) return { texto, correcciones: 0 };
+  // Guiones/menos unicode → "-" ASCII antes de verificar aritmética: sin esto "80 − 5 = 75" (con U+2212)
+  // no se evaluaba (el motor de aritmética no reconoce "−") y se mutilaba la igualdad. Misma clase de bug.
+  texto = normDashes(texto);
   let correcciones = 0;
 
   // Un término es un VALOR suelto (número, decimal o fracción a/b) — no una operación a computar.

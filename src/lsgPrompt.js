@@ -2,7 +2,7 @@
 // devolverlo. El LSG es la salida estructurada que el PRE Light valida y que en
 // la Fase 2 el PSE Light reproducirá sincronizando voz + revelación visual.
 
-import { solveLinearSteps, computeDerivative, computeFactorization, monomioLimpio } from "./preLight.js";
+import { solveLinearSteps, computeDerivative, computeFactorization, monomioLimpio, normDashes } from "./preLight.js";
 //
 // Dos formas según la intención:
 //   - resolver / explicar → escena SECUENCIAL con `directivas: [...]`
@@ -590,9 +590,9 @@ export function fraccionResueltaLSG(opts) {
 const ESCENAS_BOTON = new Set(["lineal_resuelta", "derivada_resuelta", "factorizacion_resuelta", "fraccion_resuelta", "suma_resuelta", "resta_resuelta", "multiplicacion_resuelta", "division_resuelta"]);
 export function esEscenaBoton(escena) { return ESCENAS_BOTON.has(escena); }
 
-const normBoton = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+const normBoton = (s) => normDashes(String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, ""));
 // Forma compacta y comparable de una expresión (sin espacios, superíndices → ^n) para rotar sin repetir.
-const canonExpr = (s) => String(s || "").toLowerCase()
+const canonExpr = (s) => normDashes(String(s || "").toLowerCase())
   .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]/g, (c) => "^" + "⁰¹²³⁴⁵⁶⁷⁸⁹".indexOf(c))
   .replace(/\s+/g, "");
 // Rota una lista buscando el índice MÁS ALTO cuya forma canónica aparece en `evitarRaw` (lo ya
@@ -1368,6 +1368,12 @@ const GEN_APLICADA = { derivada: derivadaAplicadaLSG, lineal: linealAplicadaLSG,
 const GEN_RESUELTA = { derivada: derivadaResueltaLSG, lineal: linealResueltaLSG, fraccion: fraccionResueltaLSG, factorizacion: factorizacionResueltaLSG };
 
 export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", currentTopic = "", previo = "", historial = [] } = {}) {
+  // Normaliza los guiones/menos unicode ("−" U+2212, "–", "—", "‐"…) a "-" ASCII EN EL PUNTO DE ENTRADA, para
+  // que TODOS los generadores y clasificadores deterministas (lineal, aritmética, factorización, intención)
+  // vean texto ASCII. Sin esto, una ecuación tecleada con "−" resolvía/mostraba la ecuación equivocada.
+  query = normDashes(query); contexto = normDashes(contexto); currentTopic = normDashes(currentTopic);
+  previo = normDashes(previo); seguimiento = normDashes(seguimiento);
+  if (Array.isArray(historial)) historial = historial.map(normDashes);
   // RECUPERACIÓN DE TEMA desde el HISTORIAL. Si la consulta es un "otro ejemplo" / "otra vez" / "resuélveme
   // otro" SIN tema activo (contexto/currentTopic/seguimiento vacíos), reconstruimos el tema a partir del
   // último mensaje del historial que sea de un TEMA NÚCLEO y lo tratamos como CONTINUACIÓN. Caso real: el

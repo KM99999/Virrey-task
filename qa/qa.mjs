@@ -414,6 +414,28 @@ async function unitTests() {
     const eqPract = (ptwo.texto.match(/([0-9x][^.?]*=\s*[0-9x][^.?]*?)(?:\.|\?|$)/) || [])[1] || "";
     check(`práctica del MISMO tipo: ejemplo de dos lados → práctica de dos lados`, /x[^=]*=[^=]*x/.test(eqPract.replace(/\s/g, "")) && !/2x\s*=\s*6/.test(eqPract), `práctica=${eqPract}`);
     check(`práctica del MISMO tipo: y su respuesta es correcta`, !!refSolve2(eqPract) && checkAnswer(ptwo.respuesta, refSolve2(eqPract)).correct === true, `resp=${ptwo.respuesta} eq=${eqPract}`);
+
+    // 5) GUIONES/MENOS UNICODE ("−" U+2212, "–" U+2013, "—" U+2014, "‐" U+2010) tecleados por el navegador
+    //    NO deben romper el parseo. Defecto reportado (screenshot): "5x − 7 = 2x + 5" con U+2212 se resolvía
+    //    como "7 = 2x + 5" → mostraba la ecuación MUTILADA y daba x=1 en vez de 4. Es una CLASE: cualquier
+    //    parser (solver, calificación, lección, clasificador) debe ver "-" ASCII.
+    for (const d of ["−", "–", "—", "‐", "‑"]) {
+      const eqU = `5x ${d} 7 = 2x + 5`;
+      const sU = solveLinearSteps(eqU);
+      check(`unicode dash U+${d.codePointAt(0).toString(16)}: solveLinearSteps → ecuación íntegra y x=4`,
+        !!sU && sU.original === "5x - 7 = 2x + 5" && sU.answer === "4", sU ? `orig=${sU.original} ans=${sU.answer}` : "null");
+      check(`unicode dash U+${d.codePointAt(0).toString(16)}: solveLinearFromText califica 4`, solveLinearFromText(eqU) === "4", `→ ${solveLinearFromText(eqU)}`);
+      const lU = leccionBotonLSG({ query: eqU });
+      const dirsU = lU.lsg.directivas || (lU.lsg.modulos || []).flatMap((m) => m.directivas || []);
+      const boardU = dirsU.find((x) => x.tipo === "pizarra" && /=/.test(x.contenido || ""));
+      check(`unicode dash U+${d.codePointAt(0).toString(16)}: la lección muestra la ecuación completa (no mutilada)`,
+        !!boardU && boardU.contenido.replace(/\s/g, "") === "5x-7=2x+5", `board=${boardU?.contenido}`);
+      check(`unicode dash U+${d.codePointAt(0).toString(16)}: el clasificador la reconoce como matemática`,
+        classifyIntent(eqU).intent === "resolver", `→ ${classifyIntent(eqU).intent}`);
+    }
+    // La resta aritmética con "−" (U+2212) se verifica bien: correcta → 0 correcciones; mala → 1 y corrige.
+    check(`unicode dash en resta: '80 − 5 = 75' correcta (0 correcciones)`, corregirIgualdades("80 − 5 = 75").correcciones === 0);
+    check(`unicode dash en resta: '80 − 5 = 70' se corrige a 75`, corregirIgualdades("80 − 5 = 70").texto.replace(/\s/g, "") === "80-5=75");
   }
   // ── EJEMPLO APLICADO / DE LA VIDA REAL de DERIVADAS (queja del cliente): pedir "un ejemplo de la vida
   //    cotidiana" o "con la variación de la velocidad" NO debe devolver un cálculo/ejercicio numérico
