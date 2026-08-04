@@ -592,12 +592,22 @@ function altEquationFrom(eqText) {
   const t = String(eqText).toLowerCase().replace(/\s+/g, "");
   const tieneCoef = /[2-9]x|\d\dx/.test(t);
   const tieneResta = t.includes("-") && !tieneCoef;
-  // Varios candidatos por tipo; se devuelve el PRIMERO DISTINTO de la ecuación de entrada, para que la
-  // práctica y su ejemplo alterno (ambos usan esta función) NO salgan idénticos.
-  const cands = tieneCoef ? ["2x = 6", "3x = 12", "4x = 8", "2x = 10"]
-    : tieneResta ? ["x - 2 = 5", "x - 3 = 4", "x - 1 = 6"]
-    : ["x + 4 = 10", "x + 3 = 8", "x + 2 = 7"];
-  return cands.find((c) => c.replace(/\s+/g, "") !== t) || cands[0];
+  // Varios candidatos por tipo. Se elige de forma DETERMINISTA según la ecuación de ENTRADA (no siempre el
+  // primero), para que la práctica VARÍE entre lecciones distintas y no salga SIEMPRE "2x = 6" (el cliente
+  // notó que esa ecuación aparecía una y otra vez). Estable para la misma entrada, distinta de la entrada.
+  // Si el ejemplo era de más nivel (x en AMBOS lados o varios términos), la práctica también lleva un
+  // término independiente ("3x + 2 = 14"), no la trivial "2x = 6" — así no baja de golpe la dificultad.
+  const dosLados = /x[^=]*=[^=]*x/.test(t) || (t.match(/x/g) || []).length >= 2;
+  const cands = tieneCoef
+    ? (dosLados
+      ? ["3x + 2 = 14", "2x - 1 = 7", "5x - 3 = 12", "4x + 3 = 19", "2x + 5 = 15", "6x - 4 = 14", "3x - 5 = 7", "5x + 2 = 22"]
+      : ["2x = 6", "3x = 12", "4x = 8", "2x = 10", "5x = 15", "3x = 9", "6x = 18", "2x = 14", "4x = 20", "3x + 2 = 14", "2x - 1 = 7"])
+    : tieneResta ? ["x - 2 = 5", "x - 3 = 4", "x - 1 = 6", "x - 5 = 2", "x - 4 = 7", "x - 6 = 3", "x - 7 = 1"]
+    : ["x + 4 = 10", "x + 3 = 8", "x + 2 = 7", "x + 5 = 12", "x + 6 = 9", "x + 1 = 8", "x + 7 = 15"];
+  const pool = cands.filter((c) => c.replace(/\s+/g, "") !== t);
+  const list = pool.length ? pool : cands;
+  const h = [...t].reduce((a, c) => a + c.charCodeAt(0), 0);
+  return list[h % list.length];
 }
 const OPS_ALT = [
   { re: /÷|\bdividid|entre\b/, pasos: [{ explica: "Dividir es repartir en partes iguales: 12 entre 4 son 3, porque 3 × 4 = 12.", escribe: "12 ÷ 4 = 3" }] },
