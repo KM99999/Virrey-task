@@ -404,38 +404,36 @@ export function solveLinearSteps(text) {
   // ("x² + 2x = 15") "resolvía" su resto lineal ("2x = 15" → 7.5), dando una solución FALSA a una
   // cuadrática (visible en modo demo). Mismo criterio que solveLinearFromText.
   if (/[²³⁴⁵⁶⁷⁸⁹]|\^|x\s*[*·]\s*x|\)\s*\(/i.test(text)) return null;
-  const m = t.match(
-    /((?:[+-]\s*)?(?:\d*[a-z]|\d+(?:\.\d+)?)(?:\s*[+-]\s*(?:\d*[a-z]|\d+(?:\.\d+)?))*)\s*=\s*(-?\d+(?:\.\d+)?)(?![a-z0-9.])/
-  );
+  // LADO = LADO (la variable puede estar en AMBOS lados: "5x - 7 = 2x + 5"). Antes el lado derecho solo
+  // podía ser un número, así que estas ecuaciones no se resolvían y la práctica salía de OTRO tipo (de un
+  // solo lado) — el cliente pidió que la práctica sea del MISMO tipo que el ejemplo.
+  const lado = "(?:[+-]\\s*)?(?:\\d*[a-z]|\\d+(?:\\.\\d+)?)(?:\\s*[+-]\\s*(?:\\d*[a-z]|\\d+(?:\\.\\d+)?))*";
+  const m = t.match(new RegExp(`(${lado})\\s*=\\s*(${lado})`));
   if (!m) return null;
   if (tieneCoeficienteRecortado(t, m.index)) return null;
-  const lhs = m[1];
-  const c = Number(m[2]);
-  if (!Number.isFinite(c)) return null;
-  const letters = new Set((lhs.match(/[a-z]/g) || []));
+  const lhs = m[1], rhs = m[2];
+  const letters = new Set(((lhs + rhs).match(/[a-z]/g) || []));
   if (letters.size !== 1) return null;
   const v = [...letters][0];
 
-  let expr = lhs.replace(/\s+/g, "");
-  if (!/^[+-]/.test(expr)) expr = "+" + expr;
-  const terms = expr.match(/[+-](?:\d*[a-z]|\d+(?:\.\d+)?)/g);
-  if (!terms) return null;
-
-  let coef = 0, konst = 0, xTerms = 0;
-  for (const term of terms) {
-    const sign = term[0] === "-" ? -1 : 1;
-    const body = term.slice(1);
-    if (body.includes(v)) {
-      const num = body.replace(v, "");
-      const k = num === "" ? 1 : Number(num);
-      if (!Number.isFinite(k)) return null;
-      coef += sign * k; xTerms++;
-    } else {
-      const k = Number(body);
-      if (!Number.isFinite(k)) return null;
-      konst += sign * k;
+  const parseSide = (side) => {
+    let expr = side.replace(/\s+/g, ""); if (!/^[+-]/.test(expr)) expr = "+" + expr;
+    const terms = expr.match(/[+-](?:\d*[a-z]|\d+(?:\.\d+)?)/g); if (!terms) return null;
+    let coef = 0, konst = 0, xTerms = 0;
+    for (const term of terms) {
+      const sign = term[0] === "-" ? -1 : 1, body = term.slice(1);
+      if (body.includes(v)) { const num = body.replace(v, ""); const k = num === "" ? 1 : Number(num); if (!Number.isFinite(k)) return null; coef += sign * k; xTerms++; }
+      else { const k = Number(body); if (!Number.isFinite(k)) return null; konst += sign * k; }
     }
-  }
+    return { coef, konst, xTerms };
+  };
+  const Li = parseSide(lhs), Ri = parseSide(rhs);
+  if (!Li || !Ri) return null;
+  const coef = Li.coef - Ri.coef;   // términos con x movidos a la izquierda
+  const konst = Li.konst;           // constante del lado izquierdo (se moverá a la derecha)
+  const c = Ri.konst;               // constante del lado derecho
+  const xTerms = Li.xTerms;
+  const rhsX = Ri.coef;             // términos con x que hay en el lado DERECHO (para el paso de moverlos)
   if (coef === 0) return null;
   const answer = (c - konst) / coef;
   if (!Number.isFinite(answer)) return null;
@@ -456,10 +454,16 @@ export function solveLinearSteps(text) {
 
   const fmt = (n) => (Number.isInteger(n) ? String(n) : String(Math.round(n * 1000) / 1000));
   const xc = (k) => (k === 1 ? "" : k === -1 ? "-" : fmt(k)); // coeficiente legible
-  const original = `${lhs.trim().replace(/\s+/g, " ")} = ${fmt(c)}`;
+  const original = `${lhs.trim().replace(/\s+/g, " ")} = ${rhs.trim().replace(/\s+/g, " ")}`;
+  const konstStr = (k) => (k === 0 ? "" : k > 0 ? ` + ${fmt(k)}` : ` - ${fmt(-k)}`);
   const steps = [];
 
-  if (xTerms > 1) {
+  // Paso EXTRA (dos lados): mover los términos con x del lado derecho a la izquierda.
+  if (rhsX !== 0) {
+    const op = rhsX > 0 ? `restamos ${xc(rhsX)}${v}` : `sumamos ${xc(-rhsX)}${v}`;
+    steps.push({ explica: `Primero juntamos los términos con ${v} en el lado izquierdo: ${op} en ambos lados.`, escribe: `${xc(coef)}${v}${konstStr(konst)} = ${fmt(c)}` });
+  }
+  if (xTerms > 1 && rhsX === 0) {
     const combined = konst === 0
       ? `${xc(coef)}${v} = ${fmt(c)}`
       : `${xc(coef)}${v} ${konst > 0 ? "+ " + fmt(konst) : "- " + fmt(-konst)} = ${fmt(c)}`;
@@ -597,10 +601,10 @@ function altEquationFrom(eqText) {
   // notó que esa ecuación aparecía una y otra vez). Estable para la misma entrada, distinta de la entrada.
   // Si el ejemplo era de más nivel (x en AMBOS lados o varios términos), la práctica también lleva un
   // término independiente ("3x + 2 = 14"), no la trivial "2x = 6" — así no baja de golpe la dificultad.
-  const dosLados = /x[^=]*=[^=]*x/.test(t) || (t.match(/x/g) || []).length >= 2;
+  const dosLados = /x[^=]*=[^=]*x/.test(t);   // x en AMBOS lados del "="
   const cands = tieneCoef
-    ? (dosLados
-      ? ["3x + 2 = 14", "2x - 1 = 7", "5x - 3 = 12", "4x + 3 = 19", "2x + 5 = 15", "6x - 4 = 14", "3x - 5 = 7", "5x + 2 = 22"]
+    ? (dosLados  // ejemplo con x en AMBOS lados → práctica también con x en ambos lados (mismo TIPO)
+      ? ["4x - 3 = 2x + 5", "3x + 1 = x + 7", "5x - 2 = 3x + 6", "6x - 5 = 2x + 7", "4x + 1 = x + 10", "5x - 4 = 2x + 5", "3x + 2 = x + 8", "7x - 6 = 3x + 6"]
       : ["2x = 6", "3x = 12", "4x = 8", "2x = 10", "5x = 15", "3x = 9", "6x = 18", "2x = 14", "4x = 20", "3x + 2 = 14", "2x - 1 = 7"])
     : tieneResta ? ["x - 2 = 5", "x - 3 = 4", "x - 1 = 6", "x - 5 = 2", "x - 4 = 7", "x - 6 = 3", "x - 7 = 1"]
     : ["x + 4 = 10", "x + 3 = 8", "x + 2 = 7", "x + 5 = 12", "x + 6 = 9", "x + 1 = 8", "x + 7 = 15"];

@@ -399,6 +399,21 @@ async function unitTests() {
     for (const q of ["enséñame más", "explícame otra vez", "muéstrame el concepto"]) {
       check(`verbo enseñar en sesión práctica ["${q}"]: NO es practicar`, correrBoton({ query: q, seguimiento: "practicar", contexto: "Enséñame derivadas", currentTopic: "derivadas" })?.intencion !== "practicar");
     }
+    // 4) solveLinearSteps resuelve DOS LADOS con pasos y respuesta correcta; y la PRÁCTICA de un ejemplo de
+    //    dos lados es del MISMO TIPO (dos lados), no una trivial de un lado. (Queja: "problema dado y ejemplo
+    //    de práctica son de tipo distinto"; y ya no siempre "2x = 6".)
+    const refSolve2 = (eq) => { const p = eq.replace(/\s/g, "").split("="); const co = (s, sg) => { let a = 0, b = 0; for (const t of s.replace(/-/g, "+-").split("+")) { if (!t) continue; let m = t.match(/^(-?\d*)x$/); if (m) { a += m[1] === "" ? 1 : m[1] === "-" ? -1 : +m[1]; continue; } m = t.match(/^(-?\d+)$/); if (m) { b += +m[1]; continue; } return null; } return { a: a * sg, b: b * sg }; }; const L = co(p[0], 1), R = co(p[1], -1); const A = L.a + R.a; return A === 0 ? null : String(-(L.b + R.b) / A); };
+    for (const eq of ["5x - 7 = 2x + 5", "3x + 1 = x + 7", "4x - 3 = 2x + 5", "6x - 5 = 3x + 4"]) {
+      const s = solveLinearSteps(eq);
+      check(`dos lados [${eq}]: solveLinearSteps da la respuesta correcta`, !!s && checkAnswer(s.answer, refSolve2(eq)).correct === true, s ? `answer=${s.answer}` : "null");
+    }
+    const gtwo = processLSG({ escena: "resolver_ecuacion", intencion: "resolver", directivas: [
+      { tipo: "hablar", texto: "Resolvamos." }, { tipo: "pizarra", accion: "escribir", contenido: "5x - 7 = 2x + 5" }, { tipo: "pizarra", accion: "escribir", contenido: "x = 4" },
+      { tipo: "preguntar", texto: "Ahora resuélvelo tú: x = 4. ¿Cuánto vale x?", esperar_respuesta: true }] }, "resolver");
+    const ptwo = gtwo.pasos.find((p) => p.tipo === "preguntar");
+    const eqPract = (ptwo.texto.match(/([0-9x][^.?]*=\s*[0-9x][^.?]*?)(?:\.|\?|$)/) || [])[1] || "";
+    check(`práctica del MISMO tipo: ejemplo de dos lados → práctica de dos lados`, /x[^=]*=[^=]*x/.test(eqPract.replace(/\s/g, "")) && !/2x\s*=\s*6/.test(eqPract), `práctica=${eqPract}`);
+    check(`práctica del MISMO tipo: y su respuesta es correcta`, !!refSolve2(eqPract) && checkAnswer(ptwo.respuesta, refSolve2(eqPract)).correct === true, `resp=${ptwo.respuesta} eq=${eqPract}`);
   }
   // ── EJEMPLO APLICADO / DE LA VIDA REAL de DERIVADAS (queja del cliente): pedir "un ejemplo de la vida
   //    cotidiana" o "con la variación de la velocidad" NO debe devolver un cálculo/ejercicio numérico
