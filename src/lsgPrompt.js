@@ -901,8 +901,23 @@ const LINEALES = {
   normal: ["2x + 5 = 15", "3x + 2 = 14", "4x - 3 = 9", "2x - 1 = 7", "5x + 5 = 20", "3x - 6 = 6", "6x + 2 = 20", "4x + 8 = 16"],
   dificil: ["4x + 3x - 5 = 30", "5x - 2x + 7 = 25", "9x + 14 = 86", "7x - 12 = 30", "6x + 5x - 8 = 25", "8x - 3x + 4 = 39"],
 };
+// Pool de ecuaciones con x en AMBOS lados. Si el EJEMPLO que trae el alumno es de dos lados ("5x - 7 = 2x + 5"),
+// la PRÁCTICA debe ser también de dos lados (MISMO tipo). El pool LINEALES es de un solo lado, así que un
+// ejemplo de dos lados recibía una práctica de un lado ("2x + 5 = 15") — defecto reportado (screenshot):
+// "el problema dado y el ejemplo de práctica son de tipo distinto". Mismo pool que altEquationFrom (PRE Light).
+const LINEALES_DOS_LADOS = ["4x - 3 = 2x + 5", "3x + 1 = x + 7", "5x - 2 = 3x + 6", "6x - 5 = 2x + 7", "4x + 1 = x + 10", "5x - 4 = 2x + 5", "3x + 2 = x + 8", "7x - 6 = 3x + 6"];
+const esDosLados = (eq) => /x[^=]*=[^=]*x/.test(canonExpr(eq || ""));
 export function linealResueltaLSG(opts = {}) {
-  const { ejemplo, practica } = elegirBoton(LINEALES, opts);
+  let { ejemplo, practica } = elegirBoton(LINEALES, opts);
+  // Si el EJEMPLO tiene x en AMBOS lados, la práctica debe ser del MISMO tipo (dos lados), elegida de forma
+  // determinista (misma consulta → misma práctica) y distinta del ejemplo. Sin esto, "5x - 7 = 2x + 5" daba
+  // como práctica "2x + 5 = 15" (un solo lado) — tipo distinto, queja del cliente.
+  if (esDosLados(ejemplo)) {
+    const pool = LINEALES_DOS_LADOS.filter((x) => canonExpr(x) !== canonExpr(ejemplo));
+    const cands = pool.length ? pool : LINEALES_DOS_LADOS;
+    const h = canonExpr(ejemplo).split("").reduce((a, c) => a + c.charCodeAt(0), 0);
+    practica = cands[h % cands.length];
+  }
   const lista = listaNivel(LINEALES, opts.nivel);
   const sol = solveLinearSteps(ejemplo) || solveLinearSteps(lista[0]);
   const solP = solveLinearSteps(practica) || solveLinearSteps(lista[1]);

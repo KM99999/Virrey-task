@@ -436,6 +436,30 @@ async function unitTests() {
     // La resta aritmética con "−" (U+2212) se verifica bien: correcta → 0 correcciones; mala → 1 y corrige.
     check(`unicode dash en resta: '80 − 5 = 75' correcta (0 correcciones)`, corregirIgualdades("80 − 5 = 75").correcciones === 0);
     check(`unicode dash en resta: '80 − 5 = 70' se corrige a 75`, corregirIgualdades("80 − 5 = 70").texto.replace(/\s/g, "") === "80-5=75");
+
+    // 6) MOTOR DETERMINISTA (leccionBotonLSG): un EJEMPLO de dos lados → PRÁCTICA de dos lados (MISMO tipo).
+    //    Defecto reportado (screenshot): "5x − 7 = 2x + 5" resolvía bien pero daba de práctica "2x + 5 = 15"
+    //    (un solo lado). El pool LINEALES es de un lado; la práctica no seguía el tipo del ejemplo.
+    const esDos = (s) => /x[^=]*=[^=]*x/.test(String(s).replace(/\s/g, ""));
+    for (const q of ["5x − 7 = 2x + 5", "3x + 1 = x + 7", "6x - 5 = 3x + 4", "2x + 8 = 3x - 2"]) {
+      const lD = leccionBotonLSG({ query: q });
+      const dirsD = lD.lsg.directivas || (lD.lsg.modulos || []).flatMap((m) => m.directivas || []);
+      const pregD = dirsD.find((x) => x.tipo === "preguntar");
+      const practD = (pregD.texto.match(/en (.+?)\?/) || [])[1] || "";
+      check(`dos lados [${q}] (motor determinista): la PRÁCTICA es de dos lados (mismo tipo)`, esDos(practD), `práctica=${practD}`);
+      const canonEq = (s) => String(s).replace(/[‐-―−⁃﹘﹣－]/g, "-").replace(/\s/g, "");
+      check(`dos lados [${q}] (motor determinista): práctica ≠ ejemplo`, canonEq(practD) !== canonEq(q), `práctica=${practD}`);
+      check(`dos lados [${q}] (motor determinista): la respuesta de la práctica es correcta`,
+        !!refSolve2(practD) && checkAnswer(pregD.respuesta, refSolve2(practD)).correct === true, `resp=${pregD.respuesta} eq=${practD}`);
+    }
+    // Y un ejemplo de UN solo lado sigue recibiendo práctica de UN solo lado (no se rompe lo que ya andaba).
+    {
+      const l1 = leccionBotonLSG({ query: "2x + 5 = 15" });
+      const dirs1 = l1.lsg.directivas || (l1.lsg.modulos || []).flatMap((m) => m.directivas || []);
+      const preg1 = dirs1.find((x) => x.tipo === "preguntar");
+      const pract1 = (preg1.texto.match(/en (.+?)\?/) || [])[1] || "";
+      check(`un lado [2x + 5 = 15] (motor determinista): la práctica sigue siendo de un solo lado`, !esDos(pract1), `práctica=${pract1}`);
+    }
   }
   // ── EJEMPLO APLICADO / DE LA VIDA REAL de DERIVADAS (queja del cliente): pedir "un ejemplo de la vida
   //    cotidiana" o "con la variación de la velocidad" NO debe devolver un cálculo/ejercicio numérico
