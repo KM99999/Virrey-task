@@ -60,7 +60,12 @@ function verificar(tema, r) {
   // (2) respuesta correcta, independiente
   let correcta = null, ej = "";
   if (tema === "lineal") { const m = qt.match(/vale x en (.+?)\?/) || (board.includes("=") ? [null, board.replace(/\.$/, "")] : null); if (m) { ej = m[1]; const x = solveLin(canon(m[1])); correcta = x !== null && String(x) === resp; } }
-  else if (tema === "derivada") { const m = qt.match(/derivada de (.+?)\?/); if (m) { ej = m[1]; const d = derive(m[1]); correcta = d !== null && canon(d) === canon(resp); } else if (/velocidad/.test(qt)) { const mv = qt.match(/v\(t\)\s*=\s*(\d+)t.*?(\d+)\s*segundos/); if (mv) { ej = qt; correcta = String(+mv[1] * +mv[2]) === resp; } } }
+  // La lección APLICADA (vida real) pregunta "Si la derivada es 2t, ¿cuánto vale a los 5 segundos?" —
+  // y el punto se nombra distinto en cada escenario ("al día 4", "al minuto 5", "cuando has avanzado 4
+  // metros", "al producir el artículo 5"). Sin esta rama el verificador no sabía comprobarla y la daba
+  // por "no verificable": 2 de 24 salían ✗ con la lección CORRECTA (2 × 5 = 10), así que la evidencia de
+  // aceptación contradecía al producto. Se evalúa igual que en clase: sustituir el valor en 2·var.
+  else if (tema === "derivada") { const m = qt.match(/derivada de (.+?)\?/); if (m) { ej = m[1]; const d = derive(m[1]); correcta = d !== null && canon(d) === canon(resp); } else if (/si la derivada es/i.test(qt)) { const ma = qt.match(/si la derivada es (\d+)[a-z][^0-9]*(\d+)/i); if (ma) { ej = qt; correcta = String(+ma[1] * +ma[2]) === resp; } } else if (/velocidad/.test(qt)) { const mv = qt.match(/v\(t\)\s*=\s*(\d+)t.*?(\d+)\s*segundos/); if (mv) { ej = qt; correcta = String(+mv[1] * +mv[2]) === resp; } } }
   else if (tema === "factorizacion") { const m = qt.match(/factoriza (.+?)\?/); if (m) { ej = m[1]; const exp = expandFactor(resp), tg = parsePoly(m[1]); correcta = exp && tg && canon(exp) === canon(polyStr(tg)); } }
   else if (tema === "fraccion") { const m = qt.match(/(\d+)\/(\d+)\s*\+\s*(\d+)\/(\d+)/); if (m) { ej = `${m[1]}/${m[2]}+${m[3]}/${m[4]}`; correcta = canon(sumFrac(+m[1], +m[2], +m[3], +m[4])) === canon(resp); } }
   if (correcta === false) p.push(`RESPUESTA INCORRECTA: "${ej}" ⇒ ${resp}`);
