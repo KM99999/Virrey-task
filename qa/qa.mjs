@@ -76,13 +76,39 @@ async function unitTests() {
   check("clasif: 'un ejercicio' → practicar", classifyIntent("un ejercicio").intent === "practicar");
   check("clasif: 'resuelve este ejercicio: 2x=4' → resolver (no practicar)", classifyIntent("resuelve este ejercicio: 2x=4").intent === "resolver");
 
+  // PREGUNTAR POR UN CONCEPTO no es pedir que resuelvan nada. El verbo "factoriza" casaba como
+  // SUBCADENA dentro de "factorizar"/"factorización" (y "calcula" dentro de "calcular", etc.), así que
+  // "¿qué es la factorización?" se clasificaba RESOLVER y el alumno recibía un ejercicio resuelto en vez
+  // del concepto. Queja del cliente: "pregunto qué es un tema y me resuelve un ejercicio".
+  for (const q of ["¿Qué es factorizar?", "¿Qué es la factorización?", "¿Qué es simplificar?",
+                   "¿Qué es despejar una variable?", "¿Qué es calcular un porcentaje?",
+                   "concepto de factorizacion", "introduccion a la factorizacion", "Enséñame factorización"]) {
+    check(`clasif: '${q}' → aprender (concepto, no resolver)`, classifyIntent(q).intent === "aprender", `→ ${classifyIntent(q).intent}`);
+  }
+  check("clasif: '¿qué significa factorizar?' → explicar", classifyIntent("¿Qué significa factorizar?").intent === "explicar", `→ ${classifyIntent("¿Qué significa factorizar?").intent}`);
+  // …sin romper las órdenes REALES de resolver (el verbo sí va solo, como palabra completa).
+  check("clasif: 'factoriza x² - 9' sigue resolver", classifyIntent("Factoriza x² - 9").intent === "resolver");
+  check("clasif: 'simplifica 4/8' sigue resolver", classifyIntent("Simplifica 4/8").intent === "resolver");
+  check("clasif: 'calcula 7 × 8' sigue resolver", classifyIntent("Calcula 7 × 8").intent === "resolver");
+  check("clasif: 'despeja x en 2x = 8' sigue resolver", classifyIntent("despeja x en 2x = 8").intent === "resolver");
+
   check("solver: 2x - 3 = 7 → 5", solveLinearFromText("2x - 3 = 7") === "5");
   check("solver: 3x + x = 20 → 5", solveLinearFromText("3x + x = 20") === "5");
-  check("solver: no-lineal → null", solveLinearFromText("2(x+1) = 6") === null);
-  // Nunca dar una respuesta FALSA: si el coeficiente se recorta ("1/2 x", "3 x"),
-  // el solver debe devolver null (modo comprensión), jamás un valor incorrecto.
+  // PARÉNTESIS: "2(x+1) = 6" SÍ es una ecuación lineal (x = 2). Antes se devolvía null —etiquetado
+  // por error como "no-lineal"— y la ecuación acababa en Gemini, sin garantía de respuesta correcta.
+  check("solver: paréntesis '2(x+1) = 6' → 2", solveLinearFromText("2(x+1) = 6") === "2", `→ ${solveLinearFromText("2(x+1) = 6")}`);
+  check("solver: paréntesis '3(x - 2) + 4 = 10' → 4", solveLinearFromText("3(x - 2) + 4 = 10") === "4", `→ ${solveLinearFromText("3(x - 2) + 4 = 10")}`);
+  check("solver: paréntesis en AMBOS lados '2(x + 3) = 4(x - 1)' → 5", solveLinearFromText("2(x + 3) = 4(x - 1)") === "5", `→ ${solveLinearFromText("2(x + 3) = 4(x - 1)")}`);
+  // DENOMINADOR y COEFICIENTE DECIMAL: también son ecuaciones lineales resolubles.
+  check("solver: 'x/2 = 4' → 8", solveLinearFromText("x/2 = 4") === "8", `→ ${solveLinearFromText("x/2 = 4")}`);
+  check("solver: 'x/3 + 1 = 5' → 12", solveLinearFromText("x/3 + 1 = 5") === "12", `→ ${solveLinearFromText("x/3 + 1 = 5")}`);
+  check("solver: '0.5x = 4' → 8", solveLinearFromText("0.5x = 4") === "8", `→ ${solveLinearFromText("0.5x = 4")}`);
+  // Nunca dar una respuesta FALSA: si el coeficiente se RECORTA de verdad ("1/2 x", donde el "1/"
+  // quedaría fuera), el solver debe devolver null (modo comprensión), jamás un valor incorrecto.
   check("solver: '1/2 x = 4' NO da x=4 falso (→ null)", solveLinearFromText("1/2 x = 4") === null);
-  check("solver: '3 x = 6' con espacio → null (no arriesga)", solveLinearFromText("3 x = 6") === null);
+  // "3 x = 6" ya NO se recorta: el analizador lee el coeficiente 3 aunque haya un espacio, así que
+  // resolverlo (x = 2) es CORRECTO. Antes daba null porque el 3 se perdía y la respuesta habría sido falsa.
+  check("solver: '3 x = 6' con espacio → 2 (coeficiente ya no se pierde)", solveLinearFromText("3 x = 6") === "2", `→ ${solveLinearFromText("3 x = 6")}`);
   // Problema VERBAL en la pizarra: la última letra de una palabra NO es una variable.
   // "Distancia = 200" jamás debe "resolverse" como 200 (bug reportado por el cliente).
   check("solver: 'Distancia = 200 metros' → null (no 200)", solveLinearFromText("Distancia = 200 metros, Tiempo = 25 segundos") === null);
@@ -469,11 +495,15 @@ async function unitTests() {
     check(`unicode dash: solveFractionFromText('1/2 − 1/4') = 1/4`, solveFractionFromText("1/2 − 1/4") === "1/4", `→ ${solveFractionFromText("1/2 − 1/4")}`);
     check(`unicode dash: computeAnswer('50 − 8') = 42`, computeAnswer("50 − 8") === "42", `→ ${computeAnswer("50 − 8")}`);
 
-    // 8) COMA DECIMAL española: "0,5x = 4" NO debe MUTILAR la ecuación a "5x = 4" (respuesta falsa 4/5). El
-    //    coeficiente decimal no es soportado → null (seguro, cae a comprensión). Un decimal en la CONSTANTE
-    //    ("3x = 7,5") sí se resuelve bien (x = 2.5). Antes la coma partía el número y resolvía otra ecuación.
-    check(`coma decimal: '0,5x = 4' → null (no mutila a 5x=4, no da 4/5)`, solveLinearFromText("0,5x = 4") === null, `→ ${solveLinearFromText("0,5x = 4")}`);
-    check(`coma decimal: solveLinearSteps('0,5x = 4') → null (no muestra '5x = 4')`, solveLinearSteps("0,5x = 4") === null, `→ ${solveLinearSteps("0,5x = 4")?.original}`);
+    // 8) COMA DECIMAL española: "0,5x = 4" NO debe MUTILAR la ecuación a "5x = 4" (respuesta falsa 4/5).
+    //    Ahora el coeficiente decimal SÍ se resuelve (x = 8) multiplicando la ecuación para quitar el
+    //    decimal, y la ecuación se muestra ÍNTEGRA. Un decimal en la CONSTANTE ("3x = 7,5") → 5/2.
+    check(`coma decimal: '0,5x = 4' → 8 (no mutila a 5x=4, no da 4/5)`, solveLinearFromText("0,5x = 4") === "8", `→ ${solveLinearFromText("0,5x = 4")}`);
+    check(`coma decimal: solveLinearSteps('0,5x = 4') muestra la ecuación íntegra (no '5x = 4')`,
+      solveLinearSteps("0,5x = 4")?.original === "0.5x = 4", `→ ${solveLinearSteps("0,5x = 4")?.original}`);
+    check(`coma decimal: '0,5x = 4' se ENSEÑA quitando el decimal (paso de multiplicar)`,
+      /multiplicamos ambos lados por 2/i.test((solveLinearSteps("0,5x = 4")?.steps || []).map((s) => s.explica).join(" ")),
+      `→ ${(solveLinearSteps("0,5x = 4")?.steps || []).map((s) => s.explica).join(" | ")}`);
     check(`coma decimal en constante: '3x = 7,5' → 5/2 (correcto)`, checkAnswer(solveLinearFromText("3x = 7,5"), "5/2").correct === true, `→ ${solveLinearFromText("3x = 7,5")}`);
 
     // 9) checkAnswer tolera el REDONDEO correcto de una respuesta no entera (anti-falso-negativo), sin aflojar
@@ -834,6 +864,25 @@ async function unitTests() {
   check("nivel fracciones difícil: denominadores DISTINTOS", (() => { const m = dFr.pizarras[0].match(/(\d+)\/(\d+)\s*\+\s*(\d+)\/(\d+)/); return !!m && m[2] !== m[4]; })());
   check("nivel fracciones difícil: suma con común denominador correcta", dFr.q.respuesta === solveFractionFromText(dFr.board));
 
+  // DERIVADA DE UN POLINOMIO: se deriva la función COMPLETA que escribió el alumno. Antes se tomaba
+  // solo el PRIMER monomio, así que "deriva 3x⁴ - 2x²" enseñaba "deriva 3x⁴" (12x³): se respondía a una
+  // pregunta DISTINTA de la que hizo el alumno y se callaba medio ejercicio.
+  for (const [q, fn, der] of [
+    ["deriva 3x⁴ - 2x²", "3x⁴ - 2x²", "12x³ - 4x"],
+    ["deriva 3x^4 - 2x^2", "3x⁴ - 2x²", "12x³ - 4x"],
+    ["deriva 3x⁴ - 2x² + 5x", "3x⁴ - 2x² + 5x", "12x³ - 4x + 5"],
+    ["cuál es la derivada de x² + 3", "x² + 3", "2x"],
+  ]) {
+    const b = leccionBotonLSG({ query: q });
+    const txt = (b?.lsg?.directivas || []).map((d) => `${d.texto || ""} ${d.contenido || ""}`).join(" ");
+    check(`derivada polinomio [${q}]: deriva la función COMPLETA (${fn})`, !!b && txt.includes(fn), `→ ${txt.slice(0, 90)}`);
+    check(`derivada polinomio [${q}]: resultado correcto (${der})`, !!b && txt.includes(der), `→ ${txt.slice(0, 90)}`);
+  }
+  // El monomio de siempre NO cambia de comportamiento.
+  const bMon = leccionBotonLSG({ query: "deriva 5x^3" });
+  check("derivada monomio 'deriva 5x^3' sigue dando 15x²",
+    (bMon?.lsg?.directivas || []).some((d) => (d.contenido || "").includes("15x²")), `→ ${JSON.stringify(bMon?.lsg?.directivas?.map((d) => d.contenido).filter(Boolean))}`);
+
   // AISLAMIENTO / NO-CAPTURA: temas libres o avanzados NO se capturan (→ Gemini, Nivel 3).
   check("botón: 'derivada de sen(x)' → null (Gemini, no monomio)", leccionBotonLSG({ query: "derivada de sen(x)" }) === null);
   check("botón: 'factoriza x² + 5x + 6' (trinomio) → null (Gemini)", leccionBotonLSG({ query: "factoriza x² + 5x + 6" }) === null);
@@ -969,7 +1018,8 @@ async function unitTests() {
   check("solver: 'resuelve 2x + 5 = 15' → 5 (palabra antes)", solveLinearFromText("resuelve 2x + 5 = 15") === "5");
   check("solver: 'calcula x - 4 = 7' → 11 (palabra antes)", solveLinearFromText("calcula x - 4 = 7") === "11");
   check("solver: 'Distancia = 200' sigue null (guarda)", solveLinearFromText("Distancia = 200 metros") === null);
-  check("solver: '3 x = 6' sigue null (coef recortado)", solveLinearFromText("3 x = 6") === null);
+  check("solver: '3 x = 6' → 2 (el coeficiente con espacio ya se lee bien)", solveLinearFromText("3 x = 6") === "2", `→ ${solveLinearFromText("3 x = 6")}`);
+  check("solver: '1/2 x = 4' sigue null (ese SÍ recortaría el coeficiente)", solveLinearFromText("1/2 x = 4") === null);
   const lsgFix = processLSG({ escena: "x", intencion: "aprender", modulos: [{ id: "m", directivas: [
     { tipo: "hablar", texto: "Entonces 200 ÷ 25 = 200, esa es la velocidad." },
     { tipo: "pizarra", contenido: "x - 4 = 7" },

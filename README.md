@@ -263,6 +263,14 @@ El modelo económico (`flash-lite`) **puede equivocarse en aritmética simple** 
   precedencia, y fórmulas de problemas verbales: **velocidad** (distancia/tiempo), **área y
   perímetro** (rectángulo, cuadrado, triángulo), **porcentajes**, **potencias**, **raíces exactas**,
   **promedios** y **volúmenes**.
+- **Ecuaciones lineales**, con un único analizador exacto (racionales) compartido por la calificación
+  y por la lección paso a paso — así lo que se enseña y lo que se califica salen del MISMO cálculo.
+  Resuelve la variable en **ambos lados** (`5x − 7 = 2x + 5`), con **paréntesis** (`2(x + 3) = 10`,
+  que se enseña repartiendo el factor), con **denominador** (`x/2 = 4`) y con **coeficiente decimal**
+  (`0,5x = 4`, que se enseña multiplicando para quitar el decimal). Rechaza lo que NO es de primer
+  grado (potencias, productos de binomios, multivariable) en vez de arriesgar una respuesta falsa.
+- **Derivadas de polinomios completos**: `deriva 3x⁴ − 2x²` deriva la función ENTERA (`12x³ − 4x`) y
+  muestra el desglose **término a término**, no solo el primer monomio.
 - Si el ejercicio no es reconocible, usa el resultado que la IA calculó **paso a paso** (`Resultado:`)
   como último recurso; y las raíces irracionales **no se adivinan**.
 - Resultado: se evita mostrar errores como "200 ÷ 25 = 200". Verificado en producción.

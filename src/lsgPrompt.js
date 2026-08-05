@@ -999,6 +999,12 @@ export function derivadaResueltaLSG(opts = {}) {
     { tipo: "pizarra", accion: "escribir", contenido: ejemplo },
     { tipo: "esperar", segundos: 1 },
     { tipo: "hablar", texto: explica },
+  );
+  // En un POLINOMIO se muestra de dónde sale cada pieza (término a término), no solo el resultado:
+  // sin este desglose el alumno veía aparecer "12x³ - 4x" sin saber qué parte venía de cada término.
+  const desglose = pm ? null : desglosePolinomio(ejemplo);
+  if (desglose) dir.push({ tipo: "pizarra", accion: "escribir", contenido: `Término a término:  ${desglose.join("   ·   ")}` });
+  dir.push(
     { tipo: "pizarra", accion: "escribir", contenido: `derivada de ${ejemplo} = ${derE}` },
     { tipo: "hablar", texto: `Así, la derivada de ${ejemplo} es ${derE}. Ahora te toca a ti.` },
     { tipo: "pizarra", accion: "escribir", contenido: practica },
@@ -1300,6 +1306,59 @@ function extraerMonomio(texto) {
   const m = String(texto).match(/[+-]?\d{0,3}\s*x\s*(?:\^\s*\d+|[⁰¹²³⁴⁵⁶⁷⁸⁹]|\d+)?/i);
   return m ? monomioLimpio(m[0].replace(/\s+/g, "")) : null;
 }
+// Dígitos → superíndice, para escribir el polinomio como se lee en clase ("3x^4" → "3x⁴").
+const A_SUPER = { 0: "⁰", 1: "¹", 2: "²", 3: "³", 4: "⁴", 5: "⁵", 6: "⁶", 7: "⁷", 8: "⁸", 9: "⁹" };
+const supDe = (n) => String(n).split("").map((c) => A_SUPER[c] || c).join("");
+
+// Normaliza un POLINOMIO en x escrito por el alumno a la forma legible de la pizarra
+// ("3x^4-2x2" → "3x⁴ - 2x²"), o null si no es un polinomio limpio de VARIOS términos.
+function polinomioLimpio(raw) {
+  let s = normDashes(String(raw)).toLowerCase().replace(/\s+/g, "");
+  if (!s) return null;
+  s = s.replace(/x(\d)/g, "x^$1"); // dígito pegado tras la x = EXPONENTE ("x2" → "x^2"), igual que monomioLimpio
+  s = s.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]+/g, (mm) => "^" + [...mm].map((c) => "⁰¹²³⁴⁵⁶⁷⁸⁹".indexOf(c)).join(""));
+  if (!/x/.test(s)) return null;
+  const terms = s.match(/[+-]?(?:\d+(?:\.\d+)?)?x(?:\^-?\d+)?|[+-]?\d+(?:\.\d+)?/g);
+  if (!terms || terms.join("") !== s) return null; // sobró algo → no lo arriesgamos
+  if (terms.length < 2) return null;               // un solo término → es un monomio (extraerMonomio)
+  return terms
+    .map((tm, i) => {
+      const neg = tm.startsWith("-");
+      const body = tm.replace(/^[+-]/, "").replace(/\^(-?\d+)/, (_, n) => supDe(n));
+      return i === 0 ? (neg ? "-" + body : body) : `${neg ? " - " : " + "}${body}`;
+    })
+    .join("");
+}
+
+// Extrae la FUNCIÓN que el alumno pidió derivar. Antes se tomaba SOLO el primer monomio, así que
+// "deriva 3x⁴ - 2x²" se enseñaba como "deriva 3x⁴" (respuesta 12x³): se respondía a una pregunta
+// DISTINTA de la que hizo el alumno, callando medio ejercicio. Ahora se conserva el polinomio
+// COMPLETO (respuesta 12x³ - 4x) y solo se cae al monomio cuando de verdad hay un solo término.
+function extraerFuncionDerivable(texto) {
+  const t = normDashes(String(texto));
+  const MON = "\\d*\\s*x(?:\\s*\\^\\s*\\d+|\\s*[⁰¹²³⁴⁵⁶⁷⁸⁹]+|\\d+)?";
+  const m = t.match(new RegExp(`[+-]?\\s*${MON}(?:\\s*[+-]\\s*(?:${MON}|\\d+))+`, "i"));
+  if (m) {
+    const poli = polinomioLimpio(m[0]);
+    // Solo se acepta si el motor determinista sabe derivarlo: si no, mejor el monomio de siempre.
+    if (poli && computeDerivative("derivada de " + poli)) return poli;
+  }
+  return extraerMonomio(texto);
+}
+
+// Desglose TÉRMINO A TÉRMINO de la derivada de un polinomio ("3x⁴ - 2x²" → ["3x⁴ → 12x³", "-2x² → -4x"]),
+// para que el alumno vea de dónde sale cada pieza y no solo el resultado final. null si algún término
+// no se puede derivar de forma determinista.
+function desglosePolinomio(expr) {
+  const terms = String(expr).split(/\s+(?=[+-]\s)/).filter(Boolean);
+  if (terms.length < 2) return null;
+  const partes = terms.map((tm) => {
+    const limpio = tm.replace(/\s+/g, "");
+    const d = computeDerivative("derivada de " + limpio);
+    return d ? `${limpio} → ${d}` : null;
+  });
+  return partes.every(Boolean) ? partes : null;
+}
 // Extrae una diferencia de cuadrados factorizable ("...factoriza x² - 9..." → "x² - 9";
 // "...factoriza 9x² - 16..." → "9x² - 16"), o null. Incluye el COEFICIENTE opcional del término x²:
 // sin él, "9x² - 16" casaba solo "x² - 16" y se factorizaba MAL como (x-4)(x+4) en vez de (3x-4)(3x+4)
@@ -1523,7 +1582,9 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   // 1) DERIVADAS. Si nombra una función NO polinómica (trig, log, raíz, eˣ) → null (lo hace Gemini, Nivel 3).
   if (/deriv/.test(n)) {
     if (/\b(sen|sin|cos|tan|cot|sec|csc|log|ln|exp|ra[ií]z|sqrt)\b|√|e\s*\^/.test(n)) return null;
-    const instancia = extraerMonomio(base);
+    // La función a derivar se toma COMPLETA (polinomio incluido): "deriva 3x⁴ - 2x²" debe derivar
+    // 3x⁴ - 2x², no solo 3x⁴ (antes se perdía el resto y se respondía a otra pregunta).
+    const instancia = extraerFuncionDerivable(base);
     return commonRet("derivada", derivadaResueltaLSG({ evitar: previo, instancia, seguimiento: esSeg, nivel, concepto: conceptoOn, practica: pidePracticar }));
   }
 

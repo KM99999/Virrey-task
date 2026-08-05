@@ -59,8 +59,35 @@ function looksLikeConcreteExercise(norm) {
   return hasEquation || hasOperator || hasVarAndNum;
 }
 
+// Coincidencia por PALABRA COMPLETA, no por subcadena. Sin esto, el VERBO "factoriza" casaba dentro
+// del SUSTANTIVO "factorización"/"factorizar", así que "¿qué es la factorización?" puntuaba como
+// RESOLVER y (por el desempate, que favorece a "resolver") el alumno que preguntaba QUÉ ES un tema
+// recibía la resolución de un ejercicio. Lo mismo con simplifica/simplificar, despeja/despejar y
+// calcula/calcular. Queja del cliente: "pregunto por un concepto y me resuelve un ejercicio".
+const KW_RE = new Map();
+function matchesKeyword(norm, kw) {
+  let re = KW_RE.get(kw);
+  if (!re) {
+    const esc = kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // Frontera solo si la clave EMPIEZA/TERMINA en carácter de palabra: las claves que ya llevan un
+    // espacio final ("deriva ", "integra ") codifican su propia frontera y no deben llevar lookahead.
+    const ini = /^[a-z0-9]/.test(kw) ? "(?:^|[^a-z0-9])" : "";
+    const fin = /[a-z0-9]$/.test(kw) ? "(?![a-z0-9])" : "";
+    re = new RegExp(ini + esc + fin);
+    KW_RE.set(kw, re);
+  }
+  return re.test(norm);
+}
+
 function countMatches(norm, list) {
-  return list.reduce((acc, kw) => (norm.includes(kw) ? acc + 1 : acc), 0);
+  return list.reduce((acc, kw) => (matchesKeyword(norm, kw) ? acc + 1 : acc), 0);
+}
+
+// ¿Pregunta por el CONCEPTO de un tema? ("¿qué es una derivada?", "concepto de factorización",
+// "introducción a las fracciones", "¿qué significa factorizar?"). El alumno quiere ENTENDER el tema,
+// no que le resuelvan un ejercicio.
+function preguntaPorElConcepto(norm) {
+  return /\bque (es|son)\b|\bconcepto de\b|\bintroduccion a\b|\bque significa\b/.test(norm);
 }
 
 // ¿El texto es una pregunta que pide la RAZÓN de algo? ("¿por qué…?", "para qué…").
@@ -127,6 +154,15 @@ export function classifyIntent(text) {
   // "Cómo se resuelve/hace/calcula/factoriza…" SIN ejercicio concreto → EXPLICAR el método.
   if (/\bcomo\s+(se\s+)?(resuelv|hace|calcul|factoriz|deriv|integr|despej|opera|obtien|saca|hall|simplific)/.test(norm) && !looksLikeConcreteExercise(norm)) {
     return { intent: "explicar", confidence: 0.9, scores: { resolver: 0, aprender: 0, explicar: 1, practicar: 0 } };
+  }
+  // Pregunta por el CONCEPTO de un tema SIN un ejercicio concreto → APRENDER (o EXPLICAR si pide el
+  // significado). "¿Qué es factorizar?" debe ENSEÑAR qué es, no factorizar una expresión. Con un
+  // ejercicio concreto delante ("¿qué es 2 + 2?") NO se fuerza: ahí sí quiere el resultado.
+  if (preguntaPorElConcepto(norm) && !looksLikeConcreteExercise(norm)) {
+    const pideSignificado = /\bque significa\b|\bexplica/.test(norm);
+    return pideSignificado
+      ? { intent: "explicar", confidence: 0.9, scores: { resolver: 0, aprender: 0, explicar: 1, practicar: 0 } }
+      : { intent: "aprender", confidence: 0.9, scores: { resolver: 0, aprender: 1, explicar: 0, practicar: 0 } };
   }
 
   const scores = {

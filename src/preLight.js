@@ -67,23 +67,115 @@ function tieneCoeficienteRecortado(text, index) {
   return false;
 }
 
-export function solveLinearFromText(text) {
+// ─── Analizador LINEAL compartido ────────────────────────────────────────────
+// Un ÚNICO analizador para toda la app: lo usan tanto la calificación
+// (solveLinearFromText) como la lección paso a paso (solveLinearSteps). Antes cada
+// una tenía su propio parseo con la MISMA expresión regular duplicada, y lo que una
+// sabía resolver la otra no — clase de defecto que produce lecciones incoherentes.
+//
+// Analiza un lado de la ecuación como polinomio de GRADO 1 en la variable `v` y
+// devuelve { a, b, xCount } (el lado vale a·x + b) con aritmética EXACTA (racionales),
+// o null si el lado NO es lineal. Cubre lo que el alumno escribe de verdad y que antes
+// caía a la IA (respuesta no garantizada):
+//   · paréntesis con factor:   "2(x + 3)"   → a=2,   b=6
+//   · variable dividida:       "x/2"        → a=1/2, b=0
+//   · coeficiente decimal:     "0.5x"       → a=1/2, b=0
+// El grado se controla en la MULTIPLICACIÓN: x·x (dos factores con parte variable) y
+// dividir ENTRE la variable devuelven null, así una cuadrática nunca se "resuelve" como lineal.
+const linNeg = (p) => ({ a: rsub(rat(0), p.a), b: rsub(rat(0), p.b) });
+const linAdd = (p, q) => ({ a: radd(p.a, q.a), b: radd(p.b, q.b) });
+const linSub = (p, q) => ({ a: rsub(p.a, q.a), b: rsub(p.b, q.b) });
+const linMul = (p, q) => {
+  if (p.a.n !== 0 && q.a.n !== 0) return null;                       // x·x → no es de grado 1
+  const [lin, k] = q.a.n === 0 ? [p, q.b] : [q, p.b];
+  return { a: rmul(lin.a, k), b: rmul(lin.b, k) };
+};
+const linDiv = (p, q) => {
+  if (q.a.n !== 0 || q.b.n === 0) return null;                       // ÷ variable o ÷ 0 → no lineal
+  return { a: rdiv(p.a, q.b), b: rdiv(p.b, q.b) };
+};
+
+function parseLinealSide(side, v) {
+  const src = String(side).toLowerCase().replace(/[·×]/g, "*").replace(/÷/g, "/").replace(/\s+/g, "");
+  const toks = src.match(/\d+(?:\.\d+)?|[a-z]|[()+\-*/]/g);
+  if (!toks) return null;
+  let i = 0, xCount = 0, bad = false;
+
+  const factor = () => {
+    const t = toks[i];
+    if (t === undefined) { bad = true; return null; }
+    if (t === "+") { i++; return factor(); }
+    if (t === "-") { i++; const f = factor(); return f && linNeg(f); }
+    if (t === "(") {
+      i++;
+      const e = expr();
+      if (!e || toks[i] !== ")") { bad = true; return null; }
+      i++;
+      return e;
+    }
+    if (/^\d/.test(t)) { i++; return { a: rat(0), b: numTok(t) }; }
+    if (/^[a-z]$/.test(t)) {
+      if (t !== v) { bad = true; return null; }                      // otra letra → multivariable
+      i++; xCount++;
+      return { a: rat(1), b: rat(0) };
+    }
+    bad = true; return null;
+  };
+
+  const term = () => {
+    let left = factor();
+    if (!left) return null;
+    for (;;) {
+      const t = toks[i];
+      if (t === "*" || t === "/") {
+        i++;
+        const r = factor();
+        if (!r) return null;
+        left = t === "*" ? linMul(left, r) : linDiv(left, r);
+      } else if (t === "(" || (t !== undefined && /^(?:\d|[a-z])/.test(t))) {
+        left = linMul(left, factor());                                // producto IMPLÍCITO: "2x", "2(x+3)"
+      } else break;
+      if (!left) { bad = true; return null; }
+    }
+    return left;
+  };
+
+  const expr = () => {
+    let left = term();
+    if (!left) return null;
+    while (toks[i] === "+" || toks[i] === "-") {
+      const op = toks[i++];
+      const r = term();
+      if (!r) return null;
+      left = op === "+" ? linAdd(left, r) : linSub(left, r);
+    }
+    return left;
+  };
+
+  const res = expr();
+  if (!res || bad || i !== toks.length) return null;                  // sobró texto → no lo arriesgamos
+  return { a: res.a, b: res.b, xCount };
+}
+
+// Localiza la ecuación dentro del texto y analiza AMBOS lados. Devuelve
+// { lhs, rhs, L, R, v, tieneParentesis } o null. Base común de las dos funciones públicas.
+function parseEcuacionLineal(text) {
   if (typeof text !== "string") return null;
   // Coma decimal española ("0,5") → punto ("0.5"). Sin esto "0,5x = 4" MUTILABA la ecuación: la coma partía
-  // el número y el motor resolvía "5x = 4" (mostrando esa ecuación equivocada) → respuesta falsa. Al unificar,
-  // "0,5x = 4" se comporta como "0.5x = 4" (coeficiente decimal → null, cae a comprensión: honesto, no falso).
+  // el número y el motor resolvía "5x = 4" (mostrando esa ecuación equivocada) → respuesta falsa.
   const t = normDashes(text.toLowerCase()).replace(/(\d),(\d)/g, "$1.$2");
   // Una ecuación LINEAL no tiene POTENCIAS ni PRODUCTOS de binomios. Si hay exponentes (x², x³, x^n,
   // superíndices) o paréntesis de factorización, NO es lineal → null. Evita interpretar un paso de
   // factorización ("En x² - 9: a = x, b = 3") como si fuera una ecuación con solución 3 (regresión que
   // metía prácticas lineales sin sentido, p.ej. "e - 2 = 5", en lecciones de factorización).
   if (/[²³⁴⁵⁶⁷⁸⁹]|\^|x\s*[*·]\s*x|\)\s*\(/i.test(text)) return null;
-  // Ecuación lineal: LADO = LADO. Cada lado es una suma de términos (coef·var o números). Se admite la
-  // variable en AMBOS lados ("5x - 7 = 2x + 5" → 4): antes el lado derecho solo podía ser un número, así que
-  // esas ecuaciones daban null y se calificaban MAL (defecto reportado por el cliente: respuesta correcta
-  // marcada como incorrecta). El "cuerpo" de cada lado admite varios términos con + / -.
-  const lado = "(?:[+-]\\s*)?(?:\\d*[a-z]|\\d+(?:\\.\\d+)?)(?:\\s*[+-]\\s*(?:\\d*[a-z]|\\d+(?:\\.\\d+)?))*";
-  const m = t.match(new RegExp(`(${lado})\\s*=\\s*(${lado})`));
+  // Ecuación lineal: LADO = LADO. Cada término admite paréntesis con factor ("2(x + 3)") y la variable
+  // dividida ("x/2"), además de coeficientes decimales — formas que el alumno escribe a diario y que antes
+  // no casaban con el patrón, así que la ecuación caía a Gemini (sin garantía de que la respuesta fuera correcta).
+  const NUM = "\\d+(?:\\.\\d+)?";
+  const TERM = `(?:${NUM}\\s*)?(?:\\(\\s*[^()=]*\\s*\\)|[a-z](?:\\s*\\/\\s*${NUM})?|${NUM})`;
+  const LADO = `(?:[+-]\\s*)?${TERM}(?:\\s*[+-]\\s*${TERM})*`;
+  const m = t.match(new RegExp(`(${LADO})\\s*=\\s*(${LADO})`));
   if (!m) return null;
   if (tieneCoeficienteRecortado(t, m.index)) return null;
   const lhs = m[1], rhs = m[2];
@@ -93,43 +185,16 @@ export function solveLinearFromText(text) {
   if (letters.size !== 1) return null;
   const v = [...letters][0];
 
-  // Suma los términos semejantes de un lado: devuelve { coef (de la variable), konst } o null.
-  const parseLado = (side) => {
-    let expr = side.replace(/\s+/g, "");
-    if (!/^[+-]/.test(expr)) expr = "+" + expr;
-    const terms = expr.match(/[+-](?:\d*[a-z]|\d+(?:\.\d+)?)/g);
-    if (!terms) return null;
-    let coef = 0, konst = 0;
-    for (const term of terms) {
-      const sign = term[0] === "-" ? -1 : 1;
-      const body = term.slice(1);
-      if (body.includes(v)) {
-        const num = body.replace(v, "");
-        const k = num === "" ? 1 : Number(num);
-        if (!Number.isFinite(k)) return null;
-        coef += sign * k;
-      } else {
-        const k = Number(body);
-        if (!Number.isFinite(k)) return null;
-        konst += sign * k;
-      }
-    }
-    return { coef, konst };
-  };
-  const Li = parseLado(lhs), Ri = parseLado(rhs);
-  if (!Li || !Ri) return null;
+  const L = parseLinealSide(lhs, v), R = parseLinealSide(rhs, v);
+  if (!L || !R) return null;
+  return { lhs, rhs, L, R, v, tieneParentesis: /\(/.test(lhs + rhs) };
+}
 
-  // (coefL - coefR)·x = (konstR - konstL)
-  const coef = Li.coef - Ri.coef;
-  const konst = Ri.konst - Li.konst;
-  if (coef === 0) return null;
-  if (!Number.isFinite(konst / coef)) return null;
-  // Resultado EXACTO: entero o fracción reducida ("7x = 3" → "3/7"), NO un decimal redondeado ("0.429").
-  // Antes redondeaba a 3 decimales y un alumno que respondía "3/7" (o el decimal exacto) salía MAL
-  // calificado — la misma clase de FALSO NEGATIVO. Coherente con la ruta determinista (solveLinearSteps).
-  if (konst % coef === 0) return String(konst / coef);
-  const g = gcd(konst, coef); let nn = konst / g, dd = coef / g; if (dd < 0) { nn = -nn; dd = -dd; }
-  return `${nn}/${dd}`;
+export function solveLinearFromText(text) {
+  // Delega en el motor de PASOS para que la respuesta que se CALIFICA y la que se
+  // ENSEÑA salgan del mismo cálculo (antes eran dos parseos distintos que podían discrepar).
+  const s = solveLinearSteps(text);
+  return s ? s.answer : null;
 }
 
 const gcd = (a, b) => { a = Math.abs(a); b = Math.abs(b); while (b) { [a, b] = [b, a % b]; } return a || 1; };
@@ -413,50 +478,32 @@ export function computeAnswer(text) {
 // (sin IA): permite que "2x + x = 12" muestre una solución real paso a paso.
 // Devuelve { original, steps:[{explica, escribe}], answer, varName } o null.
 export function solveLinearSteps(text) {
-  if (typeof text !== "string") return null;
-  // Coma decimal española → punto (ver nota en solveLinearFromText): evita mutilar "0,5x = 4" a "5x = 4".
-  const t = normDashes(text.toLowerCase()).replace(/(\d),(\d)/g, "$1.$2");
-  // Una ecuación LINEAL no tiene POTENCIAS ni PRODUCTOS de binomios. Sin este guard, una CUADRÁTICA
-  // ("x² + 2x = 15") "resolvía" su resto lineal ("2x = 15" → 7.5), dando una solución FALSA a una
-  // cuadrática (visible en modo demo). Mismo criterio que solveLinearFromText.
-  if (/[²³⁴⁵⁶⁷⁸⁹]|\^|x\s*[*·]\s*x|\)\s*\(/i.test(text)) return null;
-  // LADO = LADO (la variable puede estar en AMBOS lados: "5x - 7 = 2x + 5"). Antes el lado derecho solo
-  // podía ser un número, así que estas ecuaciones no se resolvían y la práctica salía de OTRO tipo (de un
-  // solo lado) — el cliente pidió que la práctica sea del MISMO tipo que el ejemplo.
-  const lado = "(?:[+-]\\s*)?(?:\\d*[a-z]|\\d+(?:\\.\\d+)?)(?:\\s*[+-]\\s*(?:\\d*[a-z]|\\d+(?:\\.\\d+)?))*";
-  const m = t.match(new RegExp(`(${lado})\\s*=\\s*(${lado})`));
-  if (!m) return null;
-  if (tieneCoeficienteRecortado(t, m.index)) return null;
-  const lhs = m[1], rhs = m[2];
-  const letters = new Set(((lhs + rhs).match(/[a-z]/g) || []));
-  if (letters.size !== 1) return null;
-  const v = [...letters][0];
+  const eq = parseEcuacionLineal(text);
+  if (!eq) return null;
+  const { lhs, rhs, L, R, v, tieneParentesis } = eq;
 
-  const parseSide = (side) => {
-    let expr = side.replace(/\s+/g, ""); if (!/^[+-]/.test(expr)) expr = "+" + expr;
-    const terms = expr.match(/[+-](?:\d*[a-z]|\d+(?:\.\d+)?)/g); if (!terms) return null;
-    let coef = 0, konst = 0, xTerms = 0;
-    for (const term of terms) {
-      const sign = term[0] === "-" ? -1 : 1, body = term.slice(1);
-      if (body.includes(v)) { const num = body.replace(v, ""); const k = num === "" ? 1 : Number(num); if (!Number.isFinite(k)) return null; coef += sign * k; xTerms++; }
-      else { const k = Number(body); if (!Number.isFinite(k)) return null; konst += sign * k; }
-    }
-    return { coef, konst, xTerms };
-  };
-  const Li = parseSide(lhs), Ri = parseSide(rhs);
-  if (!Li || !Ri) return null;
-  const coef = Li.coef - Ri.coef;   // términos con x movidos a la izquierda
-  const konst = Li.konst;           // constante del lado izquierdo (se moverá a la derecha)
-  const c = Ri.konst;               // constante del lado derecho
-  const xTerms = Li.xTerms;
-  const rhsX = Ri.coef;             // términos con x que hay en el lado DERECHO (para el paso de moverlos)
+  // Los coeficientes vienen como RACIONALES exactos. Para poder enseñar con números enteros
+  // (y no con "0.5x"), se multiplica TODA la ecuación por el mínimo común múltiplo de los
+  // denominadores: es el paso que se hace en clase para quitar fracciones y decimales.
+  const lcm = (a, b) => Math.abs(a * b) / gcd(a, b);
+  const escala = [L.a, L.b, R.a, R.b].reduce((s, r) => lcm(s, r.d), 1);
+  const ent = (r) => (r.n * escala) / r.d;                  // racional → entero tras escalar
+  const coefL = ent(L.a), konstL = ent(L.b), coefR = ent(R.a), konstR = ent(R.b);
+
+  const coef = coefL - coefR;       // términos con x movidos a la izquierda
+  const konst = konstL;             // constante del lado izquierdo (se moverá a la derecha)
+  const c = konstR;                 // constante del lado derecho
+  const xTerms = L.xCount;
+  const rhsX = coefR;               // términos con x que hay en el lado DERECHO (para el paso de moverlos)
+  // Sin término en x tras igualar: NO es una ecuación de primer grado resoluble (0 = k → sin
+  // solución, o 0 = 0 → identidad). Devolvemos null en vez de inventar un valor.
   if (coef === 0) return null;
   const answer = (c - konst) / coef;
   if (!Number.isFinite(answer)) return null;
   // Solución EXACTA: fracción reducida cuando NO es entera (evita decimales truncados como "2.333" para
   // 7/3, que dan una solución INEXACTA — "3 × 2.333 = 6.999 ≠ 7"— y contradicen la garantía de exactitud).
   // Cae a decimal solo si hay coeficientes decimales (num/den no enteros). checkAnswer acepta "7/3" y "2.333".
-  const gcd = (a, b) => { a = Math.abs(a); b = Math.abs(b); while (b) { [a, b] = [b, a % b]; } return a || 1; };
+  // (Se usa el `gcd` del módulo: declararlo aquí lo dejaba en zona muerta para el cálculo de escala de arriba.)
   const fmtSol = (num, den) => {
     if (!den) return "0";
     if (Number.isInteger(num) && Number.isInteger(den)) {
@@ -473,6 +520,23 @@ export function solveLinearSteps(text) {
   const original = `${lhs.trim().replace(/\s+/g, " ")} = ${rhs.trim().replace(/\s+/g, " ")}`;
   const konstStr = (k) => (k === 0 ? "" : k > 0 ? ` + ${fmt(k)}` : ` - ${fmt(-k)}`);
   const steps = [];
+
+  // Paso EXTRA (preparación): dejar la ecuación en su forma simple ANTES de despejar.
+  //  · Paréntesis  "2(x + 3) = 10"  → se reparte el factor  → "2x + 6 = 10".
+  //  · Denominador "x/2 = 4" o coeficiente decimal "0,5x = 4" → se multiplica toda la ecuación
+  //    por el mismo número → "x = 8". Es el paso que se hace en clase para quitar fracciones.
+  // Sin este paso la ecuación "saltaba" de una forma a otra sin explicación, o —peor— estas formas
+  // no se resolvían aquí y acababan en la IA, sin garantía de que la respuesta fuera correcta.
+  const ladoStr = (a, b) => (a === 0 ? fmt(b) : `${xc(a)}${v}${konstStr(b)}`);
+  if (tieneParentesis || escala !== 1) {
+    const partes = [];
+    if (tieneParentesis) partes.push("quitamos los paréntesis multiplicando el número de fuera por CADA término de dentro (propiedad distributiva) y juntamos los números sueltos");
+    if (escala !== 1) partes.push(`multiplicamos AMBOS lados por ${escala} para quitar el denominador y trabajar con números enteros`);
+    steps.push({
+      explica: `Primero ${partes.join(", y luego ")}.`,
+      escribe: `${ladoStr(coefL, konstL)} = ${ladoStr(coefR, konstR)}`,
+    });
+  }
 
   // Paso EXTRA (dos lados): mover los términos con x del lado derecho a la izquierda.
   if (rhsX !== 0) {
