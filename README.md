@@ -22,14 +22,27 @@ Consulta (texto / voz)
  Clasificador de intención   →  resolver | aprender | explicar | practicar   (src/classifier.js)
         │
         ▼
+ ¿Es un TEMA NÚCLEO?  ──── SÍ ──→  MOTOR DETERMINISTA                        (leccionBotonLSG, src/lsgPrompt.js)
+        │                          ecuaciones lineales · derivadas ·
+        │                          factorización · fracciones · aritmética
+        NO                         (0 coste de IA · matemática GARANTIZADA)
+        │                                   │
+        ▼                                   │
  IA generativa (Gemini)      →  genera el LSG con salida estructurada          (src/geminiClient.js + src/lsgPrompt.js)
-        │
-        ▼
+        │                                   │
+        ▼                                   ▼
  PRE Light                   →  valida y normaliza el LSG en pasos/módulos     (src/preLight.js)
         │
         ▼
  Frontend                    →  render de pasos + vista JSON + historial        (public/)
 ```
+
+> **Importante para entender el sistema:** la ruta por defecto de los **cinco temas núcleo**
+> (ecuaciones lineales, derivadas, factorización por diferencia de cuadrados, fracciones y
+> aritmética básica) **no pasa por la IA**. La lección la genera un **motor determinista**
+> (`leccionBotonLSG`), de modo que el cálculo es siempre correcto, la lección es reproducible y no
+> consume saldo. Gemini interviene en los temas **fuera** de esa lista, donde la lección es de
+> *mejor esfuerzo* y su aritmética **no está garantizada** (ver *Validación matemática*).
 
 - **Backend:** Node.js + Express (`server.js`). La **API key vive solo en el
   entorno** (`.env`); el navegador nunca la ve.
@@ -440,7 +453,7 @@ La clave vive **solo** en la variable de entorno `GEMINI_API_KEY` (nunca en el c
 | 3 | **Ramificación ligera** (pista o alternativa + reintento, sin repetir/revelar) | ✅ | `_handleQuestion`+`buildHint` · [pseLight.js](public/pseLight.js) |
 | 4 | **PRE Light** documentado (transforma la salida de la IA en pasos y módulos) | ✅ | Sección *PRE Light* de este README · `processLSG` en [preLight.js](src/preLight.js) |
 | 5 | **Manejo transparente de errores** (avisar cuando usa modo demostración) | ✅ | Aviso en el escenario · [app.js](public/app.js) `renderResult` |
-| 6 | **Validación final y entrega técnica** (pruebas con Gemini, reporte, versión, instrucciones) | ✅ | `npm run qa` (116+/0) · este README · [ENTREGA.md](ENTREGA.md) |
+| 6 | **Validación final y entrega técnica** (pruebas con Gemini, reporte, versión, instrucciones) | ✅ | `npm run qa` (876/0) · `qa/aceptacion.mjs` (24/24 en vivo) · este README · [ENTREGA.md](ENTREGA.md) |
 
 ---
 

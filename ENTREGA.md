@@ -7,9 +7,64 @@
 commit** → coinciden. (La verificación con Gemini real de abajo se ejecutó sobre este mismo código;
 si ve un commit distinto en `/api/health` es solo por cambios de documentación, sin cambios de código
 ejecutable — comprobable con `git diff <commit_verificación>..HEAD -- server.js src public`.)
-**Fecha:** 2026-07-15.
+**Fecha:** 2026-08-06.
 
 Este documento cierra los puntos de aceptación acordados (Fases 1 y 2), verificados en producción.
+
+---
+
+## Revisión 3 — precisión de concepto y de cálculo (2026-08-06)
+
+Ronda motivada por el pedido del cliente de un control de calidad real. Se corrigieron tres
+defectos que hacían que el sistema respondiera a una pregunta DISTINTA de la que se hizo, y —lo
+más importante— se corrigió **el propio control de calidad**, que certificaba como correctos
+algunos de esos defectos.
+
+**A. Se responde la pregunta COMPLETA** ✅
+`deriva 3x⁴ - 2x²` derivaba solo el primer monomio (`12x³`) y callaba el resto. Ahora deriva el
+polinomio entero (`12x³ - 4x`) y muestra el desglose **término a término**.
+Código: `extraerFuncionDerivable` / `desglosePolinomio` en [src/lsgPrompt.js](src/lsgPrompt.js).
+
+**B. Ecuaciones con paréntesis, denominador y decimales** ✅
+`2(x + 3) = 10`, `x/2 = 4` y `0,5x = 4` no las resolvía el motor garantizado: acababan en la IA,
+sin garantía. Ahora son deterministas y se ENSEÑAN con su paso propio (repartir el paréntesis;
+multiplicar ambos lados para quitar el denominador o el decimal). Un **único analizador exacto**
+(racionales) sirve a la calificación y a la lección, así lo enseñado y lo calificado salen del
+MISMO cálculo. Código: `parseLinealSide` / `parseEcuacionLineal` en [src/preLight.js](src/preLight.js).
+
+**C. Preguntar por un concepto ya no devuelve un ejercicio resuelto** ✅
+`¿Qué es factorizar?` respondía factorizando: el verbo "factoriza" casaba como SUBCADENA dentro
+del sustantivo "factorización". Las palabras clave ahora casan por PALABRA COMPLETA.
+Código: `matchesKeyword` / `preguntaPorElConcepto` en [src/classifier.js](src/classifier.js).
+
+**D. "Resuelve -2x = 8" (coeficiente negativo con una palabra delante)** ✅
+La ecuación podía empezar DENTRO de una palabra: la última letra de "resuelve" se leía como
+variable y el "- 2x" se pegaba a ella ("e -2x"), así que parecía multivariable y se descartaba.
+Se ancla el inicio de la ecuación. Hallado con la auditoría independiente descrita abajo.
+
+**E. Corrección del CONTROL DE CALIDAD** ✅
+- **Cinco comprobaciones daban por correcto el comportamiento defectuoso** (una afirmaba que
+  `2(x+1) = 6` "no es lineal" y exigía NO resolverla; otras exigían `null` para `0,5x = 4` y
+  `3 x = 6`). Mientras estuvieran así, esos defectos no podían aparecer: la batería los protegía.
+- **`qa/aceptacion.mjs` reportaba 2 fallos de 24 sobre lecciones CORRECTAS** (preguntaba "si la
+  derivada es 2t, ¿cuánto vale a los 5 segundos?" y calificaba 10, correcto; el verificador no
+  sabía comprobar esa forma). Con ese ruido, un fallo real se confunde con los falsos.
+
+**F. Auditoría INDEPENDIENTE del motor determinista** ✅
+368 comprobaciones que **no usan las funciones del producto**: las ecuaciones se resuelven
+evaluando f(x)=0 en dos puntos, las factorizaciones se expanden y se comparan punto a punto, las
+derivadas se recalculan término a término. Es el método que faltaba: comprobar el resultado con
+matemática distinta de la que lo produjo.
+
+### Resultado de esta ronda
+
+| Prueba | Resultado |
+|---|---|
+| Lógica (`npm run qa`, sin coste de IA) | **876 aprobadas · 0 fallidas** (antes 841) |
+| Aceptación en vivo, 4 temas × 6 formas (`qa/aceptacion.mjs`) | **24/24 correctas** (antes 22/24, por el fallo del verificador) |
+| Auditoría independiente del motor determinista | **368 comprobaciones · 1 defecto** (corregido: punto D) |
+| Contrato de Fases 1 y 2, punto por punto | **12/12 cumplen · 129 comprobaciones** |
+| Integración real con Gemini | ✅ verificada (LSG modular, 14 explicaciones, caché de contexto activo) |
 
 ---
 
@@ -118,10 +173,11 @@ demostración** pero **lo informa con claridad**, sin presentarlo como respuesta
 
 ## 6. Validación final y entrega técnica ✅
 
-- **Pruebas con Gemini activo:** `npm run qa` → **120 aprobadas · 0 fallidas · APROBADO**
-  (ver reporte abajo). Incluye las 4 intenciones generadas por Gemini real en producción, cada una
-  con explicación paso a paso, una sola pregunta y **respuesta correcta**.
-- **Versión final desplegada:** commit `76013ee` en `main`.
+- **Pruebas de lógica:** `npm run qa` → **876 aprobadas · 0 fallidas · APROBADO** (actualizado en la
+  Revisión 3; el reporte de más abajo, con 120, corresponde a la Revisión 2). Incluye las 4
+  intenciones, cada una con explicación paso a paso, una sola pregunta y **respuesta correcta**.
+- **Aceptación en vivo:** `node qa/aceptacion.mjs` → **24/24 correctas** contra el servicio desplegado.
+- **Versión final desplegada:** ver `GET /api/health` (campo `version`); coincide con el `.zip` entregado.
 - **Instrucciones de instalación, despliegue y cambio de clave:** en el [README.md](README.md)
   (secciones *Instalación*, *Despliegue* y *Cambiar la API key de Gemini*).
 
