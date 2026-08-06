@@ -1,22 +1,35 @@
-# Mantiene "despierto" el servicio de Render (plan free) para eliminar la pantalla
-# de arranque ("Welcome to Render") del cold-start. Hace ping a /api/health cada
-# ~10 minutos (Render duerme tras ~15 min de inactividad). GRATIS en repos públicos
-# y NO consume saldo de Gemini (health no llama a la IA).
+# Mantiene "despierto" el servicio de Render (plan free) para reducir la pantalla de arranque
+# en frío. Hace ping a /api/health, que NO llama a la IA (no consume saldo de Gemini).
+#
+# Cadencia: cada 10 minutos. Render duerme tras ~15 min de inactividad, así que 10 basta.
+# ANTES estaba en */5 (288 ejecuciones al día): las ejecuciones programadas se encolaban unas
+# detrás de otras y GitHub las CANCELABA, y cada cancelación llegaba como "workflow run failed"
+# al correo del repositorio. El fallo no era del ping (que nunca llegaba a ejecutarse), sino de
+# la propia frecuencia.
 name: keep-warm
 
 on:
   schedule:
-    - cron: "*/5 * * * *"    # cada 5 min (mínimo que permite GitHub). OJO: GitHub RETRASA y a veces
-                             # OMITE las tareas programadas cuando hay carga, así que el servicio
-                             # puede dormirse igualmente. Para eliminar el arranque en frío por
-                             # completo hace falta un plan de Render de pago (decisión del cliente),
-                             # o un pinger externo (p. ej. UptimeRobot / cron-job.org).
-  workflow_dispatch: {}       # permite ejecutarlo a mano desde la pestaña Actions
+    - cron: "*/10 * * * *"   # GitHub RETRASA y a veces OMITE tareas programadas cuando hay carga:
+                             # esto REDUCE el arranque en frío, no lo elimina. Para eliminarlo del
+                             # todo hace falta un plan de Render de pago o un pinger externo.
+  workflow_dispatch: {}      # permite ejecutarlo a mano desde la pestaña Actions
+
+# Una sola ejecución a la vez: si la anterior sigue viva, esta espera en vez de solaparse.
+concurrency:
+  group: keep-warm
+  cancel-in-progress: false
+
+permissions:
+  contents: read              # el ping no necesita más permisos
 
 jobs:
   ping:
     runs-on: ubuntu-latest
+    timeout-minutes: 5        # si el runner se atasca, corta pronto en vez de quedar colgado
     steps:
       - name: Ping health endpoint
-        run: |
-          curl -fsS --max-time 60 https://math-ia.onrender.com/api/health || true
+        # --max-time 90: el arranque en frío del plan free tarda ~50 s, y con 60 s se cortaba justo.
+        # "|| true": que el servicio esté dormido o lento NO es un fallo del repositorio; este
+        # workflow solo calienta, nunca debe marcar el commit en rojo ni generar notificaciones.
+        run: curl -fsS --max-time 90 https://math-ia.onrender.com/api/health || true

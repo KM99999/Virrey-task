@@ -910,6 +910,23 @@ async function unitTests() {
       check(`frontend: "${q}" NO es pedir práctica (es un EJEMPLO)`, pideOtroEjercicio(q) === false, `→ ${pideOtroEjercicio(q)}`);
     for (const q of ["dame otro ejercicio", "otro problema", "más ejercicios", "dame otro ejercicio diferente"])
       check(`frontend: "${q}" SÍ es pedir práctica`, pideOtroEjercicio(q) === true, `→ ${pideOtroEjercicio(q)}`);
+
+    // "Resuélvela" SIEMPRE se enruta a desglosar, INCLUSO sin ejercicio guardado. Antes, sin
+    // ejercicio, caía al flujo normal y la IA inventaba una ecuación NUEVA: el alumno pedía
+    // "resuelve ESTA" y veía otra distinta. Ahora el servidor resuelve la suya o avisa; nunca cambia.
+    let srcSin = "let lastExercise = null;\n";
+    for (const n of ["esSaludoOMeta", "esSeguimiento", "ajusteNivel", "esContinuacion", "pidePasos",
+      "pideOtroEjercicio", "pideResolverOtro", "pideResolverActual", "nombraOtroTema", "tieneTemaExplicito", "clasificarSeguimiento"]) {
+      const i = APP.indexOf(`function ${n}(`), j = APP.indexOf("\n}", i);
+      srcSin += APP.slice(i, j + 2) + "\n";
+    }
+    const clasifSinEj = new Function(srcSin + "return clasificarSeguimiento;")();
+    for (const q of ["resuélvela", "resuelve la ecuación", "resuélvelo", "muéstrame la solución"])
+      check(`frontend: "${q}" SIN ejercicio guardado sigue siendo desglosar (no inventa otro)`,
+        clasifSinEj(q) === "desglosar", `→ ${clasifSinEj(q)}`);
+    // …y una ecuación NUEVA escrita por el alumno sigue siendo una consulta normal, no un desglose.
+    check("frontend: 'resuelve 3x + 1 = 10' es consulta NUEVA (no desglose)",
+      clasifSinEj("resuelve 3x + 1 = 10") !== "desglosar", `→ ${clasifSinEj("resuelve 3x + 1 = 10")}`);
   }
 
   // 2) "da vueltas como un bucle y solo brinda tres ejemplos de derivada": la clave "fabrica" no casaba

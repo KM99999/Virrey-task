@@ -109,7 +109,39 @@ app.post("/api/query", async (req, res) => {
           cache_activo: false,
         });
       }
-      // sin ejercicio utilizable → cae a "reexplicar" (re-enseñar el tema activo).
+      // SIN ejercicio utilizable. El alumno pidió resolver/desglosar EL de la pantalla, así que aquí
+      // NUNCA se sigue al flujo normal: la IA acababa inventando un ejercicio NUEVO y el alumno,
+      // que había pedido "resuelve ESTA", veía otra distinta (queja del cliente: "le dije que
+      // resuelva la ecuación y, en lugar de resolverla, cambió de ejercicio"). Se responde de forma
+      // honesta y determinista: no cambiamos de ejercicio, le pedimos que lo escriba.
+      const aviso = {
+        escena: "sin_ejercicio_a_la_vista",
+        intencion: "explicar",
+        duracion_estimada: 12,
+        directivas: [
+          { tipo: "avatar", accion: "neutral" },
+          { tipo: "hablar", texto: "No tengo tu ejercicio a la vista, así que no voy a resolver otro distinto. Escríbemelo tal cual —por ejemplo «resuelve 5x - 7 = 2x + 5»— y lo hacemos juntos paso a paso." },
+          { tipo: "pizarra", accion: "escribir", contenido: "Escribe tu ejercicio y lo resuelvo paso a paso" },
+          // Pregunta de COMPRENSIÓN (sin respuesta que calificar) puesta a propósito: si no la
+          // pusiéramos, el PRE Light añadiría una de cierre y podría inventar un ejercicio — justo
+          // lo que este aviso existe para evitar.
+          { tipo: "preguntar", texto: "¿Quieres escribirme el ejercicio y lo resolvemos juntos?", respuesta: "", esperar_respuesta: true, si_correcto: "continuar", si_incorrecto: "continuar" },
+        ],
+      };
+      const avisoProc = processLSG(aviso, "explicar", query);
+      return res.json({
+        query,
+        reexplicacion: true,
+        intencion: "explicar",
+        confianza: 1,
+        fuente_ia: "local",
+        modelo: "pre-light",
+        lsg: avisoProc.lsg,
+        pasos: avisoProc.pasos,
+        advertencias: avisoProc.warnings,
+        tokens: null,
+        cache_activo: false,
+      });
     }
 
     // 0.1) LECCIÓN DE BOTÓN DETERMINISTA (los 4 chips: ecuación lineal, derivadas, factorización,

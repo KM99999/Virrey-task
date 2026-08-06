@@ -276,7 +276,11 @@ function clasificarSeguimiento(q) {
   // como "practicar" y generara ejercicios NUEVOS (el defecto reportado). Sin ejercicio guardado, "pide
   // pasos" se trata como "reexplicar"; "resuélvela" sin ejercicio guardado cae al flujo normal.
   if (pidePasos(q)) return lastExercise ? "desglosar" : "reexplicar";
-  if (pideResolverActual(q) && lastExercise) return "desglosar";
+  // "Resuélvela / resuelve la ecuación": SIEMPRE se enruta a desglosar, aunque no haya ejercicio
+  // guardado. Antes, sin ejercicio, caía al flujo normal y la IA se inventaba una ecuación NUEVA:
+  // el alumno pedía "resuelve ESTA" y veía otra distinta (queja del cliente). Ahora el servidor
+  // resuelve la que está en pantalla o dice claramente que no la tiene; nunca cambia de ejercicio.
+  if (pideResolverActual(q)) return "desglosar";
   const aj = ajusteNivel(q);            // "mas_facil" | "mas_dificil"
   if (aj) return aj;
   if (esSeguimiento(q)) return "reexplicar"; // "no entendí", "otra vez", "de otra forma"…
@@ -469,7 +473,13 @@ function avisarVersionNueva() {
 async function checkHealth() {
   try {
     const res = await fetch("/api/health", { cache: "no-store" });
-    const data = await res.json();
+    // Se lee como TEXTO y se parsea con cuidado, igual que en /api/query: durante un despliegue o
+    // un arranque en frío, Render puede devolver una página HTML ("<!DOCTYPE html>…") y res.json()
+    // lanzaría "Unexpected token '<'". Era el ÚLTIMO sitio del frontend que aún podía producir ese
+    // error crudo (defecto reportado por el cliente). Ahora se trata como "sin conexión".
+    const raw = await res.text();
+    let data;
+    try { data = JSON.parse(raw); } catch { throw new Error("respuesta no JSON"); }
     // Control de versión desplegada (para detectar pestañas con código viejo en caché).
     if (data.version && data.version !== "desconocido") {
       if (loadedVersion === null) loadedVersion = data.version;   // primera carga: fija la versión
