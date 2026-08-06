@@ -10,7 +10,7 @@
 
 import { classifyIntent } from "../src/classifier.js";
 import { processLSG, solveLinearFromText, solveLinearSteps, solveFractionFromText, resultadoFromVerificacion, computeAnswer, corregirIgualdades, otroEjemploResuelto, processStepByStep, computeDerivative, monomioLimpio, computeFactorization } from "../src/preLight.js";
-import { mockLSG, fraccionResueltaLSG, leccionBotonLSG } from "../src/lsgPrompt.js";
+import { mockLSG, fraccionResueltaLSG, leccionBotonLSG, derivadaAplicadaLSG } from "../src/lsgPrompt.js";
 import { generateLSG } from "../src/geminiClient.js";
 import { checkAnswer, flattenLSG, PSELight, buildHint } from "../public/pseLight.js";
 import { normalizeForSpeech, chunkForSpeech } from "../public/tts.js";
@@ -892,6 +892,61 @@ async function unitTests() {
   const bMon = leccionBotonLSG({ query: "deriva 5x^3" });
   check("derivada monomio 'deriva 5x^3' sigue dando 15x²",
     (bMon?.lsg?.directivas || []).some((d) => (d.contenido || "").includes("15x²")), `→ ${JSON.stringify(bMon?.lsg?.directivas?.map((d) => d.contenido).filter(Boolean))}`);
+
+  // ── QUEJAS DEL CLIENTE (ronda 2026-08-06) ──
+  // 1) "dame otro EJEMPLO" pedía un ejemplo RESUELTO para verlo, y el frontend lo enrutaba como
+  //    PRÁCTICA (la alternativa suelta "dame otro" casaba sin mirar el sustantivo que seguía), así que
+  //    el alumno recibía una tanda de ejercicios. Se prueba la función REAL de public/app.js.
+  {
+    const { readFileSync } = await import("node:fs");
+    const APP = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
+    let src = "";
+    for (const n of ["nombraOtroTema", "pideOtroEjercicio"]) {
+      const i = APP.indexOf(`function ${n}(`), j = APP.indexOf("\n}", i);
+      src += APP.slice(i, j + 2) + "\n";
+    }
+    const pideOtroEjercicio = new Function(src + "return pideOtroEjercicio;")();
+    for (const q of ["dame otro ejemplo", "dame otro ejemplo diferente", "déjame otro ejemplo", "dame otro ejemplo más"])
+      check(`frontend: "${q}" NO es pedir práctica (es un EJEMPLO)`, pideOtroEjercicio(q) === false, `→ ${pideOtroEjercicio(q)}`);
+    for (const q of ["dame otro ejercicio", "otro problema", "más ejercicios", "dame otro ejercicio diferente"])
+      check(`frontend: "${q}" SÍ es pedir práctica`, pideOtroEjercicio(q) === true, `→ ${pideOtroEjercicio(q)}`);
+  }
+
+  // 2) "da vueltas como un bucle y solo brinda tres ejemplos de derivada": la clave "fabrica" no casaba
+  //    con su propio texto ("fábrica") porque la comparación no quitaba tildes, así que ese escenario
+  //    nunca se marcaba como visto y la rotación no avanzaba. Además había solo 2 escenarios sin
+  //    velocidad, así que excluir "la rapidez" dejaba un ciclo de 2.
+  {
+    const escenario = (lsg) => {
+      const t = (lsg.directivas || []).map((d) => `${d.texto || ""} ${d.contenido || ""}`).join(" ");
+      for (const k of ["coche", "planta", "tanque", "rampa", "cuadrado", "ingreso", "fábrica"]) if (t.includes(k)) return k;
+      return "?";
+    };
+    const rotar = (excluir, n) => {
+      const out = []; let evitar = "";
+      for (let i = 0; i < n; i++) {
+        const l = derivadaAplicadaLSG({ evitar, excluir });
+        out.push(escenario(l));
+        evitar = (l.directivas || []).map((d) => `${d.texto || ""} ${d.contenido || ""}`).join(" ");
+      }
+      return out;
+    };
+    const libre = rotar("", 10);
+    check("vida real: rota por AL MENOS 6 escenarios distintos (no un bucle de 3)", new Set(libre).size >= 6, `→ ${[...new Set(libre)].join(",")}`);
+    check("vida real: no repite dos veces seguidas", libre.every((v, i) => i === 0 || v !== libre[i - 1]), `→ ${libre.join(",")}`);
+    const sinVel = rotar("rapidez", 8);
+    check("vida real excluyendo la rapidez: AL MENOS 4 escenarios distintos", new Set(sinVel).size >= 4, `→ ${[...new Set(sinVel)].join(",")}`);
+    check("vida real excluyendo la rapidez: ninguno es de velocidad", !sinVel.some((k) => ["coche", "planta", "tanque"].includes(k)), `→ ${sinVel.join(",")}`);
+  }
+
+  // 3) "le doy la respuesta correcta y me dice que no lo es": el alumno responde con una FRASE
+  //    ("la respuesta es 4") en vez del número suelto y se calificaba MAL.
+  for (const [alumno, esperada] of [["la respuesta es 4", "4"], ["x vale 4", "4"], ["es 4", "4"],
+                                    ["el resultado es 3/4", "3/4"], ["creo que es 10", "10"]])
+    check(`calificación: "${alumno}" cuenta como ${esperada}`, checkAnswer(alumno, esperada).correct === true);
+  // …sin adivinar cuando hay VARIOS números o el valor no coincide.
+  check("calificación: 'entre 3 y 5' NO se interpreta como 5", checkAnswer("entre 3 y 5", "5").correct === false);
+  check("calificación: 'la respuesta es 7' sigue MAL si es 4", checkAnswer("la respuesta es 7", "4").correct === false);
 
   // AISLAMIENTO / NO-CAPTURA: temas libres o avanzados NO se capturan (→ Gemini, Nivel 3).
   check("botón: 'derivada de sen(x)' → null (Gemini, no monomio)", leccionBotonLSG({ query: "derivada de sen(x)" }) === null);

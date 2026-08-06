@@ -1019,7 +1019,12 @@ export function derivadaResueltaLSG(opts = {}) {
 // longitud del texto previo para no repetir SIEMPRE el primero. Todos los escenarios son válidos, así que
 // cualquier índice da una lección correcta: esto solo aporta VARIEDAD (evita repetir el mismo caso real).
 function idxEscenario(list, evitarRaw, keyOf) {
-  const evit = canonExpr(evitarRaw || "");
+  // SIN TILDES en ambos lados. `canonExpr` no las quita, así que la clave "fabrica" NUNCA casaba con su
+  // propio texto ("una fábrica"): ese escenario no se registraba como "ya visto", la rotación no avanzaba
+  // desde él y volvía a caer en los mismos. Queja del cliente: "da vueltas como un bucle y solo brinda
+  // tres ejemplos de derivada".
+  const canonKey = (s) => normBoton(s).replace(/\s+/g, "");
+  const evit = canonKey(evitarRaw || "");
   // Si el resumen previo MENCIONA un escenario (piden "otro ejemplo de la vida real" seguido), se AVANZA
   // al SIGUIENTE no mostrado (rota por TODA la lista, no repite). Si NO menciona ninguno (primera vez en
   // el tema, o venía de una lección numérica), se usa el escenario CANÓNICO (0): así el primer ejemplo de
@@ -1028,7 +1033,7 @@ function idxEscenario(list, evitarRaw, keyOf) {
   // escenario se "evita" si CUALQUIERA de sus palabras aparece en `evitar`. Así, excluir "velocidad"
   // salta TODO escenario etiquetado con esa palabra (no solo el que se mostró) — queja del cliente:
   // pedía "otro ejemplo diferente a la velocidad" y todos los ejemplos de derivada eran de velocidad.
-  const hit = (c) => String(keyOf(c)).split(/\s+/).some((w) => w && evit.includes(canonExpr(w)));
+  const hit = (c) => String(keyOf(c)).split(/\s+/).some((w) => w && evit.includes(canonKey(w)));
   const mencionado = !!evit && list.some(hit);
   if (!mencionado) return 0;
   // AVANCE desde el ÚLTIMO escenario mencionado (índice más alto que aparece en `evitar`) hacia el
@@ -1092,6 +1097,18 @@ const DERIV_VIDA = [
     obj: "una rampa", mag: "altura", sym: "h", varSym: "x", varDesc: "la distancia horizontal x", rate: "La inclinación (la pendiente)",
     uMag: "metros de alto", uRate: "metros de subida por metro de avance", tabla: "al avanzar 1 metro tiene 1 metro de alto, al avanzar 2 tiene 4, al avanzar 3 tiene 9",
     obs: "Cuanto más avanzas, más empinada se vuelve.", punto: (n) => `cuando has avanzado ${n} metros`, tE: 2, tP: 4 },
+  // NO-velocidad (GEOMÉTRICO): cuánto crece el ÁREA de un cuadrado por cada metro que crece su lado.
+  { key: "cuadrado", speed: false,
+    def: "Una derivada mide cuánto CAMBIA una cantidad cuando cambia otra: aquí, cuánto crece el área al agrandar el lado.",
+    obj: "un cuadrado", mag: "área", sym: "A", varSym: "L", varDesc: "la longitud del lado L", rate: "El crecimiento del área por cada metro de lado",
+    uMag: "metros cuadrados", uRate: "metros cuadrados por metro de lado", tabla: "con lado 1 el área es 1 metro cuadrado, con lado 2 son 4, con lado 3 son 9",
+    obs: "Cada metro que alargas el lado añade más área que el anterior.", punto: (n) => `cuando el lado mide ${n} metros`, tE: 3, tP: 4 },
+  // NO-velocidad (ECONÓMICO): la derivada como INGRESO MARGINAL (lo que aporta vender uno más).
+  { key: "ingreso", speed: false,
+    def: "Una derivada mide cuánto CAMBIA una cantidad por cada unidad más: en economía, lo que aporta vender una unidad adicional.",
+    obj: "una tienda", mag: "ingreso total", sym: "I", varSym: "q", varDesc: "la cantidad vendida q", rate: "El ingreso marginal (lo que aporta la siguiente unidad)",
+    uMag: "euros", uRate: "euros por unidad", tabla: "con 1 unidad ingresa 1 euro, con 2 unidades 4, con 3 unidades 9",
+    obs: "Cada unidad vendida aporta más que la anterior.", punto: (n) => `al vender la unidad ${n}`, tE: 2, tP: 5 },
   // NO-velocidad (ECONÓMICO): la derivada como COSTO MARGINAL (lo que cuesta producir uno más). Nada de tiempo.
   { key: "fabrica", speed: false,
     def: "Una derivada mide cuánto CAMBIA una cantidad por cada unidad más: en economía es el costo de fabricar uno más (costo marginal).",

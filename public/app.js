@@ -234,6 +234,11 @@ function pidePasos(q) {
 function pideOtroEjercicio(q) {
   const n = q.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
   if (nombraOtroTema(q)) return false; // nombra un tema DISTINTO → tema nuevo, no seguimiento
+  // "otro EJEMPLO" es pedir un ejemplo RESUELTO para VERLO, no un ejercicio para resolver. Sin esta
+  // guarda, la alternativa suelta "dame otro" (más abajo) casaba con "dame otro EJEMPLO" y el alumno
+  // recibía una tanda de ejercicios de práctica. Queja del cliente: "le pido otro ejemplo y me brinda
+  // ejercicios para practicar". Misma regla que `pideEjemploVer` en el servidor (src/lsgPrompt.js).
+  if (/\bejemplos?\b/.test(n) && !/\bejercicios?\b|\bproblemas?\b|\bpractic/.test(n)) return false;
   const es = /(otro|otra|nuev[oa]|distint[oa]|diferente|mas|un|una)\s+(ejercicio|ejercicios|problema|problemas|ecuacion|ecuaciones|practica|reto)|(ejercicio|problema|ecuacion)\s+(diferente|distint[oa]|nuev[oa]|mas dificil|mas facil)|(dame|dejame|deja|ponme|pon|quiero|otro|otra|mas)\s+(ejercicio|ejercicios|problema|problemas|ecuacion|ecuaciones|practica|practicar|uno|reto)|mas ejercicios|otro ejercicio|otro problema|otra ecuacion|dejame otro|dame otro/;
   const en = /(another|other|different|new|one more|a new)\s+(exercise|problem|equation|question|one|practice)|(give|show|present).*(another|other|different)\s+(exercise|problem|equation|one)|more (exercises|problems|equations|practice)/;
   return es.test(n) || en.test(n);

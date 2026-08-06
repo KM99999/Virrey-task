@@ -176,8 +176,16 @@ export function checkAnswer(student, expected) {
   }
   // Comparación por VALOR, aceptando fracciones equivalentes (1/2 == 3/6 == 0.5),
   // decimales y respuestas con unidades ("8" == "8 metros/segundo").
-  const va = numFrom(a);
+  let va = numFrom(a);
   const vb = numFrom(b);
+  // El alumno suele responder con una FRASE ("la respuesta es 4", "x vale 4", "es 4") en vez de con el
+  // número suelto. Si lo esperado es un NÚMERO y en su frase hay UN ÚNICO número, ese es su respuesta:
+  // marcarla mal era un falso negativo (queja del cliente: "le doy la respuesta correcta y me dice que
+  // no lo es"). Se exige UN SOLO número para no adivinar: con varios ("entre 3 y 5") no se interpreta.
+  if (!Number.isFinite(va) && Number.isFinite(vb)) {
+    const nums = String(a).match(/-?\d+(?:\.\d+)?(?:\/\d+)?/g);
+    if (nums && nums.length === 1) va = fracVal(nums[0]);
+  }
   if (Number.isFinite(va) && Number.isFinite(vb)) {
     if (Math.abs(va - vb) < 1e-9) return { known: true, correct: true };
     // El alumno pudo REDONDEAR una respuesta no entera (p.ej. 7/3 → "2.33" o "2.333"). Aceptamos SU decimal
