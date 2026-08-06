@@ -175,10 +175,15 @@ function parseEcuacionLineal(text) {
   const NUM = "\\d+(?:\\.\\d+)?";
   const TERM = `(?:${NUM}\\s*)?(?:\\(\\s*[^()=]*\\s*\\)|[a-z](?:\\s*\\/\\s*${NUM})?|${NUM})`;
   const LADO = `(?:[+-]\\s*)?${TERM}(?:\\s*[+-]\\s*${TERM})*`;
-  const m = t.match(new RegExp(`(${LADO})\\s*=\\s*(${LADO})`));
+  // La ecuación NO puede empezar DENTRO de una palabra. Sin este anclaje, en "Resuelve -2x = 8" la
+  // última letra de "resuelve" se leía como una variable y el "- 2x" se pegaba a ella ("e -2x"), así que
+  // la ecuación parecía tener DOS variables y se rechazaba: escribir "Resuelve -2x = 8" (natural) no se
+  // resolvía, aunque "-2x = 8" a secas sí. Exigir que delante no haya letra ni dígito lo cierra, y de
+  // paso deja fuera por construcción la prosa tipo "Distancia = 200 metros".
+  const m = t.match(new RegExp(`(^|[^0-9a-z])(${LADO})\\s*=\\s*(${LADO})`));
   if (!m) return null;
-  if (tieneCoeficienteRecortado(t, m.index)) return null;
-  const lhs = m[1], rhs = m[2];
+  if (tieneCoeficienteRecortado(t, m.index + m[1].length)) return null;
+  const lhs = m[2], rhs = m[3];
 
   // Debe haber exactamente UNA variable en TODA la ecuación (rechaza sistemas/multivariable "x + y = 3").
   const letters = new Set(((lhs + rhs).match(/[a-z]/g) || []));

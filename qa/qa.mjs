@@ -106,6 +106,16 @@ async function unitTests() {
   // Nunca dar una respuesta FALSA: si el coeficiente se RECORTA de verdad ("1/2 x", donde el "1/"
   // quedaría fuera), el solver debe devolver null (modo comprensión), jamás un valor incorrecto.
   check("solver: '1/2 x = 4' NO da x=4 falso (→ null)", solveLinearFromText("1/2 x = 4") === null);
+  // COEFICIENTE NEGATIVO CON UNA PALABRA DELANTE. "Resuelve -2x = 8" no se resolvía (sí "-2x = 8" a
+  // secas): la última letra de "resuelve" se leía como variable y el "- 2x" se pegaba a ella ("e -2x"),
+  // así que la ecuación parecía de DOS variables y se descartaba → acababa en la IA, sin garantía.
+  check("solver: 'Resuelve -2x = 8' → -4 (palabra + coeficiente negativo)", solveLinearFromText("Resuelve -2x = 8") === "-4", `→ ${solveLinearFromText("Resuelve -2x = 8")}`);
+  check("solver: 'Halla -3x = 9' → -3", solveLinearFromText("Halla -3x = 9") === "-3", `→ ${solveLinearFromText("Halla -3x = 9")}`);
+  check("solver: 'Resuelve -x + 2 = 5' → -3", solveLinearFromText("Resuelve -x + 2 = 5") === "-3", `→ ${solveLinearFromText("Resuelve -x + 2 = 5")}`);
+  check("botón: 'Resuelve -2x = 8' es determinista (no cae a Gemini)", leccionBotonLSG({ query: "Resuelve -2x = 8" }) !== null);
+  // …y la prosa sigue SIN tratarse como ecuación (ahora por construcción: no puede empezar dentro de una palabra).
+  check("solver: 'Distancia = 200 metros' sigue null tras el anclaje", solveLinearFromText("Distancia = 200 metros") === null);
+  check("solver: 'Tiempo = 25 segundos' sigue null tras el anclaje", solveLinearFromText("Tiempo = 25 segundos") === null);
   // "3 x = 6" ya NO se recorta: el analizador lee el coeficiente 3 aunque haya un espacio, así que
   // resolverlo (x = 2) es CORRECTO. Antes daba null porque el 3 se perdía y la respuesta habría sido falsa.
   check("solver: '3 x = 6' con espacio → 2 (coeficiente ya no se pierde)", solveLinearFromText("3 x = 6") === "2", `→ ${solveLinearFromText("3 x = 6")}`);
