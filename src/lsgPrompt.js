@@ -1130,7 +1130,11 @@ export function derivadaAplicadaLSG(opts = {}) {
     { tipo: "avatar", accion: "sonreir" },
     { tipo: "hablar", texto: c.def },
     { tipo: "hablar", texto: `Veámoslo con ${c.obj}: su ${c.mag} según ${c.varDesc} sigue la fórmula ${c.varSym}², en ${c.uMag}. Fíjate: ${c.tabla}. ${c.obs}` },
-    { tipo: "pizarra", accion: "escribir", contenido: `${c.mag}: ${c.sym}(${c.varSym}) = ${c.varSym}²  (${c.uMag})` },
+    // El OBJETO del escenario ("un coche", "una fábrica") va en la PIZARRA, no solo en la voz: el
+    // resumen que el frontend manda como `previo` pone las pizarras primero y se recorta a 600
+    // caracteres, así que si el nombre del escenario solo estaba en el texto hablado se perdía en el
+    // recorte y la rotación no sabía cuál se acababa de mostrar → repetía el mismo (bucle reportado).
+    { tipo: "pizarra", accion: "escribir", contenido: `${c.obj} — ${c.mag}: ${c.sym}(${c.varSym}) = ${c.varSym}²  (${c.uMag})` },
     { tipo: "hablar", texto: `${c.rate} en cada punto es la derivada de ${c.mag}. Derivamos ${c.varSym}² con la regla de la potencia —bajamos el exponente multiplicando y le restamos 1— y queda 2${c.varSym}.` },
     { tipo: "pizarra", accion: "escribir", contenido: `derivada: ${c.sym}'(${c.varSym}) = 2${c.varSym}  (${c.uRate})` },
     { tipo: "hablar", texto: `Por ejemplo, ${c.punto(c.tE)} vale 2 × ${c.tE} = ${vE} ${c.uRate}. La derivada da el valor EXACTO en ese punto, no un promedio.` },
