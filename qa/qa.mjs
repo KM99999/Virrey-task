@@ -948,6 +948,43 @@ async function unitTests() {
   check("calificación: 'entre 3 y 5' NO se interpreta como 5", checkAnswer("entre 3 y 5", "5").correct === false);
   check("calificación: 'la respuesta es 7' sigue MAL si es 4", checkAnswer("la respuesta es 7", "4").correct === false);
 
+  // 4) LOS TRES MODOS documentados en GUIA_ACEPTACION.md ("ejemplo" vs "ejercicio" vs "vida real").
+  //    La guía le promete al cliente qué devuelve cada frase; estas pruebas impiden que la
+  //    documentación y el comportamiento se separen.
+  {
+    const { readFileSync } = await import("node:fs");
+    const APP = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
+    let src = "let lastExercise = { ejercicio: '2x³', respuesta: '6x²' };\n";
+    for (const n of ["esSaludoOMeta", "esSeguimiento", "ajusteNivel", "esContinuacion", "pidePasos",
+      "pideOtroEjercicio", "pideResolverOtro", "pideResolverActual", "nombraOtroTema", "tieneTemaExplicito", "clasificarSeguimiento"]) {
+      const i = APP.indexOf(`function ${n}(`), j = APP.indexOf("\n}", i);
+      src += APP.slice(i, j + 2) + "\n";
+    }
+    const clasificar = new Function(src + "return clasificarSeguimiento;")();
+    const modoDe = (q) => {
+      const seg = clasificar(q);
+      const b = leccionBotonLSG({ query: q, seguimiento: seg || "", contexto: "Enséñame derivadas", currentTopic: "Enséñame derivadas", previo: "" });
+      if (!b) return "ia";
+      const { pasos } = processLSG(b.lsg, b.intencion, q);
+      const t = pasos.map((p) => `${p.texto || ""} ${p.contenido || ""}`).join(" ");
+      if (/¡A practicar!/.test(t)) return "practica";
+      if (/un coche|una planta|un tanque|una rampa|un cuadrado|una tienda|una fábrica/.test(t)) return "aplicado";
+      return "resuelto";
+    };
+    const TABLA = [
+      ["dame un ejemplo de la vida real", "aplicado"], ["explícalo con ejemplos de la vida cotidiana", "aplicado"],
+      ["¿para qué sirve?", "aplicado"],
+      ["dame otro ejemplo", "resuelto"], ["dame otro ejemplo diferente", "resuelto"], ["otro ejemplo", "resuelto"],
+      ["muéstrame un ejemplo resuelto", "resuelto"], ["resuélveme otro", "resuelto"],
+      ["dame otro ejercicio", "practica"], ["ponme un problema", "practica"], ["quiero practicar", "practica"],
+      ["dame ejercicios para practicar", "practica"],
+      // La FINALIDAD manda sobre la palabra: dice "ejemplo" pero pide resolverlo él → práctica.
+      ["dame un ejemplo para que yo lo resuelva", "practica"],
+    ];
+    for (const [q, esperado] of TABLA)
+      check(`guía 3 modos: "${q}" → ${esperado}`, modoDe(q) === esperado, `→ ${modoDe(q)}`);
+  }
+
   // AISLAMIENTO / NO-CAPTURA: temas libres o avanzados NO se capturan (→ Gemini, Nivel 3).
   check("botón: 'derivada de sen(x)' → null (Gemini, no monomio)", leccionBotonLSG({ query: "derivada de sen(x)" }) === null);
   check("botón: 'factoriza x² + 5x + 6' (trinomio) → null (Gemini)", leccionBotonLSG({ query: "factoriza x² + 5x + 6" }) === null);

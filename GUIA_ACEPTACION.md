@@ -28,6 +28,28 @@ Escribe cada frase en el cuadro **"Tu consulta"** (o usa los botones de ejemplo)
 > como una pregunta nueva (no como tu respuesta). Espera a que termine la lección, y escribe el
 > **número/resultado** en el cuadro **"Tu respuesta"**.
 
+## "Ejemplo" o "ejercicio": tres modos distintos
+
+Esta es la distinción que más confusión ha causado. El sistema entiende **tres** peticiones
+diferentes, y la palabra que usted escribe decide cuál recibe:
+
+| Si escribe… | Recibe | ¿Quién lo resuelve? |
+|---|---|---|
+| "Explícalo con un **ejemplo de la vida real**" · "¿para qué sirve?" · "vida cotidiana" | El **significado** del concepto con un caso real (un coche, una rampa, una tienda…) | Se explica, no se calcula |
+| "Dame otro **ejemplo**" · "un ejemplo resuelto" · "resuélveme otro" | Otro ejercicio **resuelto paso a paso** | **El tutor** |
+| "Dame otro **ejercicio**" · "un problema" · "quiero practicar" | Ejercicios **sin resolver**, que el sistema le califica | **Usted** |
+
+Reglas prácticas:
+
+- **"ejemplo" = para VERLO resuelto.** **"ejercicio" = para RESOLVERLO usted.**
+- La **finalidad manda sobre la palabra**: "dame un ejemplo **para que yo lo resuelva**" entrega
+  práctica, aunque diga "ejemplo".
+- Añadir "**de la vida real**" cambia al modo conceptual en cualquiera de los cuatro temas.
+
+> Si alguna de estas frases no devuelve lo que indica la tabla, es un fallo: por favor anote la
+> **frase exacta** que escribió y qué esperaba, y se corrige y se añade como prueba automática
+> permanente para que no pueda volver a ocurrir.
+
 ## Las 6 formas de preguntar (valen para los 4 temas)
 
 | Lo que el cliente escribe | Qué hace el sistema |
