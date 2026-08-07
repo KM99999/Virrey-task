@@ -532,6 +532,8 @@ async function submitQuery() {
     body.contexto = lastTopicQuery;               // el TEMA activo, para no perderlo
     body.seguimiento = tipoSeg;                    // reexplicar | mas_facil | mas_dificil | continuacion | desglosar | resolver_otro
     // Desglose paso a paso: enviamos el EJERCICIO actual + su respuesta para re-narrarlo (no crear uno nuevo).
+    // (En "no entendí" el servidor re-explica el ejercicio del TEMA usando `contexto`, no el de
+    // práctica: explicar la práctica le revelaría al alumno la respuesta que debe hallar él.)
     if (tipoSeg === "desglosar" && lastExercise) {
       body.ejercicio = lastExercise.ejercicio;
       body.respuesta = lastExercise.respuesta;

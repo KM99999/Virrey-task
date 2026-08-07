@@ -255,7 +255,15 @@ async function unitTests() {
     const ej = correrBoton({ query: "dame un ejemplo matemático de derivadas", seguimiento: "continuacion", contexto: "Enséñame derivadas", currentTopic: "Enséñame derivadas" });
     check(`sesión concepto + "dame un ejemplo": da EJERCICIO (no re-explica concepto)`, !!ej && ej.intencion === "resolver" && !esConcepto(ej), ej ? `intención=${ej.intencion}` : "null");
     const otroC = correrBoton({ query: "otro ejemplo", seguimiento: "continuacion", contexto: "Enséñame derivadas", currentTopic: "Enséñame derivadas" });
-    check(`sesión concepto + "otro ejemplo": MANTIENE el concepto (14312f1)`, !!otroC && otroC.intencion === "aprender", otroC ? `intención=${otroC.intencion}` : "null");
+    check(`sesión concepto + "otro ejemplo": MANTIENE el concepto la 1.ª vez (14312f1)`, !!otroC && otroC.intencion === "aprender", otroC ? `intención=${otroC.intencion}` : "null");
+    // …pero NO lo repite si el alumno ACABA de verlo. Dos peticiones del cliente en tensión: primero
+    // pidió no perder el concepto en "otro ejemplo"; después, que dejara de repetirse ("como un
+    // bucle"). Se resuelven con la misma regla: no repetir lo que ya salió en la lección anterior.
+    const yaVisto = correrBoton({ query: "Enséñame con otro ejemplo diferente", seguimiento: "continuacion",
+      contexto: "Enséñame derivadas", currentTopic: "Enséñame derivadas",
+      previo: "Derivada: razón de cambio (la pendiente) de una función · Regla de la potencia: la derivada de xⁿ es n·xⁿ⁻¹ · x²" });
+    check(`sesión concepto + "otro ejemplo" con el concepto YA visto: no lo repite`,
+      !!yaVisto && !esConcepto(yaVisto), yaVisto ? `intención=${yaVisto.intencion}` : "null");
   }
   // CONCEPTO DE FRACCIONES: debe explicar QUÉ ES una fracción (ejemplo concreto de partes de un todo +
   // fracción equivalente), NO solo la fórmula de la suma (queja del cliente: "pido el concepto y solo me
@@ -863,7 +871,31 @@ async function unitTests() {
   }
   // Las respuestas DIFÍCILES son matemáticamente correctas (verificación independiente).
   const dLin = nivelBoton("Resuelve 2x + 5 = 15", "mas_dificil");
-  check("nivel lineal difícil: agrupa términos ('4x + 3x - 5 = 30') y la respuesta es correcta", /\dx\s*[+-]\s*\dx/.test(dLin.pizarras[0]) && dLin.q.respuesta === refSolve(dLin.q.texto));
+  // DIFÍCIL debe ser otra ESTRUCTURA, no solo cifras mayores: paréntesis, x en AMBOS lados,
+  // denominador o términos que agrupar. Queja del cliente: "pido ejercicios más complejos y me
+  // muestra ejercicios semejantes" — todos eran "ax + b = c" con números más grandes.
+  {
+    const ev = (s, x) => {
+      let t = String(s).toLowerCase().replace(/\s+/g, "").replace(/[−–—]/g, "-")
+        .replace(/(\d)([a-z(])/g, "$1*$2").replace(/([a-z)])(\()/g, "$1*$2").replace(/(\))(\d|[a-z])/g, "$1*$2")
+        .replace(/[a-z]/g, `(${x})`);
+      if (!/^[-+*/().0-9]+$/.test(t)) return null;
+      try { const v = Function('"use strict";return(' + t + ")")(); return Number.isFinite(v) ? v : null; } catch { return null; }
+    };
+    const resolverIndep = (eq) => {
+      const p = String(eq).split("="); if (p.length !== 2) return null;
+      const f = (x) => { const a = ev(p[0], x), b = ev(p[1], x); return a === null || b === null ? null : a - b; };
+      const f0 = f(0), f1 = f(1); if (f0 === null || f1 === null) return null;
+      const m = f1 - f0; return Math.abs(m) < 1e-12 ? null : -f0 / m;
+    };
+    const ejD = dLin.pizarras[0] || "";
+    const masDuro = /\(/.test(ejD) || /x[^=]*=[^=]*x/.test(ejD) || /\//.test(ejD) || /\dx\s*[+-]\s*\dx/.test(ejD);
+    check(`nivel lineal difícil: estructura MÁS DURA (paréntesis, dos lados, denominador o agrupar) — "${ejD}"`, masDuro);
+    const esperado = resolverIndep((dLin.q.texto.match(/vale\s+[a-z]\s+en\s+(.+?)\?/i) || [])[1] || "");
+    check("nivel lineal difícil: la práctica está bien calificada (verificación independiente)",
+      esperado !== null && Math.abs(esperado - Number(String(dLin.q.respuesta).replace(",", "."))) < 1e-9,
+      `práctica=${dLin.q.texto} resp=${dLin.q.respuesta} esperado=${esperado}`);
+  }
   const dDer = nivelBoton("Enséñame derivadas", "mas_dificil");
   check("nivel derivadas difícil: es un POLINOMIO (varios términos)", /[+-]/.test(dDer.pizarras[0].replace(/^\s*-/, "")));
   check("nivel derivadas difícil: derivada correcta ('2x³ + 5x' → '6x² + 5')", checkAnswer(dDer.q.respuesta, computeDerivative("derivada de " + dDer.board)).correct === true);

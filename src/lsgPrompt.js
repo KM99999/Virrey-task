@@ -899,7 +899,13 @@ const SIGNO_ARIT = { suma: "+", resta: "-", multiplicacion: "×", division: "÷"
 const LINEALES = {
   facil: ["x + 3 = 8", "x + 5 = 12", "x - 2 = 6", "x + 7 = 10", "x - 4 = 5", "x + 2 = 9"],
   normal: ["2x + 5 = 15", "3x + 2 = 14", "4x - 3 = 9", "2x - 1 = 7", "5x + 5 = 20", "3x - 6 = 6", "6x + 2 = 20", "4x + 8 = 16"],
-  dificil: ["4x + 3x - 5 = 30", "5x - 2x + 7 = 25", "9x + 14 = 86", "7x - 12 = 30", "6x + 5x - 8 = 25", "8x - 3x + 4 = 39"],
+  // DIFÍCIL = otra ESTRUCTURA, no números más grandes. Antes todas eran "ax + b = c" con cifras
+  // mayores, así que pedir "más difícil" devolvía algo que el alumno veía como lo mismo (queja del
+  // cliente: "le pido ejercicios más complejos y me muestra ejercicios semejantes"). Ahora se usan
+  // las formas que de verdad cuestan más y que el motor ya resuelve: paréntesis, x en AMBOS lados y
+  // denominador. Todas con solución entera.
+  dificil: ["2(x + 3) = 16", "5x - 7 = 2x + 5", "3(x - 2) + 4 = 19", "x/2 + 5 = 12",
+            "2(x + 4) = 3x - 1", "x/3 + 7 = 12", "4x + 3x - 5 = 30", "6x + 5x - 8 = 25"],
 };
 // Pool de ecuaciones con x en AMBOS lados. Si el EJEMPLO que trae el alumno es de dos lados ("5x - 7 = 2x + 5"),
 // la PRÁCTICA debe ser también de dos lados (MISMO tipo). El pool LINEALES es de un solo lado, así que un
@@ -1519,7 +1525,23 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   // "pido que me dé EJERCICIOS y me brinda CONCEPTOS". Distinto de "otro ejemplo"/"otro" (sin verbo de
   // pedir + "un"), que en una sesión de concepto SÍ mantiene el concepto y solo rota el ejemplo.
   const pidePracticaExpl = /\bejercicios?\b|\bpractic|\bresuelv|(dame|deme|denme|ponme|pon|quiero|quisiera|necesito|muestrame|muestra|dejame|deja)\s+(un|una)\s+(ejemplo|ejercicio)/.test(normBoton(query));
-  const conceptoOn = pideEnsenar && (!esSeg || seguimiento === "continuacion" || seguimiento === "practicar") && (!pidePracticaExpl || verboEnsenar);
+  // Si en un SEGUIMIENTO el alumno pide expresamente "otro / diferente / nuevo", NO se repite el
+  // bloque de concepto + regla: ya lo ha oído y quiere el ejemplo distinto. Sin esto, escribir
+  // "enséñame con otro ejemplo diferente" varias veces devolvía siempre las mismas dos primeras
+  // líneas y la misma introducción hablada, y el alumno lo vivía como un bucle aunque el ejemplo sí
+  // cambiara (queja del cliente: "me muestra el mismo ejemplo a cada momento, como un bucle").
+  // Un seguimiento que NO pide "otro" (p. ej. "explícame el concepto otra vez") sí lo conserva.
+  // Dos peticiones del cliente en TENSIÓN, resueltas por "no repitas lo que acaba de ver":
+  //   · antes pidió que "otro ejemplo" en una sesión de concepto NO perdiera el concepto (14312f1);
+  //   · ahora pide que deje de repetirlo ("me muestra lo mismo a cada momento, como un bucle").
+  // La regla que satisface a las dos: si el concepto YA salió en la lección anterior (aparece en el
+  // resumen `previo`), no se vuelve a emitir y se va directo al ejemplo nuevo. Si no salió —primera
+  // vez en el tema—, sí se explica. Así el concepto se enseña una vez y los siguientes "otro
+  // ejemplo" traen contenido nuevo de verdad.
+  const MARCAS_CONCEPTO = /raz[oó]n de cambio|numerador \/ denominador|ecuaci[oó]n lineal: a|producto de factores|juntar cantidades|quitar una cantidad|sumar el mismo n[uú]mero|repartir en partes iguales/i;
+  const conceptoYaVisto = esSeg && MARCAS_CONCEPTO.test(String(previo || ""));
+  const conceptoOn = pideEnsenar && (!esSeg || seguimiento === "continuacion" || seguimiento === "practicar")
+    && (!pidePracticaExpl || verboEnsenar) && !conceptoYaVisto;
   // PRACTICAR: el alumno pide EJERCICIOS para resolverlos ÉL MISMO — no que se los resuelvan ni que le
   // re-expliquen el concepto. Señales: el botón "otro ejercicio" (seguimiento), "quiero practicar", "para
   // practicar / que yo resuelva / yo mismo / por mi cuenta / para yo resolverlos", o mencionar "ejercicios/

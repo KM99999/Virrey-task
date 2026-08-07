@@ -144,6 +144,38 @@ app.post("/api/query", async (req, res) => {
       });
     }
 
+    // 0.05) "NO ENTENDÍ" con un ejercicio EN PANTALLA: el alumno quiere que le vuelvan a explicar ESE
+    //       ejercicio, más despacio — no que le cambien a otro distinto (queja del cliente: "le digo
+    //       que no entendí, con la finalidad de que me vuelva a enseñar el mismo ejercicio, y me
+    //       muestra otro ejercicio"). Se re-narra el MISMO, paso a paso y sin coste de IA. Si no es
+    //       desglosable, se sigue el flujo normal (re-enseñar el tema), que es el comportamiento previo.
+    //       OJO: se re-explica el ejercicio del TEMA (el que el alumno planteó y el tutor resolvió),
+    //       NO el de PRÁCTICA. Explicar la práctica le REVELARÍA la respuesta que debe hallar él.
+    //       Si el tema no trae un ejercicio concreto ("enséñame derivadas"), se sigue el flujo normal.
+    if (seguimiento === "reexplicar" && contexto) {
+      const mismo = processStepByStep(contexto, "");
+      // Solo vale si de verdad DESGLOSÓ algo. Con un tema sin ejercicio concreto ("enséñame
+      // derivadas") el desglose devuelve una única pizarra que repite la frase del alumno; en ese
+      // caso no sirve como re-explicación y se sigue el flujo normal (re-enseñar el tema).
+      const pizarras = mismo ? mismo.pasos.filter((p) => p.tipo === "pizarra").length : 0;
+      if (mismo && pizarras >= 2) {
+        const conIntro = {
+          ...mismo.lsg,
+          directivas: [
+            { tipo: "hablar", texto: "Sin problema: vamos MÁS DESPACIO con el MISMO ejercicio, paso a paso, sin saltarnos nada." },
+            ...(mismo.lsg.directivas || []),
+          ],
+        };
+        const re = processLSG(conIntro, "explicar", query);
+        return res.json({
+          query, reexplicacion: true, intencion: "explicar", confianza: 1,
+          fuente_ia: "local", modelo: "pre-light",
+          lsg: re.lsg, pasos: re.pasos, advertencias: re.warnings,
+          tokens: null, cache_activo: false,
+        });
+      }
+    }
+
     // 0.1) LECCIÓN DE BOTÓN DETERMINISTA (los 4 chips: ecuación lineal, derivadas, factorización,
     //      fracciones). Cada botón —o pedir "otro ejemplo" del mismo tema— presenta un EJEMPLO resuelto
     //      paso a paso + una PRÁCTICA distinta y calificable, con aritmética GARANTIZADA (0 coste de IA,
