@@ -56,7 +56,8 @@ let seeking = false;   // true mientras el usuario arrastra la barra de pasos
 let lastTopicQuery = null; // último TEMA consultado (para reexplicar en un "no entendí")
 const historial = [];      // consultas recientes del alumno (contexto de conversación para la IA)
 let lastLessonSummary = ""; // resumen de la ÚLTIMA lección (memoria: para no repetir el mismo ejemplo)
-let lastExercise = null;    // EJERCICIO en pantalla { ejercicio, respuesta } — para "explícame los pasos"
+let lastExercise = null;    // EJERCICIO de PRÁCTICA en pantalla { ejercicio, respuesta } — para "explícame los pasos"
+let lastResuelto = "";      // EJEMPLO que el tutor acaba de resolver — para re-explicarlo en "no entendí"
 
 // PERSISTENCIA de la sesión entre RECARGAS de la página. El estado de conversación (tema activo,
 // historial, memoria de la última lección y ejercicio en pantalla) se guarda en sessionStorage y se
@@ -67,7 +68,7 @@ let lastExercise = null;    // EJERCICIO en pantalla { ejercicio, respuesta } �
 const SESSION_KEY = "mathia_sesion_v1";
 function persistSession() {
   try {
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ lastTopicQuery, historial, lastLessonSummary, lastExercise }));
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ lastTopicQuery, historial, lastLessonSummary, lastExercise, lastResuelto }));
   } catch { /* sessionStorage no disponible (modo privado, etc.): seguimos sin persistir */ }
 }
 function restoreSession() {
@@ -78,9 +79,29 @@ function restoreSession() {
     if (Array.isArray(s.historial)) { historial.length = 0; for (const x of s.historial) if (typeof x === "string") historial.push(x); }
     if (typeof s.lastLessonSummary === "string") lastLessonSummary = s.lastLessonSummary;
     if (s.lastExercise && typeof s.lastExercise === "object") lastExercise = s.lastExercise;
+    if (typeof s.lastResuelto === "string") lastResuelto = s.lastResuelto;
   } catch { /* estado corrupto: se ignora y se empieza limpio */ }
 }
 restoreSession();
+
+// El EJEMPLO que el tutor acaba de RESOLVER en la pizarra (p. ej. "2(x + 3) = 16"), que NO es lo
+// mismo que el ejercicio de PRÁCTICA ni que la consulta que abrió el tema: cuando el alumno pide
+// "uno más difícil", el ejemplo mostrado ya no está en su consulta original. Es lo que hay que
+// volver a explicar cuando dice "no entendí" (queja del cliente: al no entender, le cambiaban de
+// problema en vez de re-explicarle EL QUE TENÍA DELANTE).
+// Se toma la PRIMERA pizarra que es una expresión matemática: las líneas de concepto llevan ":"
+// ("Derivada: razón de cambio…", "Ejercicio 1: 2x³") y se descartan.
+function extraerEjemploResuelto(lsg) {
+  const flat = flattenLSG(lsg) || [];
+  for (const d of flat) {
+    if (d.tipo !== "pizarra" || !d.contenido) continue;
+    const c = String(d.contenido).trim();
+    if (c.includes(":")) continue;          // definición / rótulo, no un ejercicio
+    if (!/\d|x/i.test(c)) continue;         // sin números ni variable: no es una expresión
+    return c;
+  }
+  return null;
+}
 
 // Extrae el EJERCICIO de práctica de un LSG: el enunciado escrito en la pizarra (o, en su defecto,
 // el texto de la pregunta) junto con su respuesta ya calculada. Sirve para RE-NARRARLO paso a paso
@@ -532,8 +553,10 @@ async function submitQuery() {
     body.contexto = lastTopicQuery;               // el TEMA activo, para no perderlo
     body.seguimiento = tipoSeg;                    // reexplicar | mas_facil | mas_dificil | continuacion | desglosar | resolver_otro
     // Desglose paso a paso: enviamos el EJERCICIO actual + su respuesta para re-narrarlo (no crear uno nuevo).
-    // (En "no entendí" el servidor re-explica el ejercicio del TEMA usando `contexto`, no el de
-    // práctica: explicar la práctica le revelaría al alumno la respuesta que debe hallar él.)
+    // "No entendí": se manda el EJEMPLO que el tutor acaba de resolver, para que le re-expliquen
+    // ESE y no otro. Es el ejemplo resuelto (ya visible), NO el de práctica: explicar la práctica
+    // le revelaría la respuesta que debe hallar él.
+    if (tipoSeg === "reexplicar" && lastResuelto) body.ejercicio = lastResuelto;
     if (tipoSeg === "desglosar" && lastExercise) {
       body.ejercicio = lastExercise.ejercicio;
       body.respuesta = lastExercise.respuesta;
@@ -577,6 +600,9 @@ async function submitQuery() {
     // lección trae uno; un desglose (que no lo trae) conserva el ejercicio anterior.
     const ejActual = extraerEjercicio(data.lsg);
     if (ejActual) lastExercise = ejActual;
+    // …y el EJEMPLO que se acaba de resolver, para poder re-explicar ESE si dice "no entendí".
+    const resueltoActual = extraerEjemploResuelto(data.lsg);
+    if (resueltoActual) lastResuelto = resueltoActual;
     persistSession(); // guardar el estado para que sobreviva una recarga (F5)
 
     renderResult(data);

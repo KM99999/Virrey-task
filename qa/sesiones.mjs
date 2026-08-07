@@ -74,7 +74,18 @@ const polIgual = (a, b) => { if (!a || !b) return false; for (const k of new Set
 
 // ── Estado de sesión, idéntico al del navegador ───────────────────────────────
 function nuevaSesion() {
-  return { lastTopicQuery: "", previo: "", historial: [], ejercicio: "", respuesta: "", ultimaPizarra: "" };
+  return { lastTopicQuery: "", previo: "", historial: [], ejercicio: "", respuesta: "", resuelto: "" };
+}
+// El EJEMPLO que el tutor acaba de resolver (misma regla que extraerEjemploResuelto en app.js):
+// la primera pizarra que es una expresión matemática — las de concepto llevan ":" y se descartan.
+function ejemploResuelto(pasos) {
+  for (const d of pasos) {
+    if (d.tipo !== "pizarra" || !d.contenido) continue;
+    const c = String(d.contenido).trim();
+    if (c.includes(":") || !/\d|x/i.test(c)) continue;
+    return c;
+  }
+  return "";
 }
 const resumenLeccion = (pasos) => {
   const h = pasos.filter((d) => d.tipo === "hablar").map((d) => d.texto).filter(Boolean).slice(0, 2);
@@ -94,6 +105,8 @@ async function enviar(S, texto) {
     body.previo = `Ejercicio anterior (NO lo repitas, usa uno DISTINTO): ${S.ejercicio}. ` + (body.previo || "");
   if (seg) { body.contexto = S.lastTopicQuery; body.seguimiento = seg; }
   if (seg === "desglosar") { body.ejercicio = S.ejercicio; body.respuesta = S.respuesta; }
+  // "No entendí": se manda el EJEMPLO ya resuelto en pantalla para que re-expliquen ESE.
+  if (seg === "reexplicar" && S.resuelto) body.ejercicio = S.resuelto;
 
   const r = await fetch(BASE + "/api/query", { method: "POST",
     headers: { "Content-Type": "application/json; charset=utf-8" }, body: JSON.stringify(body) });
@@ -114,7 +127,11 @@ async function enviar(S, texto) {
     for (let i = qi - 1; i >= 0; i--) if (pasos[i].tipo === "pizarra" && pasos[i].contenido) { board = pasos[i].contenido; break; }
     if (board || preg.texto) { S.ejercicio = (board || preg.texto).trim(); S.respuesta = preg.respuesta || ""; }
   }
+  const resueltoAhora = ejemploResuelto(pasos);
+  const resueltoAntes = S.resuelto;
+  if (resueltoAhora) S.resuelto = resueltoAhora;
   return { seg, intencion: j.intencion, fuente: j.fuente_ia, pizarras, dichos, preg,
+    resueltoAhora, resueltoAntes,
     texto: [...dichos, ...pizarras, preg?.texto || ""].join(" ") };
 }
 
@@ -172,6 +189,13 @@ async function correrSesion(nombre, turnos) {
     const firma = r.pizarras.join("|");
     if (t.debeVariar) check(!vistos.includes(firma), `[${nombre}] "${t.q}" → REPITE una lección ya mostrada`);
     vistos.push(firma);
+    // (6) "No entendí" debe re-explicar EL MISMO problema que hay en pantalla, no cambiar a otro.
+    //     "derivada de 3x⁴ - 2x²" cuenta como el mismo que "3x⁴ - 2x²": basta con que uno contenga al otro.
+    if (t.mismoProblema) {
+      const a = (r.resueltoAntes || "").replace(/\s/g, ""), b = (r.resueltoAhora || "").replace(/\s/g, "");
+      check(!!a && !!b && (a === b || b.includes(a) || a.includes(b)),
+        `[${nombre}] "${t.q}" → CAMBIÓ de problema: tenía "${r.resueltoAntes}" y ahora "${r.resueltoAhora}"`);
+    }
   }
   return vistos;
 }
@@ -227,6 +251,22 @@ await correrSesion("Factorización", [
   { q: "proponme uno más difícil", debeVariar: true },
   { q: "no entendí" },
 ]);
+
+// "No entendí" NO debe cambiar de problema, en los CINCO temas. Queja del cliente: pedía uno más
+// difícil, no lo entendía, y en vez de re-explicárselo le cambiaban el ejercicio.
+for (const [tema, abre, duro] of [
+  ["ecuaciones lineales", "Enséñame ecuaciones lineales", "Por favor, dame un problema más difícil."],
+  ["derivadas", "Enséñame derivadas", "dame un problema más difícil"],
+  ["factorización", "Explícame la factorización", "dame uno más difícil"],
+  ["fracciones", "Enséñame las fracciones", "dame uno más difícil"],
+  ["aritmética", "Enséñame a sumar", "dame uno más difícil"],
+]) {
+  await correrSesion(`"No entendí" mantiene el problema — ${tema}`, [
+    { q: abre },
+    { q: duro, debeVariar: true },
+    { q: "no entendí", mismoProblema: true },
+  ]);
+}
 
 console.log("\n" + "═".repeat(78));
 console.log(`Comprobaciones OK: ${ok} · Fallidas: ${fallos.length}`);

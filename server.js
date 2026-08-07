@@ -152,8 +152,29 @@ app.post("/api/query", async (req, res) => {
     //       OJO: se re-explica el ejercicio del TEMA (el que el alumno planteó y el tutor resolvió),
     //       NO el de PRÁCTICA. Explicar la práctica le REVELARÍA la respuesta que debe hallar él.
     //       Si el tema no trae un ejercicio concreto ("enséñame derivadas"), se sigue el flujo normal.
-    if (seguimiento === "reexplicar" && contexto) {
-      const mismo = processStepByStep(contexto, "");
+    //       Se prefiere el EJEMPLO que el tutor acaba de resolver (`ejercicio`, que el frontend
+    //       manda ya resuelto en pantalla) sobre la consulta que abrió el tema (`contexto`): si el
+    //       alumno pidió antes "uno más difícil", el problema que tiene delante ya NO es el de su
+    //       consulta original, y era ese el que se le re-explicaba por error.
+    if (seguimiento === "reexplicar" && (ejercicio || contexto)) {
+      //       Una expresión SUELTA no dice qué hay que hacer con ella: "3x⁴ - 2x²" puede derivarse o
+      //       factorizarse, y el desglose no la reconocía (se iba a re-enseñar el tema con otro caso).
+      //       Se prueban las lecturas posibles, en orden, y vale la primera que produzca pasos.
+      //       El TEMA ACTIVO decide la lectura: "4x² - 25" en una sesión de factorización hay que
+      //       FACTORIZARLO, no derivarlo. Sin esta prioridad, la misma expresión se derivaba.
+      const temaCtx = String(contexto || "").toLowerCase();
+      const candidatos = [];
+      if (ejercicio) {
+        if (/deriv/.test(temaCtx)) candidatos.push(`derivada de ${ejercicio}`);
+        if (/factoriz|cuadrados/.test(temaCtx)) candidatos.push(`factoriza ${ejercicio}`);
+        candidatos.push(ejercicio, `derivada de ${ejercicio}`, `factoriza ${ejercicio}`);
+      }
+      if (contexto) candidatos.push(contexto);
+      let mismo = null;
+      for (const c of candidatos) {
+        const intento = processStepByStep(c, "");
+        if (intento && intento.pasos.filter((p) => p.tipo === "pizarra").length >= 2) { mismo = intento; break; }
+      }
       // Solo vale si de verdad DESGLOSÓ algo. Con un tema sin ejercicio concreto ("enséñame
       // derivadas") el desglose devuelve una única pizarra que repite la frase del alumno; en ese
       // caso no sirve como re-explicación y se sigue el flujo normal (re-enseñar el tema).
