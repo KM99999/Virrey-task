@@ -58,6 +58,7 @@ const historial = [];      // consultas recientes del alumno (contexto de conver
 let lastLessonSummary = ""; // resumen de la ÚLTIMA lección (memoria: para no repetir el mismo ejemplo)
 let lastExercise = null;    // EJERCICIO de PRÁCTICA en pantalla { ejercicio, respuesta } — para "explícame los pasos"
 let lastResuelto = "";      // EJEMPLO que el tutor acaba de resolver — para re-explicarlo en "no entendí"
+let lastParte = "";         // "concepto" | "resolucion": qué parte está viendo el alumno ahora mismo
 
 // PERSISTENCIA de la sesión entre RECARGAS de la página. El estado de conversación (tema activo,
 // historial, memoria de la última lección y ejercicio en pantalla) se guarda en sessionStorage y se
@@ -91,6 +92,28 @@ restoreSession();
 // problema en vez de re-explicarle EL QUE TENÍA DELANTE).
 // Se toma la PRIMERA pizarra que es una expresión matemática: las líneas de concepto llevan ":"
 // ("Derivada: razón de cambio…", "Ejercicio 1: 2x³") y se descartan.
+// ¿Qué PARTE está viendo el alumno: la explicación del CONCEPTO o la resolución de un PROBLEMA?
+// Al decir "no entendí" hay que responder distinto en cada caso: si está en el concepto, hay que
+// explicarle la IDEA de forma más sencilla; si está en un problema, hay que explicarle POR QUÉ se
+// resuelve así (petición del cliente). Se detecta por las líneas de concepto de la lección.
+// Cuenta como CONCEPTO tanto el bloque de definición y regla como la lección de la VIDA REAL (el
+// coche, la pizza, el área que sobra): esa también explica la IDEA, no resuelve un ejercicio. Si no
+// se contara, tras una explicación con un caso real un "no entendí" volvería a tratarse como
+// resolución y le re-resolveríamos una ecuación en vez de explicarle el concepto otra vez.
+const MARCAS_CONCEPTO = new RegExp([
+  "raz[oó]n de cambio", "cu[aá]nto sube o baja", "numerador / denominador", "cu[aá]ntas partes tomo",
+  "producto de factores", "deshacer una multiplicaci[oó]n", "ecuaci[oó]n lineal: a",
+  "juntar cantidades", "quitar una cantidad de otra", "sumar el mismo n[uú]mero", "repartir en partes iguales",
+  // lecciones de la vida real (explican el significado con un caso cotidiano)
+  "un coche", "una planta", "un tanque", "una rampa", "una tienda", "una f[aá]brica", "A\\(L\\)",
+  "pizza", "chocolate", "presupuesto", "cuadernos", "l[aá]mina", "recortar", "c[aá]lculo mental",
+].join("|"), "i");
+function parteDeLaLeccion(lsg) {
+  const flat = flattenLSG(lsg) || [];
+  const texto = flat.map((d) => `${d.texto || ""} ${d.contenido || ""}`).join(" ");
+  return MARCAS_CONCEPTO.test(texto) ? "concepto" : "resolucion";
+}
+
 function extraerEjemploResuelto(lsg) {
   const flat = flattenLSG(lsg) || [];
   for (const d of flat) {
@@ -556,7 +579,12 @@ async function submitQuery() {
     // "No entendí": se manda el EJEMPLO que el tutor acaba de resolver, para que le re-expliquen
     // ESE y no otro. Es el ejemplo resuelto (ya visible), NO el de práctica: explicar la práctica
     // le revelaría la respuesta que debe hallar él.
-    if (tipoSeg === "reexplicar" && lastResuelto) body.ejercicio = lastResuelto;
+    // Se manda también QUÉ PARTE está viendo: si es el CONCEPTO, el servidor debe explicarle la idea
+    // de otra forma más sencilla, no re-resolverle una ecuación.
+    if (tipoSeg === "reexplicar") {
+      body.parte = lastParte || "resolucion";
+      if (lastResuelto && lastParte !== "concepto") body.ejercicio = lastResuelto;
+    }
     if (tipoSeg === "desglosar" && lastExercise) {
       body.ejercicio = lastExercise.ejercicio;
       body.respuesta = lastExercise.respuesta;
@@ -603,6 +631,7 @@ async function submitQuery() {
     // …y el EJEMPLO que se acaba de resolver, para poder re-explicar ESE si dice "no entendí".
     const resueltoActual = extraerEjemploResuelto(data.lsg);
     if (resueltoActual) lastResuelto = resueltoActual;
+    lastParte = parteDeLaLeccion(data.lsg); // concepto o resolución: decide cómo responder a "no entendí"
     persistSession(); // guardar el estado para que sobreviva una recarga (F5)
 
     renderResult(data);

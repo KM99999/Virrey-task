@@ -156,7 +156,13 @@ app.post("/api/query", async (req, res) => {
     //       manda ya resuelto en pantalla) sobre la consulta que abrió el tema (`contexto`): si el
     //       alumno pidió antes "uno más difícil", el problema que tiene delante ya NO es el de su
     //       consulta original, y era ese el que se le re-explicaba por error.
-    if (seguimiento === "reexplicar" && (ejercicio || contexto)) {
+    //       Si el alumno está viendo el CONCEPTO (no un problema), "no entendí" NO debe re-resolverle
+    //       una ecuación: hay que explicarle la IDEA de otra forma más sencilla. Eso lo hace el flujo
+    //       normal más abajo, que en ese caso entrega la lección de la VIDA REAL del tema (el coche,
+    //       la pizza, el área que sobra) — la explicación más intuitiva que tenemos. Petición del
+    //       cliente: distinguir si lo mostrado es concepto o resolución y responder distinto.
+    const parte = req.body?.parte === "concepto" ? "concepto" : "resolucion";
+    if (seguimiento === "reexplicar" && parte !== "concepto" && (ejercicio || contexto)) {
       //       Una expresión SUELTA no dice qué hay que hacer con ella: "3x⁴ - 2x²" puede derivarse o
       //       factorizarse, y el desglose no la reconocía (se iba a re-enseñar el tema con otro caso).
       //       Se prueban las lecturas posibles, en orden, y vale la primera que produzca pasos.
