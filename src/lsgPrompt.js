@@ -534,14 +534,13 @@ export function fraccionResueltaLSG(opts) {
   // ENSEÑAR el tema ("enséñame fracciones"): primero el CONCEPTO (qué es una fracción) y la REGLA,
   // igual que en los otros temas, para no saltar directo al ejercicio (paridad con lineal/derivadas/factoriz.).
   if (o.concepto) {
-    dir.push({ tipo: "hablar", texto: "Una fracción representa partes de un todo: el número de arriba es el numerador (las partes que tomamos) y el de abajo es el denominador (en cuántas partes iguales se divide el todo)." });
-    dir.push({ tipo: "pizarra", accion: "escribir", contenido: "Fracción:  numerador / denominador" });
-    // El cliente pidió el CONCEPTO de fracciones y solo se explicaba la fórmula (la suma). Aquí se enseña
-    // QUÉ ES una fracción con un ejemplo concreto (una pizza en partes), el significado de numerador y
-    // denominador, y fracciones EQUIVALENTES (2/4 = 1/2), ANTES de pasar a operar con ellas.
-    dir.push({ tipo: "hablar", texto: "Por ejemplo, si partes una pizza en 4 porciones iguales y tomas 1, eso es 1/4: el 4 (denominador) dice en cuántas partes se dividió, y el 1 (numerador) cuántas tomaste. Si tomas 2 de esas 4, es 2/4, que es lo mismo que la mitad, 1/2." });
-    dir.push({ tipo: "pizarra", accion: "escribir", contenido: "1/4 = una de 4 partes iguales    ·    2/4 = 1/2 (la mitad)" });
-    dir.push({ tipo: "hablar", texto: "Cuanto MÁS grande es el denominador, en más partes se divide el todo y más pequeña es cada parte: 1/8 es más chico que 1/4. Con la idea clara, veamos cómo se OPERA con fracciones: para SUMARLAS con el mismo denominador, se suman los numeradores y se mantiene el denominador; si son distintos, primero se igualan. Veámoslo con un ejemplo." });
+    // Para elegir la redacción se mira el RESUMEN COMPLETO de la lección previa (`previoTexto`): el
+    // `evitar` de fracciones solo trae la suma ("2/6 + 3/6"), así que nunca contenía la marca del
+    // concepto y siempre salía la misma redacción.
+    for (const d of dirsConcepto(varianteConcepto(o.previoTexto || o.evitar, CONCEPTO_FRACCION))) dir.push(d);
+    // (El QUÉ ES —numerador, denominador, la pizza en partes, 2/4 = 1/2— va en las redacciones de
+    // CONCEPTO_FRACCION, que rotan. Aquí solo queda el puente hacia OPERAR con ellas.)
+    dir.push({ tipo: "hablar", texto: "Con la idea clara, veamos cómo se OPERA con fracciones: para SUMARLAS con el mismo denominador, se suman los numeradores y se mantiene el denominador; si son distintos, primero se igualan. Veámoslo con un ejemplo." });
   }
   if (!dificil) {
     dir.push(
@@ -591,6 +590,74 @@ const ESCENAS_BOTON = new Set(["lineal_resuelta", "derivada_resuelta", "factoriz
 export function esEscenaBoton(escena) { return ESCENAS_BOTON.has(escena); }
 
 const normBoton = (s) => normDashes(String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, ""));
+
+// ── REDACCIONES del bloque de CONCEPTO ────────────────────────────────────────
+// En una sesión de CONCEPTO ("enséñame derivadas"), pedir "otro ejemplo" debe seguir explicando el
+// CONCEPTO con otra ilustración — no saltar a resolver ejercicios a secas (queja del cliente), pero
+// tampoco repetir el mismo texto palabra por palabra (la queja anterior, "como un bucle").
+// Se resuelve con VARIAS redacciones del concepto: se elige la que el alumno NO acaba de ver.
+// Cada una explica lo mismo desde otro ángulo, así el concepto se refuerza en vez de repetirse.
+function varianteConcepto(previo, variantes) {
+  const p = String(previo || "");
+  for (const v of variantes) if (!p.includes(v.marca)) return v;
+  return variantes[0];
+}
+// Convierte una redacción en directivas (hablar/pizarra alternados).
+const dirsConcepto = (v) => {
+  const out = [];
+  for (const par of v.bloques) {
+    out.push({ tipo: "hablar", texto: par[0] });
+    if (par[1]) out.push({ tipo: "pizarra", accion: "escribir", contenido: par[1] });
+  }
+  return out;
+};
+
+const CONCEPTO_DERIVADA = [
+  { marca: "Derivada: razón de cambio", bloques: [
+    ["Una derivada mide la RAPIDEZ con la que cambia una función: en cada punto indica cuánto crece o decrece, es decir, la pendiente de su gráfica. Por eso sirve, por ejemplo, para obtener la velocidad a partir de la posición.",
+     "Derivada: razón de cambio (la pendiente) de una función"],
+    ["Para derivar una potencia usamos la REGLA DE LA POTENCIA: se baja el exponente multiplicando delante y se le resta 1. Es decir, la derivada de x elevado a n es n por x elevado a n menos 1. Veámoslo con un ejemplo.",
+     "Regla de la potencia:  la derivada de xⁿ es n·xⁿ⁻¹"],
+  ] },
+  { marca: "Derivada: cuánto sube o baja", bloques: [
+    ["Veámoslo desde otro ángulo: la derivada es la INCLINACIÓN de la curva en cada punto. Si la gráfica sube deprisa, la derivada es grande; si está plana, vale cero; y si baja, es negativa. Es la misma idea de antes, mirando la forma de la curva.",
+     "Derivada: cuánto sube o baja la curva en cada punto"],
+    ["La receta para una potencia es siempre la misma: el exponente baja a multiplicar y luego se le resta uno. Por eso la derivada de x⁵ es 5x⁴, y la de x² es 2x. Veámoslo con otro ejemplo.",
+     "Receta:  xⁿ  →  n·xⁿ⁻¹"],
+  ] },
+];
+
+const CONCEPTO_FACTORIZ = [
+  { marca: "Factorizar: escribir una expresión como un producto", bloques: [
+    ["Factorizar es reescribir una expresión como un PRODUCTO —una multiplicación de factores más simples— sin cambiar su valor. Es lo contrario de multiplicar: en vez de abrir paréntesis, los buscamos.",
+     "Factorizar: escribir una expresión como un producto de factores"],
+    ["Un caso muy común es la DIFERENCIA DE CUADRADOS: un cuadrado menos otro cuadrado. Su regla es a² - b² = (a - b)(a + b). Veámoslo con un ejemplo.",
+     "Diferencia de cuadrados:  a² - b² = (a - b)(a + b)"],
+  ] },
+  { marca: "Factorizar: deshacer una multiplicación", bloques: [
+    ["Otra manera de verlo: si al multiplicar (x - 3)(x + 3) obtienes x² - 9, factorizar es hacer el camino de vuelta, de x² - 9 a (x - 3)(x + 3). Por eso se dice que factorizar deshace una multiplicación.",
+     "Factorizar: deshacer una multiplicación"],
+    ["Cuando veas un cuadrado MENOS otro cuadrado, la respuesta sale directa: la resta de sus raíces multiplicada por la suma de sus raíces. Veámoslo con otro ejemplo.",
+     "a² - b²  →  (a - b)(a + b)"],
+  ] },
+];
+
+const CONCEPTO_FRACCION = [
+  // OJO: la marca NO debe llevar espacios dobles — el PRE Light los colapsa al sanear la pizarra y
+  // entonces nunca casaba con el resumen previo, así que siempre salía esta misma redacción.
+  { marca: "numerador / denominador", bloques: [
+    ["Una fracción representa partes de un todo: el número de arriba es el numerador (las partes que tomamos) y el de abajo es el denominador (en cuántas partes iguales se divide el todo).",
+     "Fracción:  numerador / denominador"],
+    ["Por ejemplo, si partes una pizza en 4 porciones iguales y tomas 1, eso es 1/4: el 4 (denominador) dice en cuántas partes se dividió, y el 1 (numerador) cuántas tomaste. Si tomas 2 de esas 4, es 2/4, que es lo mismo que la mitad, 1/2.",
+     "1/4 = una de 4 partes iguales    ·    2/4 = 1/2 (la mitad)"],
+  ] },
+  { marca: "cuántas partes tomo", bloques: [
+    ["Otra forma de leerla: la fracción responde a dos preguntas. El de abajo dice EN CUÁNTAS partes se ha dividido algo, y el de arriba CUÁNTAS de esas partes tomo. En 3/5 hay cinco partes y me quedo con tres.",
+     "Fracción:  cuántas partes tomo de las que hay"],
+    ["Y cuanto MÁS grande es el número de abajo, más pequeña es cada parte: 1/8 de una tarta es menos que 1/4, aunque el 8 sea mayor que el 4. Veámoslo con otro ejemplo.",
+     "1/8 < 1/4  (más partes ⇒ cada parte más pequeña)"],
+  ] },
+];
 // Forma compacta y comparable de una expresión (sin espacios, superíndices → ^n) para rotar sin repetir.
 const canonExpr = (s) => normDashes(String(s || "").toLowerCase())
   .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]/g, (c) => "^" + "⁰¹²³⁴⁵⁶⁷⁸⁹".indexOf(c))
@@ -993,10 +1060,7 @@ export function derivadaResueltaLSG(opts = {}) {
   // y la REGLA, y SOLO DESPUÉS el ejemplo resuelto — no saltar directo a resolver un ejercicio (queja
   // del cliente: "le digo 'enséñame derivadas' y de frente me enseña a resolver ejercicios").
   if (opts.concepto) {
-    dir.push({ tipo: "hablar", texto: "Una derivada mide la RAPIDEZ con la que cambia una función: en cada punto indica cuánto crece o decrece, es decir, la pendiente de su gráfica. Por eso sirve, por ejemplo, para obtener la velocidad a partir de la posición." });
-    dir.push({ tipo: "pizarra", accion: "escribir", contenido: "Derivada: razón de cambio (la pendiente) de una función" });
-    dir.push({ tipo: "hablar", texto: "Para derivar una potencia usamos la REGLA DE LA POTENCIA: se baja el exponente multiplicando delante y se le resta 1. Es decir, la derivada de x elevado a n es n por x elevado a n menos 1. Veámoslo con un ejemplo." });
-    dir.push({ tipo: "pizarra", accion: "escribir", contenido: "Regla de la potencia:  la derivada de xⁿ es n·xⁿ⁻¹" });
+    for (const d of dirsConcepto(varianteConcepto(opts.evitar, CONCEPTO_DERIVADA))) dir.push(d);
     dir.push({ tipo: "hablar", texto: `Vamos a derivar ${ejemplo}.` });
   } else {
     dir.push({ tipo: "hablar", texto: `Vamos a derivar ${ejemplo}. Derivar mide qué tan rápido cambia una función. Para una potencia usamos la regla de la potencia: la derivada de xⁿ es n·xⁿ⁻¹.` });
@@ -1196,10 +1260,7 @@ export function factorizacionResueltaLSG(opts = {}) {
   // ENSEÑAR el tema ("enséñame factorización"): primero el CONCEPTO (qué es factorizar) y la REGLA, y
   // LUEGO el ejemplo — no saltar directo a resolver (misma queja del cliente que en derivadas).
   if (opts.concepto) {
-    dir.push({ tipo: "hablar", texto: "Factorizar es reescribir una expresión como un PRODUCTO —una multiplicación de factores más simples— sin cambiar su valor. Es lo contrario de multiplicar: en vez de abrir paréntesis, los buscamos." });
-    dir.push({ tipo: "pizarra", accion: "escribir", contenido: "Factorizar: escribir una expresión como un producto de factores" });
-    dir.push({ tipo: "hablar", texto: 'Un caso muy común es la DIFERENCIA DE CUADRADOS: un cuadrado menos otro cuadrado. Su regla es a² - b² = (a - b)(a + b). Veámoslo con un ejemplo.' });
-    dir.push({ tipo: "pizarra", accion: "escribir", contenido: "Diferencia de cuadrados:  a² - b² = (a - b)(a + b)" });
+    for (const d of dirsConcepto(varianteConcepto(opts.evitar, CONCEPTO_FACTORIZ))) dir.push(d);
     dir.push({ tipo: "hablar", texto: `Vamos a factorizar ${ejemplo}.` });
   } else {
     dir.push({ tipo: "hablar", texto: `Vamos a factorizar ${ejemplo}. Es una "diferencia de cuadrados": un cuadrado menos otro cuadrado. La regla es a² - b² = (a - b)(a + b).` });
@@ -1538,10 +1599,8 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   // resumen `previo`), no se vuelve a emitir y se va directo al ejemplo nuevo. Si no salió —primera
   // vez en el tema—, sí se explica. Así el concepto se enseña una vez y los siguientes "otro
   // ejemplo" traen contenido nuevo de verdad.
-  const MARCAS_CONCEPTO = /raz[oó]n de cambio|numerador \/ denominador|ecuaci[oó]n lineal: a|producto de factores|juntar cantidades|quitar una cantidad|sumar el mismo n[uú]mero|repartir en partes iguales/i;
-  const conceptoYaVisto = esSeg && MARCAS_CONCEPTO.test(String(previo || ""));
   const conceptoOn = pideEnsenar && (!esSeg || seguimiento === "continuacion" || seguimiento === "practicar")
-    && (!pidePracticaExpl || verboEnsenar) && !conceptoYaVisto;
+    && (!pidePracticaExpl || verboEnsenar);
   // PRACTICAR: el alumno pide EJERCICIOS para resolverlos ÉL MISMO — no que se los resuelvan ni que le
   // re-expliquen el concepto. Señales: el botón "otro ejercicio" (seguimiento), "quiero practicar", "para
   // practicar / que yo resuelva / yo mismo / por mi cuenta / para yo resolverlos", o mencionar "ejercicios/
@@ -1655,7 +1714,7 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
     // ejemplo") se IGNORA y se ROTA (igual que los otros temas), si no repetiría siempre la misma suma.
     const instFrac = esSeg ? null : fracInst;
     // "enséñame fracciones" (sin fracción concreta) → CONCEPTO primero; con fracción concreta → resolver ESA.
-    return commonRet("fraccion", fraccionResueltaLSG({ evitar: evitarFrac, nivel, concepto: !instFrac && conceptoOn, instancia: instFrac, practica: pidePracticar }));
+    return commonRet("fraccion", fraccionResueltaLSG({ evitar: evitarFrac, previoTexto: previo, nivel, concepto: !instFrac && conceptoOn, instancia: instFrac, practica: pidePracticar }));
   }
 
   // 4) ECUACIÓN LINEAL. Una ecuación lineal concreta ("2x + 5 = 15") o el tema genérico ("ecuación lineal").
