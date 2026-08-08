@@ -1523,11 +1523,26 @@ function temaNucleo(text) {
   if (/factoriz|diferencia de cuadrados/.test(n) || /[a-z]\s*(?:\^\s*2|[²])\s*-\s*\d/i.test(text)) return "factorizacion";
   if (/fracc/.test(n) || /\d\s*\/\s*\d/.test(text)) return "fraccion";
   if (/ecuaci|lineal|primer grado|despej/.test(n) || solveLinearSteps(text) !== null) return "lineal";
+  // ARITMÉTICA. Faltaba, y por eso una sesión de "enséñame a sumar" perdía la red de seguridad: un
+  // "no entendí" (o cualquier seguimiento) no encontraba tema activo y salía del motor determinista
+  // hacia la IA, en un tema que SÍ está dentro de lo garantizado. Va al final para que "suma de
+  // fracciones" o "resta de polinomios" ya se hayan resuelto arriba como fracción/álgebra.
+  if (/\bsum(a|ar|amos|as|en)?\b|adici[oó]n/.test(n)) return "suma";
+  if (/\brest(a|ar|as|o|amos)?\b|sustrac/.test(n)) return "resta";
+  if (/\bmultiplic|\btablas?\s+de\s+multiplicar\b/.test(n)) return "multiplicacion";
+  if (/\bdivid|divisi[oó]n|\brepart/.test(n)) return "division";
+  // …y también por la OPERACIÓN escrita: "Resuelve 47 + 38" no dice "suma" por ninguna parte, así
+  // que no se reconocía el tema y la sesión perdía la red de seguridad en el primer seguimiento.
+  const op = extraerOperacion(text);
+  if (op && op.op) return op.op;
   return null;
 }
 const GEN_APLICADA = { derivada: derivadaAplicadaLSG, lineal: linealAplicadaLSG, fraccion: fraccionAplicadaLSG, factorizacion: factorizacionAplicadaLSG };
 // Generadores RESUELTOS (paso a paso) por tema núcleo; también sirven en modo PRACTICAR (opts.practica).
-const GEN_RESUELTA = { derivada: derivadaResueltaLSG, lineal: linealResueltaLSG, fraccion: fraccionResueltaLSG, factorizacion: factorizacionResueltaLSG };
+// Incluye la ARITMÉTICA: sin ella, un seguimiento en una sesión de sumar/restar/multiplicar/dividir
+// se quedaba sin generador determinista y acababa en la IA (tema DENTRO del alcance garantizado).
+const GEN_RESUELTA = { derivada: derivadaResueltaLSG, lineal: linealResueltaLSG, fraccion: fraccionResueltaLSG,
+  factorizacion: factorizacionResueltaLSG, ...GEN_ARIT };
 
 export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", currentTopic = "", previo = "", historial = [] } = {}) {
   // Normaliza los guiones/menos unicode ("−" U+2212, "–", "—", "‐"…) a "-" ASCII EN EL PUNTO DE ENTRADA, para
@@ -1678,6 +1693,12 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
     if (/fracc/.test(tt) || (hayFrac && !hayLineal)) return commonRet("fraccion", fraccionAplicadaLSG({ evitar: evitarAp }));
     if (/factoriz|diferencia de cuadrados/.test(tt) || hayDifCuad) return commonRet("factorizacion", factorizacionAplicadaLSG({ evitar: evitarAp }));
     if (/ecuaci|lineal|primer grado|despej/.test(tt) || hayLineal) return commonRet("lineal", linealAplicadaLSG({ evitar: evitarAp }));
+    // ARITMÉTICA: no tiene versión "de la vida real" propia, pero es un tema GARANTIZADO y no debe
+    // salir del motor determinista. Se re-enseña con su lección de concepto, que ya explica el
+    // significado cotidiano ("sumar es juntar cantidades", "restar es quitar"). Sin esto, pedir
+    // "un ejemplo de la vida real" mientras se aprende a sumar acababa en la IA.
+    const temaArit = temaNucleo(`${nQ} ${ctxTema}`);
+    if (temaArit && GEN_ARIT[temaArit]) return commonRet(temaArit, GEN_ARIT[temaArit]({ evitar: previo, concepto: true }));
     return null; // aplicado pero sin tema identificable → explicación conceptual la da Gemini (Nivel 2)
   }
 
@@ -1774,8 +1795,12 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   // determinista, salvo que el alumno nombre explícitamente un tema nuevo (esas consultas ya salieron
   // arriba por las ramas 1-4 o no tienen tema núcleo activo).
   const temaActivo = temaNucleo(contexto) || temaNucleo(currentTopic);
-  if (temaActivo && GEN_APLICADA[temaActivo] && esReteachBoton(query, seguimiento)) {
-    return commonRet(temaActivo, GEN_APLICADA[temaActivo]({ evitar: previo }));
+  // La aritmética no tiene versión "de la vida real", así que se re-enseña con su propia lección
+  // determinista (concepto + ejemplo). Antes no había generador para ella aquí y el seguimiento
+  // salía del motor garantizado.
+  const genReteach = GEN_APLICADA[temaActivo] || GEN_RESUELTA[temaActivo];
+  if (temaActivo && genReteach && esReteachBoton(query, seguimiento)) {
+    return commonRet(temaActivo, genReteach({ evitar: previo, concepto: true }));
   }
 
   return null; // no es ninguno de los 4 botones → flujo normal (Gemini)
