@@ -1800,7 +1800,10 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   // salía del motor garantizado.
   const genReteach = GEN_APLICADA[temaActivo] || GEN_RESUELTA[temaActivo];
   if (temaActivo && genReteach && esReteachBoton(query, seguimiento)) {
-    return commonRet(temaActivo, genReteach({ evitar: previo, concepto: true }));
+    // `seguimiento: true` es imprescindible: sin él, elegirBoton devuelve SIEMPRE el primer ejemplo
+    // de la lista en vez de rotar con `evitar`, así que un "y otro más" que llega por esta red de
+    // seguridad (porque la frase no se reconoció como seguimiento) repetía la misma lección.
+    return commonRet(temaActivo, genReteach({ evitar: previo, seguimiento: true, concepto: true }));
   }
 
   return null; // no es ninguno de los 4 botones → flujo normal (Gemini)
