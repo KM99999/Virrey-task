@@ -144,6 +144,26 @@ function extraerEjercicio(lsg) {
   return { ejercicio, respuesta };
 }
 
+// MEMORIA LARGA de las expresiones ya mostradas (x², 3x⁴, x² - 9, 24 + 17…). La rotación de ejemplos
+// evita lo que aparece en `previo`; si ahí solo va la ÚLTIMA lección, solo puede esquivar uno o dos
+// ejemplos y acaba alternando entre dos (queja del cliente: "se repiten dos ejemplos"). Guardando las
+// últimas expresiones vistas, la rotación las salta todas y recorre la lista entera antes de repetir.
+// Se guarda SOLO el ejemplo trabajado de cada lección (la primera expresión de la pizarra), NO el
+// ejercicio de práctica: si se guardaran los dos, la rotación avanzaría de dos en dos y solo llegaría
+// a la mitad de la lista. Y la ventana es CORTA a propósito: con memoria ilimitada, en cuanto se han
+// visto todos los ejemplos la rotación se queda clavada en el primero y repite siempre el mismo.
+const expresionesVistas = [];
+function recordarExpresiones(lsg) {
+  for (const d of flattenLSG(lsg) || []) {
+    if (d.tipo !== "pizarra" || !d.contenido) continue;
+    const c = String(d.contenido).trim();
+    if (c.includes(":") || c.length > 24 || !/\d|x/i.test(c)) continue; // solo expresiones cortas
+    if (!expresionesVistas.includes(c)) expresionesVistas.push(c);
+    break;                                   // solo la PRIMERA: el ejemplo, no la práctica
+  }
+  while (expresionesVistas.length > 4) expresionesVistas.shift();
+}
+
 // Resumen breve de una lección (sus primeras explicaciones), para dárselo a la IA como "lo ya visto".
 function resumenLeccion(lsg) {
   const flat = flattenLSG(lsg) || [];
@@ -623,7 +643,10 @@ async function submitQuery() {
       lastTopicQuery = query;
     }
     // Memoria de la lección recién generada (para que un próximo "otro ejemplo" no la repita).
-    lastLessonSummary = resumenLeccion(data.lsg);
+    recordarExpresiones(data.lsg);
+    // Las expresiones ya vistas van DELANTE del resumen: el servidor recorta `previo`, y lo que la
+    // rotación necesita esquivar son precisamente ellas.
+    lastLessonSummary = expresionesVistas.join(" · ") + " · " + resumenLeccion(data.lsg);
     // Recordar el EJERCICIO en pantalla (para "explícame los pasos"). Solo se actualiza si la
     // lección trae uno; un desglose (que no lo trae) conserva el ejercicio anterior.
     const ejActual = extraerEjercicio(data.lsg);
