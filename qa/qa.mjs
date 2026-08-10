@@ -445,8 +445,57 @@ async function unitTests() {
     check(`cursor: abrir un tema de nuevo vuelve al ejemplo canónico`, JSON.stringify(a1.pizarras) === JSON.stringify(a2.pizarras));
     check(`cursor: cada tema lleva su propia posición`, lin.tema === "lineal" && a2.tema === "derivada");
     const claves = Object.keys(cursores).sort();
-    check(`cursor: la clave es tema:nivel`, claves.every((k) => /^[a-z_]+:(facil|normal|dificil)$/.test(k)) && claves.length >= 2, claves.join(","));
+    // Toda clave que produzcan los generadores tiene que SOBREVIVIR al saneador del servidor (que
+    // descarta lo que no case con su patrón). Una clave descartada no da error: simplemente hace que
+    // esa rotación deje de avanzar y el alumno vuelva a ver lo mismo. Se comprueba el patrón REAL del
+    // servidor, no uno parecido: antes se exigía que el sufijo fuera una dificultad, y eso dejaba
+    // fuera claves legítimas como la del contador de "no entendí".
+    const PATRON_SERVIDOR = /^[a-z_]{1,20}:[a-z]{1,10}$/;
+    check(`cursor: toda clave pasa el saneador del servidor`, claves.length >= 2 && claves.every((k) => PATRON_SERVIDOR.test(k)), claves.join(","));
+    check(`cursor: las claves de TEMA llevan la dificultad`, claves.filter((k) => /^(derivada|lineal|factorizacion|fraccion|suma|resta|multiplicacion|division):/.test(k))
+      .every((k) => /:(facil|normal|dificil)$/.test(k)), claves.join(","));
   }
+  // ── INSISTIR EN "NO ENTENDÍ": cada vez debe explicarse MÁS SENCILLO, no repetir lo mismo.
+  //    Se comprobó que 4 «no entendí» seguidos devolvían UNA sola respuesta distinta en 4 de los 5
+  //    temas: el alumno decía tres veces que no entendía y recibía tres veces el mismo texto, que es
+  //    el "bucle" del que se quejó el cliente y en el peor momento posible. Ahora hay una escalera:
+  //    otra forma de verlo → caso mínimo con números pequeños → la regla desnuda y, además, ejercicio
+  //    del nivel FÁCIL (esto último es la petición del 7 de agosto, que estaba sin construir).
+  for (const [label, abrir, expTema] of [
+    ["lineales",      "Enséñame ecuaciones lineales", "lineal"],
+    ["derivadas",     "Enséñame derivadas",           "derivada"],
+    ["factorización", "Explícame la factorización",   "factorizacion"],
+    ["fracciones",    "Enséñame fracciones",          "fraccion"],
+    ["suma",          "Enséñame a sumar",             "suma"],
+  ]) {
+    const cursores = {};
+    const ini = correrBoton({ query: abrir, cursores });
+    let previo = ini.resumen;
+    const firmas = [], niveles = []; let temaOk = true; let ultimo = null;
+    for (let i = 0; i < 4; i++) {
+      const r = correrBoton({ query: "no entendí", seguimiento: "reexplicar", contexto: abrir, currentTopic: abrir, previo, cursores });
+      if (!r) { temaOk = false; break; }
+      if (r.tema !== expTema) temaOk = false;
+      firmas.push(JSON.stringify(r.pizarras) + "||" + (r.flat || []).filter((d) => d.tipo === "hablar").map((d) => d.texto).join(" "));
+      niveles.push(cursores["reexplica:nivel"]);
+      previo = r.resumen; ultimo = r;
+    }
+    const seguidasIguales = firmas.filter((f, i) => i > 0 && f === firmas[i - 1]).length;
+    check(`insistir "no entendí" [${label}]: sigue en el mismo tema determinista`, temaOk);
+    check(`insistir "no entendí" [${label}]: NUNCA repite la respuesta anterior`, seguidasIguales === 0, `${seguidasIguales} repeticiones seguidas`);
+    check(`insistir "no entendí" [${label}]: 4 respuestas DISTINTAS`, new Set(firmas).size === 4, `distintas=${new Set(firmas).size}`);
+    check(`insistir "no entendí" [${label}]: baja de escalón hasta el más sencillo`, niveles.join(",") === "0,1,2,2", niveles.join(","));
+    // Al llegar al escalón más bajo, el EJERCICIO también debe ser más sencillo (no más largo que el
+    // de partida) y distinto de él: es lo que pidió el cliente con "bajar a un problema más fácil".
+    const expr = (r) => (r.pizarras || []).find((c) => !String(c).includes(":") && /\d|x/i.test(String(c))) || "";
+    check(`insistir "no entendí" [${label}]: acaba con un ejercicio MÁS FÁCIL`,
+      !!ultimo && expr(ultimo).length <= expr(ini).length && expr(ultimo) !== expr(ini),
+      `${expr(ini)} → ${expr(ultimo)}`);
+    // Y una petición normal REINICIA la escalera: no se queda en "modo simplificado" para siempre.
+    correrBoton({ query: "dame otro ejemplo", seguimiento: "continuacion", contexto: abrir, currentTopic: abrir, previo, cursores });
+    check(`insistir "no entendí" [${label}]: otra petición reinicia la escalera`, cursores["reexplica:nivel"] === -1, String(cursores["reexplica:nivel"]));
+  }
+
   // ── LA CLASE CONTINÚA tras resolver un ejercicio (queja del cliente: "enseña un tema, enseña un
   //    ejercicio y culmina la clase. La clase debe continuar"). Antes la lección terminaba y el tutor
   //    se callaba hasta que el alumno escribiera algo. Ahora él mismo enlaza el tramo siguiente.

@@ -595,6 +595,7 @@ export function fraccionResueltaLSG(opts) {
   // PRÁCTICA: otra fracción DISTINTA que resuelve el alumno (calificable).
   dir.push({ tipo: "pizarra", accion: "escribir", contenido: `${B.texto} = ?` });
   dir.push({ tipo: "preguntar", texto: `¿Cuánto es ${B.texto}? Escríbelo en su forma más simple.`, respuesta: B.final, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" });
+  if (o.mantener) aperturaReexplicacion(dir, SIMPLE_FRACCION, o.simplificacion);
   return { escena: "fraccion_resuelta", intencion: o.concepto ? "aprender" : "resolver", duracion_estimada: 60, _mock: true, directivas: dir };
 }
 
@@ -957,18 +958,22 @@ function extraerOperacion(text) {
 }
 const ARIT = {
   suma: { escena: "suma_resuelta", lista: SUMAS, verbo: "sumar", pasos: pasosSuma,
+    simple: ["Hazlo con los dedos o con objetos: si tienes 4 lápices y te dan 3 más, los cuentas todos y son 7. Sumar es solo eso, juntar y contar cuántos hay.", "Con números grandes es lo mismo, solo que por partes: primero juntas las unidades, luego las decenas. Si al juntar unidades te pasas de 9, esa decena que sobra la pasas a la columna de al lado. Nada más."],
     rec: "suma columna por columna de derecha a izquierda; si una columna pasa de 9, escribes las unidades y llevas 1.", concepto: [
     "Sumar es JUNTAR cantidades para saber cuántas hay en total.", "Suma:  juntar cantidades → total",
     "Cuando los números tienen varias cifras, sumamos columna por columna, de derecha a izquierda (primero las unidades, luego las decenas…). Si una columna pasa de 9, escribimos la cifra de las unidades y LLEVAMOS 1 a la siguiente. Veámoslo con un ejemplo."] },
   resta: { escena: "resta_resuelta", lista: RESTAS, verbo: "restar", pasos: pasosResta,
+    simple: ["Piénsalo como quitar: tienes 9 caramelos, te comes 5, ¿cuántos quedan? 4. Restar es solo eso, ver qué queda al quitar una parte.", "Con números grandes vas por columnas. Y si arriba tienes menos que abajo, le pides 1 a la columna de la izquierda, que vale 10 y te saca del apuro. Es como cambiar un billete de 10 en monedas para poder pagar."],
     rec: "resta columna por columna de derecha a izquierda; si arriba hay menos que abajo, pides prestada una unidad (vale 10) a la columna de la izquierda.", concepto: [
     "Restar es QUITAR una cantidad de otra: cuánto queda al sacar una parte.", "Resta:  quitar una cantidad de otra",
     "Restamos columna por columna, de derecha a izquierda. Si arriba hay menos que abajo, pedimos PRESTADA una unidad a la columna de la izquierda, que vale 10. Veámoslo con un ejemplo."] },
   multiplicacion: { escena: "multiplicacion_resuelta", lista: MULTIS, verbo: "multiplicar", pasos: pasosMult,
+    simple: ["Multiplicar es sumar lo mismo varias veces: 3 × 4 es 4 + 4 + 4, o sea 12. Si te bloqueas, súmalo y saldrá igual.", "Con un número de dos cifras, pártelo: 12 × 4 es 10 × 4 más 2 × 4, o sea 40 + 8 = 48. Partir el número en decenas y unidades lo vuelve fácil."],
     rec: "descompón el número de dos cifras en decenas y unidades, multiplica cada parte y suma los resultados.", concepto: [
     "Multiplicar es SUMAR el mismo número varias veces: una forma rápida de sumar repetido.", "Multiplicar:  sumar el mismo número varias veces",
     "Para multiplicar por un número de dos cifras, lo descomponemos en decenas y unidades, multiplicamos por cada parte y sumamos. Veámoslo con un ejemplo."] },
   division: { escena: "division_resuelta", lista: DIVIS, verbo: "dividir", pasos: pasosDiv,
+    simple: ["Dividir es repartir: 12 caramelos entre 3 niños, ¿cuántos a cada uno? 4. Reparte de uno en uno y cuenta cuántos le tocan a cada uno.", "Y hay un truco: la división es la multiplicación al revés. Para 84 ÷ 4, pregúntate qué número por 4 da 84. Si sabes multiplicar, ya sabes dividir."],
     rec: "busca el número que, multiplicado por el divisor, da el total (la división es la inversa de multiplicar).", concepto: [
     "Dividir es REPARTIR una cantidad en partes iguales, o ver cuántas veces cabe un número en otro.", "Dividir:  repartir en partes iguales",
     "Dividir es la operación INVERSA de multiplicar: buscamos el número que, multiplicado por el divisor, da el total. Veámoslo con un ejemplo."] },
@@ -1074,6 +1079,7 @@ function aritmeticaLSG(opts, cfg) {
   dir.push({ tipo: "hablar", texto: `Así, ${E.texto} ${eq} ${E.answer}. Ahora te toca a ti.` });
   dir.push({ tipo: "pizarra", accion: "escribir", contenido: `${P.texto} = ?` });
   dir.push({ tipo: "preguntar", texto: pregArit(P), respuesta: String(P.answer), esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" });
+  if (opts.mantener) aperturaReexplicacion(dir, cfg.simple, opts.simplificacion);
   return { escena: cfg.escena, intencion: opts.concepto ? "aprender" : "resolver", duracion_estimada: 60, _mock: true, directivas: dir };
 }
 export function sumaResueltaLSG(opts = {}) { return aritmeticaLSG(opts, ARIT.suma); }
@@ -1147,6 +1153,7 @@ export function linealResueltaLSG(opts = {}) {
   dir.push({ tipo: "hablar", texto: `Comprobado: ${sol.varName} = ${sol.answer}. Ahora te toca a ti con otra ecuación parecida.` });
   dir.push({ tipo: "pizarra", accion: "escribir", contenido: solP.original });
   dir.push({ tipo: "preguntar", texto: `¿Cuánto vale ${solP.varName} en ${solP.original}? Escribe solo el número.`, respuesta: solP.answer, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" });
+  if (opts.mantener) aperturaReexplicacion(dir, SIMPLE_LINEAL, opts.simplificacion);
   return { escena: "lineal_resuelta", intencion: opts.concepto ? "aprender" : "resolver", duracion_estimada: 70, _mock: true, directivas: dir };
 }
 
@@ -1215,6 +1222,7 @@ export function derivadaResueltaLSG(opts = {}) {
     { tipo: "pizarra", accion: "escribir", contenido: practica },
     { tipo: "preguntar", texto: `¿Cuál es la derivada de ${practica}?`, respuesta: derP, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
   );
+  if (opts.mantener) aperturaReexplicacion(dir, SIMPLE_DERIVADA, opts.simplificacion);
   return { escena: "derivada_resuelta", intencion: opts.concepto ? "aprender" : "resolver", duracion_estimada: 65, _mock: true, directivas: dir };
 }
 
@@ -1228,14 +1236,64 @@ export function derivadaResueltaLSG(opts = {}) {
 // diferente"); si además se devolviera la lección IDÉNTICA, se caería en la otra queja que ya había
 // hecho antes ("me muestra lo mismo a cada momento, como un bucle"). Así que al mantener el caso se
 // abre con un aviso explícito y se añade UNA explicación nueva, más concreta, del mismo ejemplo.
-function aperturaReexplicacion(dir, extra) {
-  dir.splice(1, 0,
-    { tipo: "hablar", texto: "Sin problema: es el MISMO ejemplo que tienes en la pizarra, no lo cambio. Vamos más despacio y te lo cuento con otras palabras." });
-  if (extra) {
+// El AVISO de apertura cambia según cuántas veces seguidas lleve el alumno diciendo que no entiende:
+// no es lo mismo la primera vez que la tercera, y repetir el mismo aviso es parte de lo que hacía que
+// el tutor sonara a máquina.
+const AVISO_REEXPLICA = [
+  "Sin problema: es el MISMO ejemplo que tienes en la pizarra, no lo cambio. Vamos más despacio y te lo cuento con otras palabras.",
+  "Vale, vamos a bajar un escalón. Mismo ejemplo, pero te lo explico de la forma más sencilla que sé, con números pequeños.",
+  "Tranquilo, esto le pasa a todo el mundo. Vamos a lo MÁS simple: olvídate del ejercicio grande un momento y quédate solo con la idea.",
+];
+function aperturaReexplicacion(dir, extra, nivel = 0) {
+  const n = Math.max(0, Math.min(2, Number(nivel) || 0));
+  dir.splice(1, 0, { tipo: "hablar", texto: AVISO_REEXPLICA[n] });
+  // `extra` puede ser un texto o una ESCALERA de textos (uno por nivel de simplificación): cada vez que
+  // el alumno insiste en que no entiende, se baja un escalón en vez de repetir lo mismo. Antes se
+  // devolvía la MISMA lección palabra por palabra a partir de la segunda vez (comprobado: 4 «no
+  // entendí» seguidos daban 1 sola respuesta distinta en 4 de los 5 temas).
+  const textos = Array.isArray(extra) ? extra.filter(Boolean) : (extra ? [extra] : []);
+  const txt = textos.length ? textos[Math.min(n, textos.length - 1)] : "";
+  if (txt) {
     const i = dir.findIndex((d) => d.tipo === "pizarra");
-    dir.splice(i >= 0 ? i + 1 : dir.length, 0, { tipo: "hablar", texto: extra });
+    dir.splice(i >= 0 ? i + 1 : dir.length, 0, { tipo: "hablar", texto: txt });
   }
   return dir;
+}
+// Cuenta cuántos "no entendí" SEGUIDOS lleva el alumno (0, 1, 2…), guardado en el cursor que ya viaja
+// con la conversación. Cualquier otra petición lo reinicia: la escalera de simplificación es para la
+// insistencia, no para un "no entendí" suelto en mitad de la clase.
+// ESCALERAS DE SIMPLIFICACIÓN de las lecciones NUMÉRICAS (la versión aplicada tiene la suya, con su
+// caso real). Un escalón por cada "no entendí" seguido: primero otra forma de verlo, luego un caso
+// mínimo con números pequeños, y al final la regla desnuda, con lo mínimo que hay que retener.
+const SIMPLE_LINEAL = [
+  "Otra forma de verlo: la x es el número que todavía no sabes, y el signo igual dice que los dos lados pesan lo mismo. Resolver es dejar la x sola de un lado, quitando de su alrededor lo que la acompaña.",
+  "Piensa en una balanza en equilibrio. Si quitas lo mismo de los dos platillos, sigue equilibrada; si partes los dos por la mitad, también. Resolver es eso: quitar y partir a los DOS lados hasta que quede solo la x.",
+  "Lo más simple posible: x + 3 = 8. Quitas 3 a los dos lados y queda x = 5. Ya está, eso es resolver una ecuación. Las demás son lo mismo repitiendo ese paso una o dos veces más.",
+];
+const SIMPLE_DERIVADA = [
+  "Otra forma de verlo: la función dice cuánto llevas ACUMULADO, y la derivada dice cuánto SUBE justo en ese punto. Son dos preguntas distintas sobre la misma curva.",
+  "Con números pequeños: en x² , con x = 1 vale 1, con x = 2 vale 4, con x = 3 vale 9. Mira lo que sube: de 1 a 4 sube 3, de 4 a 9 sube 5. Cada vez sube más. La derivada mide exactamente ese subir.",
+  "Quédate solo con la regla: el exponente baja a multiplicar delante y se le resta 1. Así, x² se convierte en 2x, y x³ en 3x². Si retienes eso, ya tienes lo esencial de derivar.",
+];
+const SIMPLE_FACTORIZ = [
+  "Otra forma de verlo: factorizar es lo CONTRARIO de multiplicar. Partimos del resultado y buscamos qué dos paréntesis lo produjeron.",
+  "El caso más pequeño: x² - 4. ¿Qué por sí mismo da 4? El 2. ¿Y qué por sí misma da x²? La x. Pues se escribe (x - 2)(x + 2): las mismas dos raíces, una restando y otra sumando.",
+  "Solo dos preguntas: la raíz de lo primero y la raíz de lo segundo. Las escribes dos veces, una con menos y otra con más. En x² - 9 son x y 3, así que sale (x - 3)(x + 3). Nada más.",
+];
+const SIMPLE_FRACCION = [
+  "Otra forma de verlo: el número de abajo dice en cuántos trozos está partido el todo, y el de arriba cuántos trozos coges. Al juntar trozos del mismo tamaño, el de abajo no cambia.",
+  "Hazlo con una pizza partida en 5 porciones. Coges 1 y luego 2 más: tienes 3 porciones de las 5. Eso es 1/5 + 2/5 = 3/5. La pizza sigue partida en 5, eso no cambia.",
+  "Quédate con la regla: si abajo es el mismo número, sumas solo los de arriba y abajo lo dejas quieto. 1/5 + 2/5 = 3/5. Si abajo son distintos, primero hay que igualarlos.",
+];
+const CLAVE_REEXPLICA = "reexplica:nivel";
+function nivelReexplicacion(cursores, esReexplica) {
+  const m = cursorMapa(cursores);
+  if (!m) return 0;
+  if (!esReexplica) { m[CLAVE_REEXPLICA] = -1; return 0; }
+  const previo = Number.isInteger(m[CLAVE_REEXPLICA]) ? m[CLAVE_REEXPLICA] : -1;
+  const n = Math.min(previo + 1, 2);
+  m[CLAVE_REEXPLICA] = n;
+  return n;
 }
 // `cur` = { cursores, clave }: igual que en las listas numéricas, la posición explícita manda sobre lo
 // deducido del texto. Sin ella, dos peticiones de "un ejemplo de la vida real" separadas por otro turno
@@ -1405,8 +1463,11 @@ export function derivadaAplicadaLSG(opts = {}) {
     { tipo: "pizarra", accion: "escribir", contenido: `derivada 2${c.varSym}  en ${c.uRate}   ·   sustituye ${c.varSym} por ${c.tP}` },
     { tipo: "preguntar", texto: `Ya tenemos la derivada: 2${c.varSym}. Sustituye ${c.varSym} por ${c.tP} (${c.punto(c.tP)}) y calcula: ¿cuánto vale? Escribe solo el número.`, respuesta: String(vP), esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
   ];
-  if (opts.mantener) aperturaReexplicacion(dir,
-    `Míralo de otra forma: ${c.sym}(${c.varSym}) = ${c.varSym}² dice el TOTAL acumulado, y la derivada 2${c.varSym} dice lo que se añade JUSTO en ese punto. Son dos cosas distintas: una es el montón entero y la otra, lo que crece el montón en ese instante. Por eso ${c.punto(c.tE)} el valor es 2 × ${c.tE} = ${vE}, y más adelante es mayor.`);
+  if (opts.mantener) aperturaReexplicacion(dir, [
+    `Míralo de otra forma: ${c.sym}(${c.varSym}) = ${c.varSym}² dice el TOTAL acumulado, y la derivada 2${c.varSym} dice lo que se añade JUSTO en ese punto. Son dos cosas distintas: una es el montón entero y la otra, lo que crece el montón en ese instante. Por eso ${c.punto(c.tE)} el valor es 2 × ${c.tE} = ${vE}, y más adelante es mayor.`,
+    `Vamos con números pequeños y sin fórmulas. Con ${c.varSym} = 1 el total es 1; con ${c.varSym} = 2 es 4; con ${c.varSym} = 3 es 9. Fíjate en lo que SUBE cada vez: de 1 a 4 sube 3, y de 4 a 9 sube 5. Sube cada vez más. La derivada es exactamente eso: cuánto sube en ese punto, ni antes ni después.`,
+    `Quédate solo con esto: derivar es preguntarse "¿cuánto sube?". Y para ${c.varSym}² la respuesta siempre es 2${c.varSym}: se baja el 2 a multiplicar delante y el exponente pasa a valer 1. Nada más. Si entiendes que ${c.varSym}² se convierte en 2${c.varSym}, ya tienes lo esencial.`,
+  ], opts.simplificacion);
   return { escena: "derivada_resuelta", intencion: "aprender", duracion_estimada: 80, _mock: true, directivas: dir };
 }
 
@@ -1475,6 +1536,7 @@ export function factorizacionResueltaLSG(opts = {}) {
     { tipo: "pizarra", accion: "escribir", contenido: practica },
     { tipo: "preguntar", texto: `¿Cómo se factoriza ${practica}? Escríbelo como producto de dos paréntesis.`, respuesta: facP, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
   );
+  if (opts.mantener) aperturaReexplicacion(dir, SIMPLE_FACTORIZ, opts.simplificacion);
   return { escena: "factorizacion_resuelta", intencion: opts.concepto ? "aprender" : "resolver", duracion_estimada: 65, _mock: true, directivas: dir };
 }
 
@@ -1516,8 +1578,11 @@ export function linealAplicadaLSG(opts = {}) {
   dir.push({ tipo: "hablar", texto: `${c.histP} Resuélvela.` });
   dir.push({ tipo: "pizarra", accion: "escribir", contenido: solP.original });
   dir.push({ tipo: "preguntar", texto: `¿Cuánto vale x en ${solP.original}? Escribe solo el número.`, respuesta: solP.answer, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" });
-  if (opts.mantener) aperturaReexplicacion(dir,
-    `Dicho de otra manera: la x es el dato que NO conoces, y la ecuación ${sol.original} es la frase del problema escrita con números. Resolverla es ir quitando de alrededor de la x todo lo que la acompaña, haciendo lo contrario de lo que hay (si suma, se resta; si multiplica, se divide), hasta dejarla sola.`);
+  if (opts.mantener) aperturaReexplicacion(dir, [
+    `Dicho de otra manera: la x es el dato que NO conoces, y la ecuación ${sol.original} es la frase del problema escrita con números. Resolverla es ir quitando de alrededor de la x todo lo que la acompaña, haciendo lo contrario de lo que hay (si suma, se resta; si multiplica, se divide), hasta dejarla sola.`,
+    "Piensa en una balanza con dos platillos que están en equilibrio. El signo igual es el fiel de la balanza. Puedes quitar lo mismo de los dos platillos, o partir los dos por la mitad, y seguirá equilibrada. Eso es todo lo que hacemos: quitar y partir a los DOS lados a la vez, hasta que en un platillo quede solo la x.",
+    "Lo más simple posible: si te digo x + 3 = 8, ¿cuánto vale x? Quitas 3 de los dos lados y queda x = 5. Ya está, eso es resolver una ecuación. Todas las demás son lo mismo, solo que hay que repetir ese paso un par de veces.",
+  ], opts.simplificacion);
   return { escena: "lineal_resuelta", intencion: "aprender", duracion_estimada: 80, _mock: true, directivas: dir };
 }
 
@@ -1547,8 +1612,11 @@ export function fraccionAplicadaLSG(opts = {}) {
     { tipo: "pizarra", accion: "escribir", contenido: `${c.pa}/${c.pd} + ${c.pb}/${c.pd} = ?` },
     { tipo: "preguntar", texto: `¿Cuánto es ${c.pa}/${c.pd} + ${c.pb}/${c.pd}? Escribe la fracción.`, respuesta: `${psum}/${c.pd}`, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
   ];
-  if (opts.mantener) aperturaReexplicacion(dir,
-    `Otra forma de verlo: el número de ABAJO (${c.d}) dice en cuántos trozos iguales está partido el todo, y ese número no cambia al juntar. El de ARRIBA dice cuántos trozos tienes. Por eso ${c.a} trozos y ${c.b} trozos son ${c.a} + ${c.b} trozos de los mismos ${c.d}.`);
+  if (opts.mantener) aperturaReexplicacion(dir, [
+    `Otra forma de verlo: el número de ABAJO (${c.d}) dice en cuántos trozos iguales está partido el todo, y ese número no cambia al juntar. El de ARRIBA dice cuántos trozos tienes. Por eso ${c.a} trozos y ${c.b} trozos son ${c.a} + ${c.b} trozos de los mismos ${c.d}.`,
+    `Hazlo con las manos: parte una pizza en ${c.d} porciones iguales. Coges ${c.a} porciones, y luego ${c.b} más. ¿Cuántas porciones tienes? ${c.a + c.b}. ¿De cuántas estaba partida la pizza? De ${c.d}, eso no ha cambiado. Pues eso es ${c.a}/${c.d} + ${c.b}/${c.d} = ${c.a + c.b}/${c.d}.`,
+    "Quédate solo con la regla: si el número de abajo es el mismo, sumas los de arriba y el de abajo lo dejas quieto. 1/5 + 2/5 = 3/5. Ni más ni menos. El de abajo solo dice el tamaño del trozo, y el tamaño no cambia porque cojas más trozos.",
+  ], opts.simplificacion);
   return { escena: "fraccion_resuelta", intencion: "aprender", duracion_estimada: 70, _mock: true, directivas: dir };
 }
 
@@ -1592,8 +1660,11 @@ export function factorizacionAplicadaLSG(opts = {}) {
     { tipo: "pizarra", accion: "escribir", contenido: exprP },
     { tipo: "preguntar", texto: `¿Cómo se factoriza ${exprP}? Escríbelo como producto de dos paréntesis.`, respuesta: facP, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
   );
-  if (opts.mantener) aperturaReexplicacion(dir,
-    "Puesto de otra manera: factorizar es lo CONTRARIO de multiplicar. Si al multiplicar dos paréntesis te queda una resta de dos cuadrados, entonces desde esa resta puedes volver atrás y recuperar los dos paréntesis. Por eso siempre puedes comprobar tu respuesta multiplicándola: si vuelves a la expresión del principio, está bien.");
+  if (opts.mantener) aperturaReexplicacion(dir, [
+    "Puesto de otra manera: factorizar es lo CONTRARIO de multiplicar. Si al multiplicar dos paréntesis te queda una resta de dos cuadrados, entonces desde esa resta puedes volver atrás y recuperar los dos paréntesis. Por eso siempre puedes comprobar tu respuesta multiplicándola: si vuelves a la expresión del principio, está bien.",
+    "Vamos con el caso más pequeño: x² - 4. ¿Qué número multiplicado por sí mismo da 4? El 2. ¿Y qué letra por sí misma da x²? La x. Pues ya está: se escribe (x - 2)(x + 2), primero restando y después sumando. Siempre son esas dos raíces, una con menos y otra con más.",
+    "Solo tienes que hacer dos preguntas: ¿la raíz de lo primero? ¿la raíz de lo segundo? Y las escribes dos veces, una restando y otra sumando. En x² - 9 las raíces son x y 3, así que es (x - 3)(x + 3). Eso es todo lo que hay que saber aquí.",
+  ], opts.simplificacion);
   return { escena: "factorizacion_resuelta", intencion: "aprender", duracion_estimada: 75, _mock: true, directivas: dir };
 }
 
@@ -1881,6 +1952,13 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   // (Queja del cliente: "que no sea un coche" seguía dando el coche; "otro de la vida cotidiana" no daba ejemplo.)
   const excluir = extraerExclusion(query);
   const pideOtroDiferente = !!excluir || /\b(otr[oa]|diferente|distint[oa]|nuev[oa])\b/.test(nQ);
+  // ¿Está el alumno diciendo que NO ENTIENDE (y no pidiendo otra cosa)? Se decide UNA vez y aquí
+  // arriba, antes de repartir por temas, porque el contador de insistencia tiene que actualizarse en
+  // TODAS las ramas: si solo se tocara en la rama que re-explica, una petición normal ("dame otro
+  // ejemplo") no lo reiniciaría y el alumno se quedaría en modo simplificado para el resto de la clase.
+  const esReexplica = !pideOtroDiferente
+    && (seguimiento === "reexplicar" || /no (lo )?entend|no comprend|no me qued|explica\w*\s*(me|lo)?\s*mejor|otra vez|de nuevo|nuevamente|por qu[eé]/.test(nQ));
+  const nivelRe = nivelReexplicacion(cursores, esReexplica);
   const ctxAplicado = esContextoAplicado(`${previo} ${contexto} ${currentTopic}`);
   // Si el alumno EXCLUYE la rapidez/velocidad ("otro ejemplo diferente a la rapidez") en un tema de
   // DERIVADAS, va a la lección APLICADA (que elegirá un escenario NO de velocidad: rampa/costo marginal),
@@ -1897,8 +1975,7 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
     // / excluye algo, quiere uno distinto. Antes ambos rotaban, así que pedir ayuda con el ejercicio de
     // la pizarra le cambiaba el ejercicio (queja del cliente, con captura: iba de una fábrica y le
     // respondió con un coche).
-    const mantenerEscenario = !pideOtroDiferente
-      && (seguimiento === "reexplicar" || /no (lo )?entend|no comprend|no me qued|explica\w*\s*(me|lo)?\s*mejor|otra vez|de nuevo|nuevamente|por qu[eé]/.test(nQ));
+    const mantenerEscenario = esReexplica;
     // Se despacha al MISMO tema, pero a su lección APLICADA determinista (no a la numérica). El tema se
     // toma de la consulta O del CONTEXTO activo. OJO: en un seguimiento ("explícalo con ejemplos de la
     // vida real"), el frontend manda como contexto/currentTopic la CONSULTA que abrió el tema (p.ej.
@@ -1911,7 +1988,7 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
     const hayLineal = solveLinearSteps(query) !== null || solveLinearSteps(contexto) !== null || solveLinearSteps(currentTopic) !== null;
     const hayDifCuad = /[a-z]\s*(?:\^\s*2|[²])\s*-\s*\d/i.test(enCtx);
     const hayFrac = /\d\s*\/\s*\d/.test(enCtx);
-    const apOpts = { evitar: evitarAp, cursores, mantener: mantenerEscenario };
+    const apOpts = { evitar: evitarAp, cursores, mantener: mantenerEscenario, simplificacion: nivelRe };
     if (/deriv/.test(nQ) || /velocidad|aceleraci|variaci[oó]n/.test(nQ) || /deriv/.test(ctxTema)) return commonRet("derivada", derivadaAplicadaLSG({ ...apOpts, excluir }));
     if (/fracc/.test(tt) || (hayFrac && !hayLineal)) return commonRet("fraccion", fraccionAplicadaLSG(apOpts));
     if (/factoriz|diferencia de cuadrados/.test(tt) || hayDifCuad) return commonRet("factorizacion", factorizacionAplicadaLSG(apOpts));
@@ -2029,9 +2106,18 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
     // `mantener` distingue las dos peticiones que llegan por aquí: "no entendí" quiere el MISMO caso
     // explicado de otra forma; "otro ejemplo" quiere uno distinto. Sin esta distinción, pedir ayuda
     // con el ejercicio de la pizarra lo CAMBIABA por otro (queja del cliente, con captura).
-    const mantenerRe = !pideOtroDiferente
-      && (seguimiento === "reexplicar" || /no (lo )?entend|no comprend|no me qued|explica\w*\s*(me|lo)?\s*mejor|otra vez|de nuevo|nuevamente|por qu[eé]/.test(nQ));
-    return commonRet(temaActivo, genReteach({ evitar: previo, seguimiento: true, concepto: true, cursores, mantener: mantenerRe }));
+    // ESCALERA DE SIMPLIFICACIÓN: cada "no entendí" seguido baja un escalón (misma idea, explicada más
+    // sencillo), y al TERCERO se pasa además al nivel FÁCIL, con números pequeños. Antes se devolvía la
+    // MISMA lección palabra por palabra a partir de la segunda vez —comprobado: 4 «no entendí» daban 1
+    // sola respuesta distinta en 4 de los 5 temas—, que es justo el "bucle" del que se quejó el cliente,
+    // y en el peor momento: cuando el alumno ya ha dicho dos veces que no lo entiende.
+    const opsRe = { evitar: previo, seguimiento: true, concepto: true, cursores, mantener: esReexplica, simplificacion: nivelRe };
+    // Al tercer "no entendí" se BAJA LA DIFICULTAD del ejercicio, no solo la explicación: se cambia a la
+    // lección numérica del nivel FÁCIL. (Petición del cliente del 7 de agosto, hasta ahora sin construir.)
+    if (nivelRe >= 2 && GEN_RESUELTA[temaActivo]) {
+      return commonRet(temaActivo, GEN_RESUELTA[temaActivo]({ ...opsRe, nivel: "facil" }));
+    }
+    return commonRet(temaActivo, genReteach(opsRe));
   }
 
   return null; // no es ninguno de los 4 botones → flujo normal (Gemini)
