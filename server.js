@@ -71,6 +71,19 @@ app.post("/api/query", async (req, res) => {
   // final del resumen → "otro ejemplo" no tenía qué evitar y repetía el mismo). No impacta el coste de IA:
   // en la ruta determinista (los 4 botones) `previo` no se envía a Gemini, solo sirve para rotar el ejemplo.
   const previo = typeof req.body?.previo === "string" ? req.body.previo.trim().slice(0, 800) : "";
+  // CURSOR DE ROTACIÓN: posición ("tema:nivel" → índice) de por dónde va cada lista de ejemplos. El
+  // servidor NO guarda sesión, así que el cursor viaja con la conversación: el navegador lo manda, el
+  // generador lo avanza y se devuelve en la respuesta para que el navegador lo guarde. Sustituye a
+  // deducir la posición del texto ya mostrado, que se perdía y hacía repetir la misma lección.
+  // Se saneia entero (claves, tipos y rango) porque viene del cliente.
+  const cursores = {};
+  const curRaw = req.body?.cursores;
+  if (curRaw && typeof curRaw === "object" && !Array.isArray(curRaw)) {
+    for (const k of Object.keys(curRaw).slice(0, 40)) {
+      const v = curRaw[k];
+      if (/^[a-z_]{1,20}:[a-z]{1,10}$/.test(k) && Number.isInteger(v) && v >= -1 && v < 1000) cursores[k] = v;
+    }
+  }
   // Continuidad de ARTEFACTO: el EJERCICIO que está en pantalla y su respuesta ya calculada. Se usa
   // cuando el alumno pide "explícame los pasos anteriores / paso a paso" para RE-NARRAR ESE ejercicio
   // (no generar uno nuevo ni cambiar de tema).
@@ -168,12 +181,21 @@ app.post("/api/query", async (req, res) => {
       //       Se prueban las lecturas posibles, en orden, y vale la primera que produzca pasos.
       //       El TEMA ACTIVO decide la lectura: "4x² - 25" en una sesión de factorización hay que
       //       FACTORIZARLO, no derivarlo. Sin esta prioridad, la misma expresión se derivaba.
-      const temaCtx = String(contexto || "").toLowerCase();
+      //       Y la lectura del tema es EXCLUSIVA, no solo prioritaria: en una sesión de factorización
+      //       nunca se acepta la lectura "derivada de …" ni al revés. Antes solo iba PRIMERA, así que
+      //       si la lectura correcta no producía pasos —el desglose no sabía factorizar— la siguiente
+      //       de la lista ganaba y el alumno recibía la DERIVADA de su ejercicio de factorización.
+      //       Que una lectura falle debe dejarnos re-enseñar el tema, nunca cambiar de operación.
+      const temaCtx = String(`${contexto} ${currentTopic}`).toLowerCase();
+      const esDeriv = /deriv/.test(temaCtx), esFactor = /factoriz|cuadrados/.test(temaCtx);
       const candidatos = [];
       if (ejercicio) {
-        if (/deriv/.test(temaCtx)) candidatos.push(`derivada de ${ejercicio}`);
-        if (/factoriz|cuadrados/.test(temaCtx)) candidatos.push(`factoriza ${ejercicio}`);
-        candidatos.push(ejercicio, `derivada de ${ejercicio}`, `factoriza ${ejercicio}`);
+        if (esDeriv) candidatos.push(`derivada de ${ejercicio}`);
+        if (esFactor) candidatos.push(`factoriza ${ejercicio}`);
+        // La expresión SUELTA solo se prueba cuando el tema no es derivadas ni factorización: en esos
+        // dos, la misma expresión ("x² - 9") vale para las dos operaciones y la lectura desnuda podría
+        // resolver la que NO se pidió. En lineales, fracciones y aritmética no hay tal ambigüedad.
+        if (!esDeriv && !esFactor) candidatos.push(ejercicio, `derivada de ${ejercicio}`, `factoriza ${ejercicio}`);
       }
       if (contexto) candidatos.push(contexto);
       let mismo = null;
@@ -209,12 +231,12 @@ app.post("/api/query", async (req, res) => {
     //      siempre correcta y siempre diferente). Los cuatro comparten el MISMO flujo pero con generadores
     //      AISLADOS: tocar uno no afecta a los demás. Si la consulta no es de ninguno de los 4 botones
     //      (tema libre/avanzado), devuelve null y se sigue el flujo normal con Gemini.
-    const boton = leccionBotonLSG({ query, seguimiento, contexto, currentTopic, previo, historial });
+    const boton = leccionBotonLSG({ query, seguimiento, contexto, currentTopic, previo, historial, cursores });
     if (boton) {
       const { lsg, pasos, warnings } = processLSG(boton.lsg, boton.intencion, query);
       return res.json({
         query, reexplicacion: !!contexto, intencion: boton.intencion, confianza: 1,
-        fuente_ia: "local", modelo: boton.modelo,
+        fuente_ia: "local", modelo: boton.modelo, cursores,
         lsg, pasos, advertencias: warnings, tokens: null, cache_activo: false,
       });
     }

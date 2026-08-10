@@ -343,6 +343,35 @@ export function computeFactorization(text) {
   return null; // no es diferencia de cuadrados factorizable con raíces enteras → sin nota (no se arriesga)
 }
 
+// Piezas para NARRAR una factorización paso a paso: la expresión tal cual, los dos cuadrados
+// identificados, la reescritura como a² - b² y el resultado factorizado. Devuelve null si no es una
+// diferencia de cuadrados con raíces enteras. Usa computeFactorization para el resultado, así que la
+// narración y la respuesta calificable NO pueden discrepar (salen del mismo cálculo).
+export function factorizacionPasos(text) {
+  const factor = computeFactorization(text);
+  if (!factor) return null;
+  const t = normDashes(String(text).toLowerCase()).replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]+/g, (m) => "^" + [...m].map((c) => "⁰¹²³⁴⁵⁶⁷⁸⁹".indexOf(c)).join(""));
+  const m = t.match(/(\d*)\s*\*?\s*([a-z])\s*\^\s*2\s*-\s*(\d+)/);
+  if (!m) return null;
+  const c = m[1] === "" ? 1 : Number(m[1]), v = m[2], d = Number(m[3]);
+  const isSq = (n) => Number.isInteger(Math.sqrt(n));
+  const sup2 = (s) => `${s}²`;
+  const coef = (k) => (k === 1 ? "" : String(k));
+  const expr = `${coef(c)}${v}² - ${d}`;
+  // Con ambos cuadrados perfectos se reescribe término a término; con factor común, el común sale fuera.
+  if (isSq(c) && isSq(d)) {
+    const sc = Math.sqrt(c), sd = Math.sqrt(d);
+    return { expr, factor, izq: `${coef(c)}${v}² es el cuadrado de ${coef(sc)}${v}`, der: `${d} es el cuadrado de ${sd}`,
+      reescrito: `${expr} = ${sup2(`(${coef(sc)}${v})`)} - ${sup2(`(${sd})`)}` };
+  }
+  if (d % c === 0 && isSq(d / c)) {
+    const a = Math.sqrt(d / c);
+    return { expr, factor, izq: `el factor común ${c}`, der: `${d / c} es el cuadrado de ${a}`,
+      reescrito: `${expr} = ${c}(${v}² - ${d / c})` };
+  }
+  return null;
+}
+
 // Deriva una FUNCIÓN escrita en la pizarra/enunciado: "f(x) = x³", "y = 2x³" o un monomio suelto
 // "x³". Toma el lado DERECHO de "=" (la función real) y aplica la regla de la potencia. Sirve para
 // calificar cuando el exponente está en el TABLERO y la pregunta solo dice "¿la derivada de f(x)?".
@@ -775,6 +804,10 @@ function metodoDe(ejercicio) {
   if (/\d+\s*\/\s*\d+/.test(t)) return "Con fracciones buscamos el mismo denominador, operamos los numeradores y simplificamos al final.";
   if (/÷|divid|\bentre\b/.test(t)) return "Dividir es repartir en partes iguales: vemos cuántas veces cabe el segundo número en el primero.";
   if (/×|multiplic|\bpor\b/.test(t)) return "Multiplicar es sumar el mismo número varias veces.";
+  // La factorización se comprueba ANTES que la resta: "x² - 9" lleva un signo menos, y sin esta línea
+  // se narraba como una resta ("restar es quitar") mientras la pizarra factorizaba. El alumno oía una
+  // explicación que no correspondía a lo que veía.
+  if (/factoriz|\)\s*\(/.test(t) || (/[a-z]\s*(?:\^\s*2|²)/.test(t) && /-/.test(t))) return "Una diferencia de cuadrados es una resta entre dos cuadrados: se reescribe como el producto de la resta por la suma de sus raíces.";
   if (/-|\bmenos\b|resta/.test(t)) return "Restar es quitar: al primer número le quitamos el segundo.";
   if (/\+|\bm[aá]s\b|suma/.test(t)) return "Sumar es juntar las cantidades.";
   return "Lo resolvemos con calma, paso a paso, aplicando la operación que pide el ejercicio.";
@@ -790,6 +823,25 @@ export function buildStepByStepLSG(ejercicio, respuesta) {
     { tipo: "avatar", accion: "pensando" },
     { tipo: "hablar", texto: "Claro, repasemos juntos —paso a paso— cómo se resuelve este ejercicio." },
   ];
+  // FACTORIZACIÓN (diferencia de cuadrados). Sin esta rama el desglose no sabía factorizar: en una
+  // sesión de factorización, un "no entendí" sobre "x² - 9" no producía pasos, el servidor probaba la
+  // siguiente lectura posible y acababa DERIVANDO la expresión ("derivada de x² - 9 → 2x") mientras
+  // narraba "restar es quitar". Tres errores en un turno —cambio de tema, cálculo que no se pidió y
+  // explicación que no correspondía— justo en el punto donde el alumno ya había dicho que no entendía.
+  // Va DESPUÉS de la lineal (una ecuación de primer grado no es esto) y se salta si el enunciado pide
+  // explícitamente derivar (la misma expresión sirve para las dos cosas; manda lo que se pide).
+  const fac = /deriv/.test(ej.toLowerCase()) ? null : factorizacionPasos(ej);
+  if (fac) {
+    directivas.push({ tipo: "pizarra", accion: "escribir", contenido: fac.expr });
+    directivas.push({ tipo: "hablar", texto: `Primero identificamos los dos cuadrados: ${fac.izq} y ${fac.der}.` });
+    directivas.push({ tipo: "pizarra", accion: "escribir", contenido: fac.reescrito });
+    directivas.push({ tipo: "hablar", texto: "La regla de la diferencia de cuadrados dice que a² - b² se escribe como (a - b)(a + b)." });
+    directivas.push({ tipo: "pizarra", accion: "escribir", contenido: `${fac.expr} = ${fac.factor}` });
+    // COMPROBACIÓN con matemática distinta de la que produjo el resultado: se multiplica de vuelta.
+    directivas.push({ tipo: "hablar", texto: `Y se comprueba multiplicando: al desarrollar ${fac.factor} los términos del medio se cancelan y vuelve a quedar ${fac.expr}.` });
+    directivas.push({ tipo: "hablar", texto: "Ese es el procedimiento. Si quieres, lo intentamos ahora con otro ejemplo parecido." });
+    return { escena: "desglose_pasos", intencion: "explicar", directivas };
+  }
   const lin = solveLinearSteps(ej);
   if (lin) {
     // Ecuación lineal: mostramos el enunciado y CADA paso del despeje (los mismos que valida el sistema).

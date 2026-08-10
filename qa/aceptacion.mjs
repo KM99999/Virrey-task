@@ -16,12 +16,30 @@ const sup = (s) => String(s).replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]/g, (c) => "^
 const canon = (s) => sup(String(s).toLowerCase()).replace(/\s+/g, "").replace(/·|×/g, "*").replace(/÷/g, "/");
 const gcd = (a, b) => { a = Math.abs(a); b = Math.abs(b); while (b) { [a, b] = [b, a % b]; } return a || 1; };
 function evalArith(e) { const t = canon(e).replace(/,/g, "."); if (!/^[-+*/().\d]+$/.test(t)) return null; try { const v = Function('"use strict";return(' + t + ")")(); return Number.isFinite(v) ? v : null; } catch { return null; } }
-function evalLinSide(side, x) { let s = side.replace(/\s+/g, ""); if (!s) return null; if (!/^[+-]/.test(s)) s = "+" + s; const terms = s.match(/[+-](?:\d*\.?\d*x|\d+\.?\d*)/g); if (!terms || terms.join("").length !== s.length) return null; let v = 0; for (const t of terms) { const g = t[0] === "-" ? -1 : 1; const b = t.slice(1); if (b.includes("x")) { const c = b.replace("x", ""); v += g * (c === "" ? 1 : Number(c)) * x; } else v += g * Number(b); } return v; }
+// Evalúa un lado de la ecuación sustituyendo x, ADMITIENDO PARÉNTESIS y multiplicación implícita
+// ("2(x + 4)", "3(x - 2) + 4"). Antes solo se aceptaban términos sueltos "±ax / ±b", así que las
+// ecuaciones del nivel DIFÍCIL —que son difíciles precisamente por el paréntesis— no se podían
+// evaluar; y como no distinguía "no sé leerlo" de "está mal", las marcaba como RESPUESTA INCORRECTA.
+// El verificador daba por defectuoso un ejercicio correcto (2(x + 4) = 3x - 1 ⇒ x = 9, bien resuelto).
+function evalLinSide(side, x) {
+  let s = canon(side).replace(/,/g, ".").replace(/[−–—]/g, "-");
+  if (!s) return null;
+  s = s.replace(/(\d)([a-z(])/g, "$1*$2").replace(/([a-z)])(\()/g, "$1*$2").replace(/(\))(\d|[a-z])/g, "$1*$2");
+  s = s.replace(/[a-z]/g, `(${x})`);
+  if (!/^[-+*/().\d\s]+$/.test(s)) return null;
+  try { const v = Function('"use strict";return(' + s + ")")(); return Number.isFinite(v) ? v : null; } catch { return null; }
+}
 function solveLin(eq) { const m = eq.match(/^(.+)=(.+)$/); if (!m) return null; const L0 = evalLinSide(m[1], 0), L1 = evalLinSide(m[1], 1), R0 = evalLinSide(m[2], 0), R1 = evalLinSide(m[2], 1); if ([L0, L1, R0, R1].some((v) => v === null)) return null; const a = (L1 - L0) - (R1 - R0), b = R0 - L0; return a === 0 ? null : b / a; }
+// La respuesta puede venir como fracción exacta ("7/2"): se compara por VALOR, no por texto.
+const numResp = (s) => { const t = String(s).trim().replace(",", "."); const f = t.match(/^(-?\d+)\s*\/\s*(-?\d+)$/); if (f) return +f[1] / +f[2]; const n = parseFloat(t); return Number.isFinite(n) ? n : NaN; };
 function parsePoly(t) { t = sup(t).replace(/\s+/g, ""); if (!/^[+-]/.test(t)) t = "+" + t; const terms = t.match(/[+-](?:\d*x(?:\^\d+)?|\d+)/g); if (!terms || terms.join("").length !== t.length) return null; const map = new Map(); for (const term of terms) { const g = term[0] === "-" ? -1 : 1; const b = term.slice(1); if (b.includes("x")) { const mm = b.match(/^(\d*)x(?:\^(\d+))?$/); if (!mm) return null; const c = mm[1] === "" ? 1 : Number(mm[1]); const e = mm[2] ? Number(mm[2]) : 1; map.set(e, (map.get(e) || 0) + g * c); } else map.set(0, (map.get(0) || 0) + g * Number(b)); } return map; }
 function polyStr(m) { const es = [...m.entries()].filter(([, c]) => c !== 0).sort((a, b) => b[0] - a[0]); if (!es.length) return "0"; return es.map(([e, c], i) => { const a = Math.abs(c); const cs = a === 1 && e !== 0 ? "" : String(a); const mono = e === 0 ? String(a) : e === 1 ? cs + "x" : cs + "x^" + e; return (i === 0 ? (c < 0 ? "-" : "") : (c < 0 ? "-" : "+")) + mono; }).join(""); }
 function derive(f) { const p = parsePoly(f); if (!p) return null; const d = new Map(); for (const [e, c] of p) if (e > 0) d.set(e - 1, (d.get(e - 1) || 0) + c * e); return polyStr(d); }
-function expandFactor(r) { const mm = canon(r).match(/^\((\d*)x-(\d+)\)\((\d*)x\+(\d+)\)$/); if (!mm) return null; const a = mm[1] === "" ? 1 : +mm[1], b = +mm[2], c = mm[3] === "" ? 1 : +mm[3], d = +mm[4]; const m = new Map(); m.set(2, a * c); m.set(1, a * d - c * b); m.set(0, -b * d); return polyStr(m); }
+// Desarrolla "(ax - b)(cx + d)" y también "k(ax - b)(cx + d)" — el factor común FUERA de los
+// paréntesis, que es la forma correcta de "3x² - 27 = 3(x - 3)(x + 3)". Sin admitirlo, el verificador
+// no sabía comprobar la factorización del nivel difícil y la daba por "no verificable" aunque fuera
+// correcta. Se comprueba multiplicando de vuelta: matemática distinta de la que produjo el resultado.
+function expandFactor(r) { const mm = canon(r).match(/^(\d*)\((\d*)x-(\d+)\)\((\d*)x\+(\d+)\)$/); if (!mm) return null; const k = mm[1] === "" ? 1 : +mm[1], a = mm[2] === "" ? 1 : +mm[2], b = +mm[3], c = mm[4] === "" ? 1 : +mm[4], d = +mm[5]; const m = new Map(); m.set(2, k * a * c); m.set(1, k * (a * d - c * b)); m.set(0, -k * b * d); return polyStr(m); }
 function sumFrac(a, b, c, d) { const n = a * d + c * b, den = b * d, g = gcd(n, den); return den / g === 1 ? String(n / g) : (n / g) + "/" + (den / g); }
 
 // ---------- coherencia pizarra ↔ voz ----------
@@ -59,7 +77,7 @@ function verificar(tema, r) {
   const board = r.boards.length ? r.boards[r.boards.length - 1] : "";
   // (2) respuesta correcta, independiente
   let correcta = null, ej = "";
-  if (tema === "lineal") { const m = qt.match(/vale x en (.+?)\?/) || (board.includes("=") ? [null, board.replace(/\.$/, "")] : null); if (m) { ej = m[1]; const x = solveLin(canon(m[1])); correcta = x !== null && String(x) === resp; } }
+  if (tema === "lineal") { const m = qt.match(/vale x en (.+?)\?/) || (board.includes("=") ? [null, board.replace(/\.$/, "")] : null); if (m) { ej = m[1]; const x = solveLin(canon(m[1])); correcta = x === null ? null : Math.abs(x - numResp(resp)) < 1e-9; } }
   // La lección APLICADA (vida real) pregunta "Si la derivada es 2t, ¿cuánto vale a los 5 segundos?" —
   // y el punto se nombra distinto en cada escenario ("al día 4", "al minuto 5", "cuando has avanzado 4
   // metros", "al producir el artículo 5"). Sin esta rama el verificador no sabía comprobarla y la daba

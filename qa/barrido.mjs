@@ -106,18 +106,42 @@ const SEGS = [
   "ahora uno más fácil", "dame un ejercicio", "quiero practicar", "resuélvela",
   "explícame los pasos", "dame un ejemplo de la vida real", "otro de la vida real", "¿por qué?",
 ];
+// PATRÓN REAL DEL CLIENTE: repite LA MISMA frase muchas veces seguidas. El barrido encadenaba frases
+// DISTINTAS, y esa diferencia escondía una clase entera de defectos: con frases variadas la rotación
+// parecía funcionar, y repitiendo una sola volvían los mismos dos ejemplos. Ahora se prueban las dos
+// formas. (Los defectos que encontró el cliente en esta clase: "solo alterna dos ejemplos",
+// "me muestra lo mismo a cada momento, como un bucle".)
+const REPETIR = [
+  "Por favor, muéstrame otro ejemplo.", "dame otro ejemplo", "y otro más",
+  "Dame un ejemplo de la vida real.", "Por favor, dame un problema más difícil.", "quiero practicar",
+];
 
 const fallos = [];
 let turnos = 0, sesiones = 0;
 const anota = (conv, msg) => fallos.push({ conv: conv.join("  →  "), msg });
 
-async function conversar(tema, apertura, semilla) {
+// `fraseFija` = patrón del cliente (la MISMA frase en cada turno). Sin ella, frases variadas.
+async function conversar(tema, apertura, semilla, fraseFija = "") {
   let t = "", prev = "", hist = [], ej = null, resuelto = "", parte = "";
   const conv = [apertura];
-  let ultimaFirma = "", ultimoResuelto = "";
+  let ultimaFirma = "", ultimoResuelto = "", ultimasExpr = [];
+  // Estado del navegador que el barrido debe replicar EXACTAMENTE, o no estará probando lo que se
+  // entrega: el CURSOR de rotación (posición por tema:nivel, va y vuelve en cada consulta) y las
+  // expresiones ya vistas, que el frontend antepone al resumen `previo`.
+  const cursores = {}, vistas = [];
+  const recordarVistas = (pasos) => {
+    for (const d of pasos) {
+      if (d.tipo !== "pizarra" || !d.contenido) continue;
+      const c = String(d.contenido).trim();
+      if (c.includes(":") || c.length > 24 || !/\d|x/i.test(c)) continue;
+      if (!vistas.includes(c)) vistas.push(c);
+      break;
+    }
+    while (vistas.length > 4) vistas.shift();
+  };
   sesiones++;
   for (let k = 0; k <= TURNOS; k++) {
-    const texto = k === 0 ? apertura : SEGS[(semilla * 7 + k * 5) % SEGS.length];
+    const texto = k === 0 ? apertura : (fraseFija || SEGS[(semilla * 7 + k * 5) % SEGS.length]);
     if (k > 0) conv.push(texto);
     const F = FE(ej, resuelto);
     const seg = t ? F.clasificarSeguimiento(texto) : null;
@@ -125,6 +149,7 @@ async function conversar(tema, apertura, semilla) {
     if (t) body.currentTopic = t;
     if (hist.length) body.historial = hist.slice(-5);
     if (prev && t) body.previo = prev;
+    if (Object.keys(cursores).length) body.cursores = cursores;
     if (seg) { body.contexto = t; body.seguimiento = seg; }
     if (seg === "reexplicar") { body.parte = parte || "resolucion"; if (resuelto && parte !== "concepto") body.ejercicio = resuelto; }
     if (seg === "desglosar" && ej) { body.ejercicio = ej.ejercicio; body.respuesta = ej.respuesta; }
@@ -179,10 +204,28 @@ async function conversar(tema, apertura, semilla) {
     // I8. Pedir PRÁCTICA no debe resolvérsela.
     if (k > 0 && /quiero practicar|dame un ejercicio/i.test(texto) && !/¡A practicar!/.test(todo) && preg && !String(preg.respuesta || "").trim())
       anota(conv, "pidió practicar y no recibió un ejercicio calificable");
+    // I9. Al pedir OTRO, la lección no puede reutilizar el EJEMPLO trabajado ni el EJERCICIO de
+    //     práctica de la anterior. Más estricta que I5 (que solo ve la lección ENTERA repetida):
+    //     detecta "otro ejemplo pero la misma práctica" y el ejercicio practicado que reaparece como
+    //     ejemplo — que es como el alumno vive la repetición.
+    //     Se comparan SOLO esas dos expresiones, no todas las pizarras: los pasos intermedios y la
+    //     solución coinciden de forma legítima entre ejercicios distintos ("3x + 2 = 14" y
+    //     "2x - 1 = 7" acaban los dos en "x = 4"), y contarlos daba falsos positivos.
+    let enunciadoPract = "";
+    if (preg) { const qi = pasos.indexOf(preg);
+      for (let i = qi - 1; i >= 0; i--) if (pasos[i].tipo === "pizarra" && pasos[i].contenido) { enunciadoPract = pasos[i].contenido; break; } }
+    const expr = [nuevoResuelto, enunciadoPract].filter(Boolean).map((c) => String(c).replace(/\s/g, ""));
+    if (k > 1 && /otro|otra|diferente|distint|m[aá]s ejemplos/i.test(texto)) {
+      const rep = expr.filter((c) => ultimasExpr.includes(c));
+      if (rep.length) anota(conv, `pidió OTRO y repite el ejemplo/ejercicio anterior (${rep.join(", ")})`);
+    }
+    ultimasExpr = expr;
 
+    if (j.cursores && typeof j.cursores === "object") Object.assign(cursores, j.cursores);
     hist.push(texto);
     if (!seg && !F.esSaludoOMeta(texto) && (F.tieneTemaExplicito(texto) || !t)) t = texto;
-    prev = resumen(pasos);
+    recordarVistas(pasos);
+    prev = vistas.join(" · ") + " · " + resumen(pasos);
     if (preg) { const qi = pasos.indexOf(preg); let b = "";
       for (let i = qi - 1; i >= 0; i--) if (pasos[i].tipo === "pizarra" && pasos[i].contenido) { b = pasos[i].contenido; break; }
       if (b || preg.texto) ej = { ejercicio: (b || preg.texto).trim(), respuesta: preg.respuesta || "" }; }
@@ -192,9 +235,10 @@ async function conversar(tema, apertura, semilla) {
   }
 }
 
-console.log(`Barrido: ${OPEN.length} aperturas × ${SECUENCIAS} secuencias × ${TURNOS} turnos  →  ${BASE}\n`);
+console.log(`Barrido: ${OPEN.length} aperturas × (${SECUENCIAS} secuencias variadas + ${REPETIR.length} frases repetidas) × ${TURNOS} turnos  →  ${BASE}\n`);
 for (const [tema, apertura] of OPEN) {
   for (let s = 0; s < SECUENCIAS; s++) await conversar(tema, apertura, s);
+  for (const frase of REPETIR) await conversar(tema, apertura, 0, frase);
   process.stdout.write(`  ${tema.padEnd(15)} ${apertura.slice(0, 30).padEnd(32)} ok\n`);
 }
 

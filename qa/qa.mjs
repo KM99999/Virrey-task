@@ -392,6 +392,60 @@ async function unitTests() {
     check(`aplicado [${label}]: 'otro ejemplo' NO repite la lección dos veces seguidas`, !repiteConsec);
     check(`aplicado [${label}]: recorre ≥${minDistintos} ejemplos DISTINTOS`, new Set(sigs).size >= minDistintos, `distintos=${new Set(sigs).size} de ${sigs.length}`);
   }
+  // ── ROTACIÓN NUMÉRICA con CURSOR, con el patrón REAL del cliente: la MISMA frase repetida muchas
+  //    veces seguidas (no frases variadas). Es como prueba él, y es lo que rompía: la rotación deducía
+  //    su posición leyendo el texto ya mostrado, esa deducción fallaba y volvía a la misma lección
+  //    ("solo alterna dos ejemplos", "repite la misma"). Ahora la posición es un número explícito que
+  //    viaja con la conversación, así que el ejemplo recorre la lista ENTERA antes de repetirse.
+  //    Se comprueba lo que VE el alumno: (a) dos lecciones seguidas no comparten ninguna expresión
+  //    —ni siquiera el ejercicio de práctica reaparecido como ejemplo—, y (b) en 8 repeticiones salen
+  //    8 lecciones distintas. Se simula el frontend COMPLETO: `previo` y `cursores` de ida y vuelta.
+  for (const [label, abrir, frase, expTema] of [
+    ["derivadas",     "Enséñame derivadas",                      "Por favor, muéstrame otro ejemplo.", "derivada"],
+    ["lineales",      "Enséñame ecuaciones lineales",            "Por favor, muéstrame otro ejemplo.", "lineal"],
+    ["factorización", "Explícame por qué se factoriza x² - 9",   "Por favor, muéstrame otro ejemplo.", "factorizacion"],
+    ["fracciones",    "Enséñame fracciones",                     "Por favor, muéstrame otro ejemplo.", "fraccion"],
+    ["suma",          "Enséñame a sumar",                        "Por favor, muéstrame otro ejemplo.", "suma"],
+  ]) {
+    const cursores = {}; let previo = "";
+    const sigs = [], exprs = []; let temaOk = true;
+    for (let i = 0; i <= 8; i++) {
+      const body = i === 0 ? { query: abrir, cursores }
+        : { query: frase, seguimiento: "continuacion", contexto: abrir, previo, cursores };
+      const r = correrBoton(body);
+      if (!r) { temaOk = false; break; }
+      if (r.tema !== expTema) temaOk = false;
+      // Se comparan las EXPRESIONES, no las líneas con ":" (el título de la lección —"Ecuación lineal:
+      // a·x + b = c"— y las etiquetas de paso —"unidades: 4 + 7 = 11"— se repiten a propósito: son el
+      // método, no el ejemplo). Es la misma regla con la que el frontend decide qué recordar.
+      if (i > 0) {
+        sigs.push(JSON.stringify(r.pizarras));
+        exprs.push(r.pizarras.filter((c) => !String(c).includes(":")).map((c) => String(c).replace(/\s/g, "")));
+      }
+      previo = r.resumen;
+    }
+    // Solape entre lecciones CONSECUTIVAS: cualquier expresión repetida (el alumno la reconoce aunque
+    // el resto de la lección cambie). Es la comprobación que faltaba: antes solo se miraba si la
+    // lección entera era idéntica, y "misma práctica, otro ejemplo" pasaba desapercibido.
+    let solapa = false;
+    for (let i = 1; i < exprs.length; i++) if (exprs[i].some((c) => exprs[i - 1].includes(c))) solapa = true;
+    check(`repetir la misma frase [${label}]: siempre el mismo tema determinista`, temaOk);
+    check(`repetir la misma frase [${label}]: dos lecciones seguidas NO comparten ninguna expresión`, !solapa);
+    check(`repetir la misma frase [${label}]: 8 repeticiones → 8 lecciones distintas`, new Set(sigs).size === 8, `distintas=${new Set(sigs).size} de ${sigs.length}`);
+  }
+  // El cursor es POR TEMA Y NIVEL: alternar de tema (o pedir "más difícil") no descoloca al otro, y
+  // volver a abrir el tema desde cero reinicia al ejemplo canónico que documenta la guía de aceptación.
+  {
+    const cursores = {};
+    const a1 = correrBoton({ query: "Enséñame derivadas", cursores });
+    correrBoton({ query: "otro ejemplo", seguimiento: "continuacion", contexto: "Enséñame derivadas", cursores });
+    const lin = correrBoton({ query: "Enséñame ecuaciones lineales", cursores });
+    const a2 = correrBoton({ query: "Enséñame derivadas", cursores });
+    check(`cursor: abrir un tema de nuevo vuelve al ejemplo canónico`, JSON.stringify(a1.pizarras) === JSON.stringify(a2.pizarras));
+    check(`cursor: cada tema lleva su propia posición`, lin.tema === "lineal" && a2.tema === "derivada");
+    const claves = Object.keys(cursores).sort();
+    check(`cursor: la clave es tema:nivel`, claves.every((k) => /^[a-z_]+:(facil|normal|dificil)$/.test(k)) && claves.length >= 2, claves.join(","));
+  }
   // ── QUEJAS DEL CLIENTE (ronda derivadas): 1) "dame otro ejemplo" = EJEMPLO resuelto, NO ejercicio de
   //    práctica; 2) la derivada aplicada rota por los 5 escenarios (no 3); 3) FALSO NEGATIVO: una ecuación
   //    con x en AMBOS lados ("5x - 7 = 2x + 5") debe calificar bien la respuesta correcta.
@@ -593,9 +647,15 @@ async function unitTests() {
       check(`practicar [${q}]: NO resuelve paso a paso (da ejercicios)`, esPracticar(r) && !resuelvePaso(r));
       check(`practicar [${q}]: entrega un reto CALIFICABLE`, r.nPreg === 1 && !!r.q && checkAnswer(r.q.respuesta, r.q.respuesta).correct === true, `nPreg=${r.nPreg} resp=${r.q?.respuesta}`);
     }
-    // Dificultad por TEXTO: "más complejos" → nivel difícil (ecuación con términos que agrupar).
+    // Dificultad por TEXTO: "más complejos" → nivel difícil. Se comprueba lo que hace difícil a una
+    // ecuación —un paso EXTRA antes de despejar—, no una forma concreta: paréntesis que distribuir,
+    // denominador que quitar, x en los DOS lados, o dos términos en x que agrupar. Antes se exigía
+    // literalmente "…x … ± … x…", que solo casaba con las ecuaciones de dos lados: la comprobación
+    // dependía de QUÉ POSICIÓN de la lista tocaba, no de la dificultad, y al cambiar la rotación
+    // fallaba con ejercicios que son igual de difíciles ("2(x + 3) = 16").
     const rDif = correrBoton({ query: "dame ejercicios más complejos para resolverlos yo", seguimiento: "practicar", contexto: "ecuaciones lineales", currentTopic: "ecuaciones lineales" });
-    check(`practicar 'más complejos': usa nivel difícil`, !!rDif && /\dx.*[+\-].*\dx/.test(JSON.stringify(rDif.pizarras)), rDif ? JSON.stringify(rDif.pizarras).slice(0, 60) : "null");
+    const pasoExtra = (s) => /\(/.test(s) || /x\s*\/\s*\d/.test(s) || /x[^=]*=[^=]*x/.test(s) || /\dx[^=]*[+\-][^=]*\dx/.test(s);
+    check(`practicar 'más complejos': usa nivel difícil`, !!rDif && pasoExtra(JSON.stringify(rDif.pizarras)), rDif ? JSON.stringify(rDif.pizarras).slice(0, 60) : "null");
     // CONTROLES que NO deben cambiar:
     check(`control: "enséñame a dividir" sigue siendo CONCEPTO (aprender)`, correrBoton({ query: "enséñame a dividir" })?.intencion === "aprender");
     check(`control: "resuelve 20 ÷ 4" sigue siendo RESOLVER`, correrBoton({ query: "resuelve 20 ÷ 4" })?.intencion === "resolver");

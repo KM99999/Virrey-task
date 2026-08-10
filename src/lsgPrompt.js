@@ -508,7 +508,10 @@ export function fraccionResueltaLSG(opts) {
   // la PRÁCTICA sale de los presets del mismo tipo (mismo/distinto denominador), distinta del ejemplo.
   const inst = Array.isArray(o.instancia) && (o.instancia.length === 3 || o.instancia.length === 4) ? o.instancia : null;
   const dificil = inst ? inst.length === 4 : nivel === "dificil";
-  // Rota a la SIGUIENTE tras la ya mostrada; la práctica usa la siguiente (siempre distinta).
+  // Rota con el CURSOR (posición explícita por tema:nivel que viaja con la conversación); si no llega
+  // cursor, se deduce del texto ya mostrado como respaldo. La práctica va a medio giro del ejemplo,
+  // para que el ejercicio practicado no reaparezca como ejemplo en la lección siguiente.
+  const claveF = cursorClave("fraccion", nivel);
   const hay = canonExpr(evitar);
   let last = -1;
   for (let i = 0; i < lista.length; i++) if (hay.includes(canonExpr(textoFrac(lista[i])))) last = i;
@@ -517,9 +520,19 @@ export function fraccionResueltaLSG(opts) {
     eA = inst;
     const pool = (dificil ? FRACCIONES.dificil : FRACCIONES.normal).filter((e) => canonExpr(textoFrac(e)) !== canonExpr(textoFrac(inst)));
     eB = pool[0];
+    cursorFijar(o.cursores, claveF, lista.findIndex((e) => canonExpr(textoFrac(e)) === canonExpr(textoFrac(inst))));
+  } else if (!o.seguimiento && !hay) {
+    // Consulta nueva del tema y nada mostrado aún: ejemplo canónico y cursor a cero (igual que los
+    // otros tres temas). Si SÍ hay algo ya mostrado se rota, aunque la consulta no venga marcada como
+    // seguimiento: es la forma antigua de llamar al generador (`fraccionResueltaLSG("2/6 + 3/6")`).
+    cursorFijar(o.cursores, claveF, 0);
+    eA = lista[0];
+    eB = lista[offPractica(lista.length) % lista.length];
   } else {
-    eA = lista[(last + 1) % lista.length];
-    eB = lista[(last + 2) % lista.length];
+    const idx = cursorFijar(o.cursores, claveF,
+      cursorSiguiente(o.cursores, claveF, lista.length, (last + 1) % lista.length));
+    eA = lista[idx];
+    eB = lista[(idx + offPractica(lista.length)) % lista.length];
   }
   const A = dificil ? distintoDen(eA) : mismoDen(eA);
   const B = dificil ? distintoDen(eB) : mismoDen(eB);
@@ -662,10 +675,48 @@ const CONCEPTO_FRACCION = [
 const canonExpr = (s) => normDashes(String(s || "").toLowerCase())
   .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]/g, (c) => "^" + "⁰¹²³⁴⁵⁶⁷⁸⁹".indexOf(c))
   .replace(/\s+/g, "");
-// Rota una lista buscando el índice MÁS ALTO cuya forma canónica aparece en `evitarRaw` (lo ya
-// mostrado, p.ej. el resumen de la lección previa) y devuelve los índices del EJEMPLO (idx+1) y la
-// PRÁCTICA (idx+2). Si no encuentra nada, empieza en 0/1. Así cada "otro ejemplo" avanza sin repetir.
-function rotarBoton(lista, evitarRaw) {
+// ── CURSOR DE ROTACIÓN ────────────────────────────────────────────────────────────────────────────
+// Hasta ahora la rotación DEDUCÍA su posición leyendo el texto ya mostrado (`evitar` = resumen de la
+// lección anterior): buscaba cuál de los ejemplos aparecía ahí y avanzaba desde ese índice. Funciona,
+// pero es frágil POR CONSTRUCCIÓN: si el resumen se recorta, si la lección llega por la red de
+// seguridad, si el alumno recarga la página o si el ejemplo se escribe distinto en pizarra, la
+// posición se pierde y la rotación vuelve al principio — el alumno ve otra vez el MISMO ejemplo.
+// (Queja del cliente, dos veces: "solo alterna dos ejemplos", "repite la misma lección".)
+// Ahora la posición es un NÚMERO explícito por (tema, nivel) que viaja con la conversación: el
+// navegador lo guarda y lo reenvía en cada consulta, el servidor lo devuelve actualizado. Ya no se
+// deduce nada. La lectura del texto queda SOLO como respaldo para quien no mande cursor.
+const cursorClave = (nombre, nivel) => (nombre ? `${nombre}:${NIVELES.includes(nivel) ? nivel : "normal"}` : "");
+const cursorMapa = (c) => (c && typeof c === "object" && !Array.isArray(c) ? c : null);
+// Siguiente posición: cursor+1 si hay cursor; si no, la deducida del texto (`fallback`).
+function cursorSiguiente(cursores, clave, n, fallback) {
+  const m = cursorMapa(cursores);
+  if (!m || !clave || !Number.isInteger(m[clave])) return fallback;
+  return (((m[clave] + 1) % n) + n) % n;
+}
+function cursorFijar(cursores, clave, idx) {
+  const m = cursorMapa(cursores);
+  if (m && clave) m[clave] = idx;
+  return idx;
+}
+// Deja el cursor de una lista PARADO en la expresión que se acaba de mostrar por otra vía. Lo usan las
+// lecciones de la vida real, que entregan como práctica una expresión que TAMBIÉN está en la lista
+// numérica: sin esto, la siguiente lección numérica podía abrir con el ejercicio que el alumno acababa
+// de practicar. Como el cursor apunta a lo ya visto, la rotación arranca en la SIGUIENTE.
+function cursorParar(cursores, clave, lista, expr) {
+  const m = cursorMapa(cursores);
+  if (!m || !clave || !expr) return;
+  const i = lista.findIndex((x) => canonExpr(x) === canonExpr(expr));
+  if (i >= 0) m[clave] = i;
+}
+// La PRÁCTICA se toma a MEDIO GIRO del ejemplo, no en la posición siguiente. Con el cursor avanzando
+// de uno en uno, si la práctica fuera `ejemplo+1` el ejercicio que el alumno acaba de practicar
+// reaparecería como ejemplo en la lección INMEDIATAMENTE posterior: repetición visible, justo lo que
+// se quiere evitar. A medio giro, dos lecciones consecutivas no comparten ninguna expresión (para
+// listas de 4 o más, que son todas) y el ejemplo recorre la lista ENTERA antes de repetirse.
+const offPractica = (n) => (n > 3 ? Math.floor(n / 2) : 1);
+// Rota una lista: con cursor avanza una posición; sin cursor busca el índice MÁS ALTO cuya forma
+// canónica aparece en `evitarRaw` (lo ya mostrado) y avanza desde ahí. Devuelve EJEMPLO y PRÁCTICA.
+function rotarBoton(lista, evitarRaw, cursores, clave) {
   const hay = canonExpr(evitarRaw);
   let last = -1;
   for (let i = 0; i < lista.length; i++) {
@@ -676,7 +727,8 @@ function rotarBoton(lista, evitarRaw) {
     if (t && new RegExp(`(^|[^0-9a-z])${t}([^0-9a-z]|$)`, "i").test(hay)) last = i;
   }
   const n = lista.length;
-  return { ejemplo: lista[(last + 1) % n], practica: lista[(last + 2) % n] };
+  const idx = cursorFijar(cursores, clave, cursorSiguiente(cursores, clave, n, (last + 1) % n));
+  return { ejemplo: lista[idx], practica: lista[(idx + offPractica(n)) % n] };
 }
 // NIVELES de dificultad. Cada tema tiene TRES listas reales (fácil / normal / difícil), no una sola:
 // al pedir "algo más difícil" el ejercicio debe ser DE VERDAD más difícil (antes se caía siempre en la
@@ -687,8 +739,11 @@ const listaNivel = (listas, nivel) => listas[NIVELES.includes(nivel) ? nivel : "
 // Elige ejemplo + práctica DENTRO del nivel pedido: en la PRIMERA pulsación (sin seguimiento) usa la
 // instancia dada por el botón (o el primer elemento) y una práctica distinta; en un seguimiento
 // ("otro ejemplo", "más fácil", "más difícil") rota dentro de la lista de ESE nivel con `evitar`.
-function elegirBoton(listas, { evitar, instancia, seguimiento, nivel } = {}) {
+// `nombre` identifica el tema para el CURSOR de rotación (clave "tema:nivel"). Cada tema y cada nivel
+// llevan su propia posición, así que alternar entre temas o pedir "más difícil" no descoloca al otro.
+function elegirBoton(listas, { evitar, instancia, seguimiento, nivel, cursores } = {}, nombre = "") {
   const lista = listaNivel(listas, nivel);
+  const clave = cursorClave(nombre, nivel);
   if (!seguimiento && instancia) {
     // La práctica debe ser DISTINTA del ejemplo y VARIAR según la instancia. Antes se tomaba SIEMPRE el
     // primer preset (find → lista[0]), así que consultas concretas distintas ("resuelve 3x-7=8",
@@ -698,10 +753,21 @@ function elegirBoton(listas, { evitar, instancia, seguimiento, nivel } = {}) {
     const pool = lista.filter((x) => canonExpr(x) !== canonExpr(instancia));
     const cands = pool.length ? pool : lista;
     const h = canonExpr(instancia).split("").reduce((a, c) => a + c.charCodeAt(0), 0);
+    // El cursor se ANCLA en el ejercicio que escribió el alumno (si está en la lista): así el siguiente
+    // "otro ejemplo" continúa desde ahí en vez de saltar al principio y mostrarle algo ya visto. Si su
+    // ejercicio no es de la lista, se ancla en -1 para que el siguiente sea el primero de la lista.
+    const iInst = lista.findIndex((x) => canonExpr(x) === canonExpr(instancia));
+    cursorFijar(cursores, clave, iInst);
     return { ejemplo: instancia, practica: cands[h % cands.length] };
   }
-  if (!seguimiento) return { ejemplo: lista[0], practica: lista[1] };
-  return rotarBoton(lista, evitar);
+  // Consulta NUEVA del tema (no es un seguimiento): se vuelve al ejemplo canónico y el cursor se
+  // reinicia. Que "enséñame derivadas" empiece siempre por el mismo ejemplo es deliberado: la guía de
+  // aceptación del cliente lo da por hecho y hace la primera lección predecible.
+  if (!seguimiento) {
+    cursorFijar(cursores, clave, 0);
+    return { ejemplo: lista[0], practica: lista[offPractica(lista.length)] };
+  }
+  return rotarBoton(lista, evitar, cursores, clave);
 }
 
 // ── PRACTICAR: el alumno pide EJERCICIOS para resolverlos ÉL MISMO (no que se los resuelvan ni que le
@@ -919,8 +985,8 @@ const pregArit = (P) => P.aproximado
   ? `¿Cuánto es ${P.texto}? Como no es exacta, da el resultado con UN decimal (por ejemplo, ${P.answer}).`
   : `¿Cuánto es ${P.texto}? Escribe solo el número.`;
 function aritmeticaLSG(opts, cfg) {
-  let { ejemplo, practica } = elegirBoton(cfg.lista, opts);
   const op = cfg.escena.replace(/_resuelta$/, "");
+  let { ejemplo, practica } = elegirBoton(cfg.lista, opts, op);
   // Si el alumno ESCRIBIÓ el cálculo (instancia), la práctica debe tener el MISMO número de dígitos que su
   // ejemplo (no un preset chico) y —en división— el MISMO tipo (exacta o con decimales). Cliente: ejemplo de
   // 7 dígitos y práctica "47 + 25"; y ejemplo con decimales pero práctica exacta ("125 ÷ 5").
@@ -981,7 +1047,7 @@ const LINEALES = {
 const LINEALES_DOS_LADOS = ["4x - 3 = 2x + 5", "3x + 1 = x + 7", "5x - 2 = 3x + 6", "6x - 5 = 2x + 7", "4x + 1 = x + 10", "5x - 4 = 2x + 5", "3x + 2 = x + 8", "7x - 6 = 3x + 6"];
 const esDosLados = (eq) => /x[^=]*=[^=]*x/.test(canonExpr(eq || ""));
 export function linealResueltaLSG(opts = {}) {
-  let { ejemplo, practica } = elegirBoton(LINEALES, opts);
+  let { ejemplo, practica } = elegirBoton(LINEALES, opts, "lineal");
   // Si el EJEMPLO tiene x en AMBOS lados, la práctica debe ser del MISMO tipo (dos lados), elegida de forma
   // determinista (misma consulta → misma práctica) y distinta del ejemplo. Sin esto, "5x - 7 = 2x + 5" daba
   // como práctica "2x + 5 = 15" (un solo lado) — tipo distinto, queja del cliente.
@@ -1038,7 +1104,7 @@ function partesMonomio(m) {
   return { a, n };
 }
 export function derivadaResueltaLSG(opts = {}) {
-  const { ejemplo, practica } = elegirBoton(DERIVADAS, opts);
+  const { ejemplo, practica } = elegirBoton(DERIVADAS, opts, "derivada");
   const derE = computeDerivative("derivada de " + ejemplo) || "0";
   const derP = computeDerivative("derivada de " + practica) || "0";
   if (opts.practica) return practicaLSG("derivada_resuelta", {
@@ -1088,7 +1154,12 @@ export function derivadaResueltaLSG(opts = {}) {
 // aparece (la lección previa era de otro tipo y su resumen no nombra ningún escenario), varía según la
 // longitud del texto previo para no repetir SIEMPRE el primero. Todos los escenarios son válidos, así que
 // cualquier índice da una lección correcta: esto solo aporta VARIEDAD (evita repetir el mismo caso real).
-function idxEscenario(list, evitarRaw, keyOf) {
+// `cur` = { cursores, clave }: igual que en las listas numéricas, la posición explícita manda sobre lo
+// deducido del texto. Sin ella, dos peticiones de "un ejemplo de la vida real" separadas por otro turno
+// devolvían el MISMO escenario, porque la deducción solo mira la lección inmediatamente anterior.
+// La EXCLUSIÓN que pide el alumno ("que no sea un coche") se sigue respetando por encima del cursor:
+// se avanza desde la posición hasta el primer escenario no excluido.
+function idxEscenario(list, evitarRaw, keyOf, cur = null) {
   // SIN TILDES en ambos lados. `canonExpr` no las quita, así que la clave "fabrica" NUNCA casaba con su
   // propio texto ("una fábrica"): ese escenario no se registraba como "ya visto", la rotación no avanzaba
   // desde él y volvía a caer en los mismos. Queja del cliente: "da vueltas como un bucle y solo brinda
@@ -1105,7 +1176,18 @@ function idxEscenario(list, evitarRaw, keyOf) {
   // pedía "otro ejemplo diferente a la velocidad" y todos los ejemplos de derivada eran de velocidad.
   const hit = (c) => String(keyOf(c)).split(/\s+/).some((w) => w && evit.includes(canonKey(w)));
   const mencionado = !!evit && list.some(hit);
-  if (!mencionado) return 0;
+  // Con CURSOR: se avanza una posición desde la última mostrada y se salta lo excluido. Es lo que hace
+  // que pedir "otro de la vida real" recorra TODOS los escenarios aunque entre medias haya habido otros
+  // turnos (una re-explicación, un ejercicio) que borran el rastro en el texto.
+  const m = cur && cursorMapa(cur.cursores);
+  if (m && cur.clave && Number.isInteger(m[cur.clave])) {
+    for (let step = 1; step <= list.length; step++) {
+      const j = (m[cur.clave] + step) % list.length;
+      if (!hit(list[j])) { m[cur.clave] = j; return j; }
+    }
+    return cursorFijar(cur.cursores, cur.clave, (m[cur.clave] + 1) % list.length);
+  }
+  if (!mencionado) return cur ? cursorFijar(cur.cursores, cur.clave, 0) : 0;
   // AVANCE desde el ÚLTIMO escenario mencionado (índice más alto que aparece en `evitar`) hacia el
   // siguiente NO mencionado/excluido, dando la vuelta. Antes se devolvía el PRIMER no-mencionado, lo que
   // producía un ciclo de 2 (p.ej. pizza→dinero→pizza→dinero) que NUNCA llegaba al tercer escenario y, al
@@ -1194,7 +1276,10 @@ export function derivadaAplicadaLSG(opts = {}) {
   // no-velocidad (planta y tanque nunca aparecían → el "bucle de 3" que reportó el cliente).
   const soloNoVel = /rapidez|velocidad|rapido|speed/.test(canonExpr(opts.excluir || ""));
   const pool = soloNoVel ? DERIV_VIDA.filter((s) => !s.speed) : DERIV_VIDA;
-  const c = pool[idxEscenario(pool, opts.evitar, (s) => s.key)];
+  // Clave de cursor distinta según el pool: al excluir la velocidad la lista es más corta y una
+  // posición compartida apuntaría a otro escenario. Cada lista lleva la suya.
+  const cur = { cursores: opts.cursores, clave: soloNoVel ? "derivada_vida_novel:normal" : "derivada_vida:normal" };
+  const c = pool[idxEscenario(pool, opts.evitar, (s) => s.key, cur)];
   const vE = 2 * c.tE, vP = 2 * c.tP;   // t²→2t: valor de la derivada en el ejemplo y en la práctica
   const dir = [
     { tipo: "avatar", accion: "sonreir" },
@@ -1243,7 +1328,7 @@ function explicaDifCuadrados(expr) {
   return null;
 }
 export function factorizacionResueltaLSG(opts = {}) {
-  let { ejemplo, practica } = elegirBoton(FACTORIZ, opts);
+  let { ejemplo, practica } = elegirBoton(FACTORIZ, opts, "factorizacion");
   const lista = listaNivel(FACTORIZ, opts.nivel);
   // Si la instancia del botón no es una diferencia de cuadrados factorizable, cae al primer preset.
   if (!computeFactorization(ejemplo)) ejemplo = lista[0];
@@ -1298,7 +1383,7 @@ const LINEAL_VIDA = [
     eqP: "3x + 4 = 19", histP: "Otro taxi cobra 4 de base y 3 por kilómetro; pagaste 19. Los kilómetros recorridos cumplen esta ecuación." },
 ];
 export function linealAplicadaLSG(opts = {}) {
-  const c = LINEAL_VIDA[idxEscenario(LINEAL_VIDA, opts.evitar, (s) => s.key)];
+  const c = LINEAL_VIDA[idxEscenario(LINEAL_VIDA, opts.evitar, (s) => s.key, { cursores: opts.cursores, clave: "lineal_vida:normal" })];
   const sol = solveLinearSteps(c.eqE), solP = solveLinearSteps(c.eqP);
   const dir = [
     { tipo: "avatar", accion: "sonreir" },
@@ -1332,7 +1417,7 @@ const FRACC_VIDA = [
     pHist: "De otra hora, dedicas 4/9 a un tema y 3/9 a otro.", pd: 9, pa: 4, pb: 3 },
 ];
 export function fraccionAplicadaLSG(opts = {}) {
-  const c = FRACC_VIDA[idxEscenario(FRACC_VIDA, opts.evitar, (s) => s.key)];
+  const c = FRACC_VIDA[idxEscenario(FRACC_VIDA, opts.evitar, (s) => s.key, { cursores: opts.cursores, clave: "fraccion_vida:normal" })];
   const sum = c.a + c.b, psum = c.pa + c.pb;
   const dir = [
     { tipo: "avatar", accion: "sonreir" },
@@ -1355,8 +1440,12 @@ const FACTOR_VIDA = [
   { key: "multiplicar numeros calculo mental rapido truco aritmetica", tipo: "numero", A: 10, bb: 3, pN: 25 },
 ];
 export function factorizacionAplicadaLSG(opts = {}) {
-  const c = FACTOR_VIDA[idxEscenario(FACTOR_VIDA, opts.evitar, (s) => s.key)];
+  const c = FACTOR_VIDA[idxEscenario(FACTOR_VIDA, opts.evitar, (s) => s.key, { cursores: opts.cursores, clave: "factorizacion_vida:normal" })];
   const exprP = `x² - ${c.pN}`, facP = computeFactorization(exprP);
+  // El ejercicio de práctica de la lección aplicada ("x² - 16", "x² - 25") también está en la lista
+  // numérica. Se marca como visto para que la siguiente lección numérica no lo presente como su
+  // ejemplo: el alumno acababa de resolverlo y lo veía como una repetición. Detectado por el barrido.
+  cursorParar(opts.cursores, "factorizacion:normal", FACTORIZ.normal, exprP);
   const dir = [{ tipo: "avatar", accion: "sonreir" }];
   if (c.tipo === "area") {
     const exprE = `x² - ${c.N}`, facE = computeFactorization(exprE);
@@ -1544,7 +1633,11 @@ const GEN_APLICADA = { derivada: derivadaAplicadaLSG, lineal: linealAplicadaLSG,
 const GEN_RESUELTA = { derivada: derivadaResueltaLSG, lineal: linealResueltaLSG, fraccion: fraccionResueltaLSG,
   factorizacion: factorizacionResueltaLSG, ...GEN_ARIT };
 
-export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", currentTopic = "", previo = "", historial = [] } = {}) {
+// `cursores` es el mapa de posiciones de rotación ("lineal:normal" → 3). Llega del navegador, se
+// MUTA aquí (el generador que se use escribe su nueva posición) y el servidor lo devuelve para que el
+// navegador lo guarde y lo reenvíe. Es lo que garantiza que "otro ejemplo" recorra la lista entera sin
+// repetir, en vez de deducir la posición del texto ya visto (que se perdía y hacía repetir la lección).
+export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", currentTopic = "", previo = "", historial = [], cursores = null } = {}) {
   // Normaliza los guiones/menos unicode ("−" U+2212, "–", "—", "‐"…) a "-" ASCII EN EL PUNTO DE ENTRADA, para
   // que TODOS los generadores y clasificadores deterministas (lineal, aritmética, factorización, intención)
   // vean texto ASCII. Sin esto, una ecuación tecleada con "−" resolvía/mostraba la ecuación equivocada.
@@ -1689,16 +1782,16 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
     const hayLineal = solveLinearSteps(query) !== null || solveLinearSteps(contexto) !== null || solveLinearSteps(currentTopic) !== null;
     const hayDifCuad = /[a-z]\s*(?:\^\s*2|[²])\s*-\s*\d/i.test(enCtx);
     const hayFrac = /\d\s*\/\s*\d/.test(enCtx);
-    if (/deriv/.test(nQ) || /velocidad|aceleraci|variaci[oó]n/.test(nQ) || /deriv/.test(ctxTema)) return commonRet("derivada", derivadaAplicadaLSG({ evitar: evitarAp, excluir }));
-    if (/fracc/.test(tt) || (hayFrac && !hayLineal)) return commonRet("fraccion", fraccionAplicadaLSG({ evitar: evitarAp }));
-    if (/factoriz|diferencia de cuadrados/.test(tt) || hayDifCuad) return commonRet("factorizacion", factorizacionAplicadaLSG({ evitar: evitarAp }));
-    if (/ecuaci|lineal|primer grado|despej/.test(tt) || hayLineal) return commonRet("lineal", linealAplicadaLSG({ evitar: evitarAp }));
+    if (/deriv/.test(nQ) || /velocidad|aceleraci|variaci[oó]n/.test(nQ) || /deriv/.test(ctxTema)) return commonRet("derivada", derivadaAplicadaLSG({ evitar: evitarAp, excluir, cursores }));
+    if (/fracc/.test(tt) || (hayFrac && !hayLineal)) return commonRet("fraccion", fraccionAplicadaLSG({ evitar: evitarAp, cursores }));
+    if (/factoriz|diferencia de cuadrados/.test(tt) || hayDifCuad) return commonRet("factorizacion", factorizacionAplicadaLSG({ evitar: evitarAp, cursores }));
+    if (/ecuaci|lineal|primer grado|despej/.test(tt) || hayLineal) return commonRet("lineal", linealAplicadaLSG({ evitar: evitarAp, cursores }));
     // ARITMÉTICA: no tiene versión "de la vida real" propia, pero es un tema GARANTIZADO y no debe
     // salir del motor determinista. Se re-enseña con su lección de concepto, que ya explica el
     // significado cotidiano ("sumar es juntar cantidades", "restar es quitar"). Sin esto, pedir
     // "un ejemplo de la vida real" mientras se aprende a sumar acababa en la IA.
     const temaArit = temaNucleo(`${nQ} ${ctxTema}`);
-    if (temaArit && GEN_ARIT[temaArit]) return commonRet(temaArit, GEN_ARIT[temaArit]({ evitar: previo, concepto: true }));
+    if (temaArit && GEN_ARIT[temaArit]) return commonRet(temaArit, GEN_ARIT[temaArit]({ evitar: previo, concepto: true, seguimiento: true, cursores }));
     return null; // aplicado pero sin tema identificable → explicación conceptual la da Gemini (Nivel 2)
   }
 
@@ -1708,7 +1801,7 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
     // La función a derivar se toma COMPLETA (polinomio incluido): "deriva 3x⁴ - 2x²" debe derivar
     // 3x⁴ - 2x², no solo 3x⁴ (antes se perdía el resto y se respondía a otra pregunta).
     const instancia = extraerFuncionDerivable(base);
-    return commonRet("derivada", derivadaResueltaLSG({ evitar: previo, instancia, seguimiento: esSeg, nivel, concepto: conceptoOn, practica: pidePracticar }));
+    return commonRet("derivada", derivadaResueltaLSG({ evitar: previo, instancia, seguimiento: esSeg, nivel, concepto: conceptoOn, practica: pidePracticar, cursores }));
   }
 
   // 2) FACTORIZACIÓN (diferencia de cuadrados). Con una expresión concreta NO factorizable así
@@ -1721,7 +1814,7 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
     // alumno (p. ej. pedir "factoriza x³ - 8" y ver "x² - 9") — incoherente, del tipo de queja del cliente.
     // Solo el pedido GENÉRICO ("enséñame factorización", "ejercicio de factorización") usa un preset.
     if (!instancia && /[a-z]\s*(?:\^\s*\d|[²³⁴⁵⁶⁷⁸⁹])/i.test(base)) return null;
-    return commonRet("factorizacion", factorizacionResueltaLSG({ evitar: previo, instancia, seguimiento: esSeg, nivel, concepto: conceptoOn, practica: pidePracticar }));
+    return commonRet("factorizacion", factorizacionResueltaLSG({ evitar: previo, instancia, seguimiento: esSeg, nivel, concepto: conceptoOn, practica: pidePracticar, cursores }));
   }
 
   // 3) FRACCIONES. El tema genérico ("ejercicio/ejemplo de fracciones", "enséñame fracciones") O una SUMA
@@ -1735,7 +1828,7 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
     // ejemplo") se IGNORA y se ROTA (igual que los otros temas), si no repetiría siempre la misma suma.
     const instFrac = esSeg ? null : fracInst;
     // "enséñame fracciones" (sin fracción concreta) → CONCEPTO primero; con fracción concreta → resolver ESA.
-    return commonRet("fraccion", fraccionResueltaLSG({ evitar: evitarFrac, previoTexto: previo, nivel, concepto: !instFrac && conceptoOn, instancia: instFrac, practica: pidePracticar }));
+    return commonRet("fraccion", fraccionResueltaLSG({ evitar: evitarFrac, previoTexto: previo, nivel, concepto: !instFrac && conceptoOn, instancia: instFrac, practica: pidePracticar, seguimiento: esSeg, cursores }));
   }
 
   // 4) ECUACIÓN LINEAL. Una ecuación lineal concreta ("2x + 5 = 15") o el tema genérico ("ecuación lineal").
@@ -1751,7 +1844,7 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   const instLin = solBase ? solBase.original : null;
   if (!noLineal && (instLin || /\becuaci[oó]n(?:es)?\b|\blineal(?:es)?\b|primer grado/.test(n))) {
     // "enséñame ecuaciones lineales" (sin una ecuación concreta) → enseñar el CONCEPTO primero.
-    return commonRet("lineal", linealResueltaLSG({ evitar: previo, instancia: instLin, seguimiento: esSeg, nivel, concepto: !instLin && conceptoOn, practica: pidePracticar }));
+    return commonRet("lineal", linealResueltaLSG({ evitar: previo, instancia: instLin, seguimiento: esSeg, nivel, concepto: !instLin && conceptoOn, practica: pidePracticar, cursores }));
   }
 
   // 5) ARITMÉTICA BÁSICA (suma, resta, multiplicación, división). Un CÁLCULO concreto ("24 + 17", "6 × 7",
@@ -1771,7 +1864,7 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   const opActivo = (opInst && opInst.op) || opTema;
   if (opActivo) {
     const instancia = (!esSeg && opInst && opInst.op === opActivo) ? `${opInst.a} ${SIGNO_ARIT[opActivo]} ${opInst.b}` : null;
-    return commonRet(opActivo, GEN_ARIT[opActivo]({ evitar: previo, instancia, seguimiento: esSeg, nivel, concepto: !instancia && conceptoOn, practica: pidePracticar }));
+    return commonRet(opActivo, GEN_ARIT[opActivo]({ evitar: previo, instancia, seguimiento: esSeg, nivel, concepto: !instancia && conceptoOn, practica: pidePracticar, cursores }));
   }
 
   // ── PRACTICAR con tema núcleo ACTIVO pero SIN nombrarlo en la consulta ──
@@ -1782,7 +1875,7 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   if (pidePracticar) {
     const temaP = temaNucleo(base) || temaNucleo(contexto) || temaNucleo(currentTopic);
     if (temaP && GEN_RESUELTA[temaP]) {
-      return commonRet(temaP, GEN_RESUELTA[temaP]({ evitar: previo, seguimiento: esSeg, nivel, practica: true }));
+      return commonRet(temaP, GEN_RESUELTA[temaP]({ evitar: previo, seguimiento: esSeg, nivel, practica: true, cursores }));
     }
   }
 
@@ -1803,7 +1896,7 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
     // `seguimiento: true` es imprescindible: sin él, elegirBoton devuelve SIEMPRE el primer ejemplo
     // de la lista en vez de rotar con `evitar`, así que un "y otro más" que llega por esta red de
     // seguridad (porque la frase no se reconoció como seguimiento) repetía la misma lección.
-    return commonRet(temaActivo, genReteach({ evitar: previo, seguimiento: true, concepto: true }));
+    return commonRet(temaActivo, genReteach({ evitar: previo, seguimiento: true, concepto: true, cursores }));
   }
 
   return null; // no es ninguno de los 4 botones → flujo normal (Gemini)

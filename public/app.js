@@ -140,11 +140,25 @@ function extraerEjercicio(lsg) {
   }
   const ejercicio = (board || q.texto || "").trim();
   if (!ejercicio) return null;
+  // Una línea de RESULTADO no es un enunciado. En un desglose ("explícame los pasos") la última
+  // pizarra antes de la pregunta es "Resultado: 41", y guardarla como "el ejercicio en pantalla"
+  // hacía que el SIGUIENTE "resuélvela" pidiera desglosar un resultado: el alumno veía
+  // "Resultado: 6x² · Resultado: 4x³", dos resultados sueltos sin ejercicio a la vista. Cuando pasa,
+  // se conserva el ejercicio anterior, que es el que el alumno sigue teniendo delante.
+  if (/^resultado\s*:/i.test(ejercicio)) return null;
   const respuesta = (q.respuesta && String(q.respuesta).trim()) || "";
   return { ejercicio, respuesta };
 }
 
-// MEMORIA LARGA de las expresiones ya mostradas (x², 3x⁴, x² - 9, 24 + 17…). La rotación de ejemplos
+// POSICIÓN DE ROTACIÓN por tema y nivel ("lineal:normal" → 3). El servidor no guarda sesión: esta
+// memoria vive en el navegador, se envía en cada consulta y vuelve avanzada. Con ella la rotación ya
+// no tiene que ADIVINAR por dónde iba leyendo el texto ya mostrado — sabe exactamente en qué ejemplo
+// está, así que recorre la lista entera antes de repetir ninguno.
+const cursoresRotacion = {};
+
+// MEMORIA LARGA de las expresiones ya mostradas (x², 3x⁴, x² - 9, 24 + 17…), que se sigue enviando
+// como RED DE SEGURIDAD del cursor: si el cursor se pierde (recarga de página, pestaña nueva, un
+// cliente que no lo reenvíe), la rotación por texto sigue funcionando como antes. La rotación de ejemplos
 // evita lo que aparece en `previo`; si ahí solo va la ÚLTIMA lección, solo puede esquivar uno o dos
 // ejemplos y acaba alternando entre dos (queja del cliente: "se repiten dos ejemplos"). Guardando las
 // últimas expresiones vistas, la rotación las salta todas y recorre la lista entera antes de repetir.
@@ -586,6 +600,11 @@ async function submitQuery() {
   // seguimientos detectados), para que la IA no repita el mismo ejemplo aunque el seguimiento no se
   // detecte con exactitud. En una consulta de tema NUEVO explícito no estorba (es contexto).
   if (lastLessonSummary && lastTopicQuery) body.previo = lastLessonSummary;
+  // CURSOR DE ROTACIÓN: por dónde va cada lista de ejemplos ("lineal:normal" → 3). El servidor no
+  // guarda sesión, así que la posición la lleva el navegador: se manda, el servidor la avanza y la
+  // devuelve. Es lo que hace que "otro ejemplo" recorra la lista ENTERA sin repetir; antes la posición
+  // se deducía del texto ya visto y, en cuanto esa deducción fallaba, volvía a la misma lección.
+  if (Object.keys(cursoresRotacion).length) body.cursores = cursoresRotacion;
   // Cuando el alumno pide OTRA ecuación/ejercicio (para practicar o para que se lo resuelvan), pasamos
   // EXPLÍCITAMENTE el ejercicio anterior al frente del `previo` para que la IA NO lo repita (era la
   // queja: "otra ecuación" repetía la inicial). Va delante porque el server recorta `previo` a 400.
@@ -642,6 +661,8 @@ async function submitQuery() {
     if (!seguimiento && !esSaludoOMeta(query) && (tieneTemaExplicito(query) || !lastTopicQuery)) {
       lastTopicQuery = query;
     }
+    // Posición de rotación actualizada por el servidor: se guarda tal cual para la próxima consulta.
+    if (data.cursores && typeof data.cursores === "object") Object.assign(cursoresRotacion, data.cursores);
     // Memoria de la lección recién generada (para que un próximo "otro ejemplo" no la repita).
     recordarExpresiones(data.lsg);
     // Las expresiones ya vistas van DELANTE del resumen: el servidor recorta `previo`, y lo que la
