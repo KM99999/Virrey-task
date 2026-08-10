@@ -156,6 +156,35 @@ function extraerEjercicio(lsg) {
 // está, así que recorre la lista entera antes de repetir ninguno.
 const cursoresRotacion = {};
 
+// Estado de la CLASE encadenada: cuántos tramos ha enlazado el tutor por su cuenta y cuántos
+// ejercicios seguidos lleva bien el alumno (dos aciertos → se sube el nivel). `MAX_TRAMOS` es una
+// salvaguarda para que la clase no se prolongue sola de forma indefinida: al llegar al tope, el tutor
+// le devuelve la palabra al alumno en vez de seguir enlazando.
+let tramosSeguidos = 0;
+let aciertosSeguidos = 0;
+let claseEnCurso = false;
+let temporizadorClase = null;
+const MAX_TRAMOS = 6;
+// Cancela una continuación pendiente. La usa «Detener» y cualquier consulta que escriba el alumno:
+// si él toma la palabra, el tutor no debe arrancarle encima el tramo que tenía preparado.
+function cancelarContinuacion() {
+  if (temporizadorClase) { clearTimeout(temporizadorClase); temporizadorClase = null; }
+  claseEnCurso = false;
+}
+// Decide CÓMO sigue la clase después de un ejercicio. Función pura (sin DOM ni red) para poder
+// comprobarla en el QA: dado cómo le fue al alumno, qué pide el tutor a continuación.
+//   · dos aciertos seguidos → se SUBE el nivel (la clase progresa, no da vueltas sobre lo mismo);
+//   · acierto suelto        → otro ejercicio del mismo nivel;
+//   · fallo                 → otro EJEMPLO RESUELTO antes de volver a pedirle que resuelva él;
+//   · tope de tramos        → el tutor deja de encadenar y le devuelve la palabra al alumno.
+function siguienteTramo({ acerto, aciertos, tramos, max }) {
+  if (tramos >= max) return { fin: true, aviso: "Hemos avanzado bastante. Dime por dónde seguimos: otro ejercicio, subir el nivel o cambiar de tema." };
+  const n = acerto ? aciertos + 1 : 0;
+  if (n >= 2) return { query: "dame un problema más difícil", aciertos: 0, aviso: "Vas bien: subimos un poco el nivel. Seguimos…" };
+  if (acerto) return { query: "dame otro ejercicio", aciertos: n, aviso: "Seguimos con la clase, va otro ejercicio…" };
+  return { query: "muéstrame otro ejemplo resuelto", aciertos: 0, aviso: "No pasa nada: vemos otro ejemplo resuelto y lo intentas de nuevo…" };
+}
+
 // MEMORIA LARGA de las expresiones ya mostradas (x², 3x⁴, x² - 9, 24 + 17…), que se sigue enviando
 // como RED DE SEGURIDAD del cursor: si el cursor se pierde (recarga de página, pestaña nueva, un
 // cliente que no lo reenvíe), la rotación por texto sigue funcionando como antes. La rotación de ejemplos
@@ -442,6 +471,27 @@ const ui = {
   setCaption(text) {
     els.caption.textContent = text || "";
   },
+  // LA CLASE CONTINÚA al terminar una lección. Antes el alumno resolvía el ejercicio, salía
+  // "¡Lección completada!" y ahí se acababa todo — el tutor no volvía a hablar hasta que el alumno
+  // escribía algo (queja del cliente: "enseña un tema, enseña un ejercicio y culmina la clase. La
+  // clase debe continuar"). Ahora el tutor enlaza la siguiente parte él mismo.
+  //
+  // No es un bucle sin fin: cada tramo termina en un ejercicio que el alumno debe contestar, así que
+  // la clase solo avanza si él participa. Y se puede parar en cualquier momento con «Detener».
+  onLessonEnd({ respondio, acerto } = {}) {
+    // Solo se encadena si hubo un ejercicio calificable y el alumno lo contestó: si la lección era de
+    // concepto puro, o si abandonó sin responder, no se le empuja nada.
+    if (!respondio || !lastTopicQuery || claseEnCurso) return;
+    const paso = siguienteTramo({ acerto, aciertos: aciertosSeguidos, tramos: tramosSeguidos, max: MAX_TRAMOS });
+    els.caption.textContent = paso.aviso;
+    if (paso.fin) { tramosSeguidos = 0; aciertosSeguidos = 0; return; }
+    aciertosSeguidos = paso.aciertos;
+    tramosSeguidos++;
+    claseEnCurso = true;
+    const siguiente = paso.query;
+    // Pequeña pausa para que el alumno lea el resultado antes de que arranque el tramo siguiente.
+    temporizadorClase = setTimeout(() => { temporizadorClase = null; claseEnCurso = false; submitQuery(siguiente); }, 2200);
+  },
   onStep(index) {
     els.steps.querySelectorAll(".step.active").forEach((s) => s.classList.remove("active"));
     if (index == null) return;
@@ -510,7 +560,7 @@ els.playBtn.addEventListener("click", () => {
   else pse.play(currentLSG);
 });
 els.pauseBtn.addEventListener("click", () => pse.pause());
-els.stopBtn.addEventListener("click", () => pse.stop());
+els.stopBtn.addEventListener("click", () => { cancelarContinuacion(); tramosSeguidos = 0; aciertosSeguidos = 0; pse.stop(); });
 
 // Barra de pasos (scrubber): retroceder/avanzar a cualquier punto. La pizarra sigue al dedo EN VIVO
 // mientras se arrastra (antes solo saltaba al soltar, y no se veía respuesta → "no funciona").
@@ -577,12 +627,17 @@ async function checkHealth() {
 }
 
 // --- Envío de consulta -------------------------------------------------------
-async function submitQuery() {
-  const query = els.input.value.trim();
+// `textoAuto` permite que la CLASE se encadene sola (la continuación tras resolver un ejercicio):
+// es la misma consulta que escribiría el alumno, pero enviada por el propio tutor.
+async function submitQuery(textoAuto) {
+  const query = (typeof textoAuto === "string" ? textoAuto : els.input.value).trim();
   if (!query) {
     toast("Escribe o dicta una consulta primero.");
     return;
   }
+  // Si la consulta la escribe el ALUMNO, manda él: se cancela la continuación que el tutor tuviera
+  // preparada y se reinicia el contador de tramos encadenados.
+  if (typeof textoAuto !== "string") { cancelarContinuacion(); tramosSeguidos = 0; aciertosSeguidos = 0; }
 
   // Seguimiento del tema activo: reexplicar ("no entendí"), ajustar nivel ("más básico/difícil")
   // o continuar la conversación (otro ejemplo, analogía, pregunta conceptual). En todos estos

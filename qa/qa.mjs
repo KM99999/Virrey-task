@@ -447,6 +447,74 @@ async function unitTests() {
     const claves = Object.keys(cursores).sort();
     check(`cursor: la clave es tema:nivel`, claves.every((k) => /^[a-z_]+:(facil|normal|dificil)$/.test(k)) && claves.length >= 2, claves.join(","));
   }
+  // ── LA CLASE CONTINÚA tras resolver un ejercicio (queja del cliente: "enseña un tema, enseña un
+  //    ejercicio y culmina la clase. La clase debe continuar"). Antes la lección terminaba y el tutor
+  //    se callaba hasta que el alumno escribiera algo. Ahora él mismo enlaza el tramo siguiente.
+  //    Se simula una CLASE COMPLETA: el alumno acierta cada ejercicio y el tutor va encadenando.
+  {
+    const { readFileSync } = await import("node:fs");
+    const APP = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
+    const i = APP.indexOf("function siguienteTramo("), j = APP.indexOf("\n}", i);
+    const { siguienteTramo } = new Function(APP.slice(i, j + 2) + "\nreturn { siguienteTramo };")();
+    const MAX = 6;
+    // Acertando siempre: debe SUBIR de nivel cada dos aciertos, no repetir el mismo tramo sin fin.
+    let aciertos = 0, tramos = 0; const pedidos = [];
+    for (let k = 0; k < MAX; k++) {
+      const p = siguienteTramo({ acerto: true, aciertos, tramos, max: MAX });
+      if (p.fin) break;
+      pedidos.push(p.query); aciertos = p.aciertos; tramos++;
+    }
+    check("la clase continúa: acertando, el tutor encadena varios tramos", pedidos.length === MAX, `tramos=${pedidos.length}`);
+    check("la clase PROGRESA: acertando dos seguidos sube el nivel", pedidos.filter((q) => /dif[íi]cil/.test(q)).length >= 2, pedidos.join(" · "));
+    check("la clase no repite siempre lo mismo", new Set(pedidos).size >= 2, pedidos.join(" · "));
+    // Fallando: se refuerza con un EJEMPLO RESUELTO antes de volver a pedirle que resuelva él.
+    const falla = siguienteTramo({ acerto: false, aciertos: 1, tramos: 0, max: MAX });
+    check("la clase refuerza tras un fallo (ejemplo resuelto, no otro examen)", /ejemplo/.test(falla.query) && falla.aciertos === 0, falla.query);
+    // Tope: el tutor deja de encadenar solo y le devuelve la palabra al alumno.
+    const tope = siguienteTramo({ acerto: true, aciertos: 0, tramos: MAX, max: MAX });
+    check("la clase no se alarga sola sin fin (al tope, devuelve la palabra)", tope.fin === true && !tope.query);
+    // Y cada consulta que encadena tiene que producir lección DETERMINISTA en los temas del alcance.
+    for (const q of ["dame otro ejercicio", "dame un problema más difícil", "muéstrame otro ejemplo resuelto"]) {
+      for (const [tema, ctx] of [["derivada", "Enséñame derivadas"], ["lineal", "Enséñame ecuaciones lineales"],
+        ["factorizacion", "Explícame la factorización"], ["fraccion", "Enséñame fracciones"], ["suma", "Enséñame a sumar"]]) {
+        const r = correrBoton({ query: q, seguimiento: "continuacion", contexto: ctx, currentTopic: ctx });
+        check(`clase encadenada ["${q}" en ${tema}]: lección determinista y calificable`,
+          !!r && r.tema === tema && r.nPreg >= 1 && r.qs.every((x) => checkAnswer(x.respuesta, x.respuesta).correct === true),
+          r ? `${r.tema} nPreg=${r.nPreg}` : "null");
+      }
+    }
+  }
+
+  // ── "APARIENCIA DE ROBOT": al pedir otro ejercicio cambian los números pero se repetía PALABRA POR
+  //    PALABRA todo lo demás — la introducción de la práctica y el recordatorio del método (queja del
+  //    cliente, con captura señalando esos dos párrafos). La matemática debe ser idéntica siempre; el
+  //    lenguaje no. Se mide qué proporción de lo que DICE el tutor es literal de la lección anterior.
+  for (const [label, abrir, pedir] of [
+    ["derivadas",     "Enséñame derivadas",           "quiero ejercicios más complejos"],
+    ["lineales",      "Enséñame ecuaciones lineales", "dame otro ejercicio para practicar"],
+    ["factorización", "Explícame la factorización",   "dame otro ejercicio para practicar"],
+    ["fracciones",    "Enséñame fracciones",          "dame otro ejercicio para practicar"],
+    ["suma",          "Enséñame a sumar",             "dame otro ejercicio para practicar"],
+  ]) {
+    const cursores = {}; let previo = "", antes = null; let peor = 0, ejemploPeor = "";
+    correrBoton({ query: abrir, cursores });
+    for (let i = 0; i < 4; i++) {
+      const r = correrBoton({ query: pedir, seguimiento: "practicar", contexto: abrir, currentTopic: abrir, previo, cursores });
+      if (!r) break;
+      const frases = (r.flat || []).filter((d) => d.tipo === "hablar").map((d) => String(d.texto).trim()).filter(Boolean);
+      if (antes) {
+        const repes = frases.filter((f) => antes.includes(f)).length;
+        const prop = frases.length ? repes / frases.length : 0;
+        if (prop > peor) { peor = prop; ejemploPeor = frases.find((f) => antes.includes(f)) || ""; }
+      }
+      antes = frases; previo = r.resumen;
+    }
+    // Umbral: menos de la mitad de las frases pueden ser literales de la tanda anterior. No se exige
+    // 0 % — hay avisos cortos que es razonable repetir—, pero sí que el alumno perciba lenguaje nuevo.
+    check(`sin sonar a robot [${label}]: al pedir otro ejercicio NO repite el mismo texto`, peor < 0.5,
+      `${Math.round(peor * 100)}% literal — p.ej. "${ejemploPeor.slice(0, 70)}"`);
+  }
+
   // ── "NO ENTENDÍ" sobre una lección de la VIDA REAL: debe re-explicar el MISMO caso, no cambiarlo.
   //    Queja del cliente, con captura: la pizarra mostraba una FÁBRICA (costo marginal) y al pedir
   //    "no entendí, ¿puedes explicarme mejor?" el sistema respondió con un COCHE (posición y tiempo).

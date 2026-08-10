@@ -266,6 +266,10 @@ export class PSELight {
     this.lsg = lsg;
     this.timeline = flattenLSG(lsg);
     this.index = 0;
+    // Cómo va el alumno en ESTA lección: si contestó a un ejercicio calificable y si acertó. Sirve
+    // para encadenar la siguiente parte de la clase (seguir, subir de nivel o reforzar).
+    this._respondio = false;
+    this._acerto = false;
     this.ui.clearBoard();
     this.ui.setCaption("");
     this.ui.onProgress?.(0, this.timeline.length);
@@ -349,6 +353,11 @@ export class PSELight {
         this.playing = false;
         this.ui.onStep(null);
         this._notifyControls();
+        // LA CLASE CONTINÚA. Antes la lección terminaba aquí y se acababa todo: el alumno resolvía un
+        // ejercicio y el tutor se callaba (queja del cliente: "enseña un tema, enseña un ejercicio y
+        // culmina la clase. La clase debe continuar"). Ahora se avisa a la interfaz de CÓMO terminó
+        // —si hubo ejercicio calificable y si lo acertó— para que enlace la siguiente parte de la clase.
+        this.ui.onLessonEnd?.({ respondio: this._respondio, acerto: this._acerto });
       }
     } finally {
       this.avatar.setSpeaking(false);
@@ -465,10 +474,16 @@ export class PSELight {
       return;
     }
 
+    this._respondio = true;
     if (checkAnswer(answer, expected).correct) {
+      this._acerto = true;
+      // El elogio VARÍA. Repetir siempre la misma frase es lo que hacía que el tutor pareciera un
+      // robot (queja del cliente). `_frase` recorre la lista sin repetir hasta agotarla.
       const msg = d.si_correcto === "felicitar"
-        ? "¡Muy bien! 🎉 Respuesta correcta."
-        : "¡Correcto! Continuemos.";
+        ? this._frase("bien", ["¡Muy bien! 🎉 Respuesta correcta.", "¡Exacto! 🎉 Así se hace.",
+            "¡Correcto! 🎉 Lo has resuelto bien.", "¡Perfecto! 🎉 Ese es el resultado.",
+            "¡Muy bien! 🎉 Has aplicado el método correctamente."])
+        : this._frase("sigue", ["¡Correcto! Continuemos.", "Bien, sigamos.", "Exacto. Vamos con lo siguiente.", "Correcto, seguimos."]);
       this.ui.showFeedback(true, msg);
       await this._speak(msg, "sonriendo", signal);
       return;
@@ -478,7 +493,7 @@ export class PSELight {
     // respuesta, damos una PISTA (cada vez más concreta) del MÉTODO y permitimos REINTENTAR. La caja
     // de respuesta NO desaparece: se reabre de inmediato y la voz suena en paralelo.
     const boardText = this._exerciseBoard(timeline, index);
-    const acerto = async (msg) => { this.ui.showFeedback(true, msg); await this._speak(msg, "sonriendo", signal); };
+    const acerto = async (msg) => { this._acerto = true; this.ui.showFeedback(true, msg); await this._speak(msg, "sonriendo", signal); };
 
     // 1er error → mostrar OTRO EJEMPLO resuelto (si lo hay) o una pista; luego permitir REINTENTAR.
     if (d.otro_ejemplo) {
@@ -521,6 +536,16 @@ export class PSELight {
       if (paso.escribe) { this.ui.writeBoard(paso.escribe); await sleep(700, signal); }
     }
     if (ej.cierre && !signal.aborted) await this._speak(ej.cierre, "sonriendo", signal);
+  }
+
+  // Elige una frase de `lista` DISTINTA de las últimas usadas para esa clave. El tutor decía siempre
+  // exactamente las mismas palabras y el alumno lo notaba ("da la apariencia de un robot"): la
+  // matemática debe ser idéntica siempre, pero el lenguaje no tiene por qué serlo.
+  _frase(clave, lista) {
+    this._frasesUsadas ||= {};
+    const i = ((this._frasesUsadas[clave] ?? -1) + 1) % lista.length;
+    this._frasesUsadas[clave] = i;
+    return lista[i];
   }
 
   // Devuelve el ejercicio escrito en la pizarra JUSTO antes de la pregunta (para dar pistas).
