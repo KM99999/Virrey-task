@@ -3,8 +3,8 @@
 **Proyecto:** Math IA — prototipo web de tutor de matemáticas (avatar + pizarra + voz).
 **En vivo:** https://math-ia.onrender.com · versión desplegada verificable en `/api/health`.
 **Repositorio:** https://github.com/KM99999/Virrey-task (rama `main`).
-**Periodo:** 9 de julio – 10 de agosto de 2026 · **194 commits**.
-**Estado a 10 de agosto de 2026:** commit `8e47a98` desplegado; Etapas 1 y 2 completas y verificadas.
+**Periodo:** 9 de julio – 10 de agosto de 2026 · **197 commits**.
+**Estado a 10 de agosto de 2026:** commit `f3ac0c2` desplegado; Etapas 1 y 2 completas y verificadas.
 
 ---
 
@@ -210,13 +210,37 @@ Dos de estos defectos estaban **certificados como correctos** por las propias pr
 literalmente UNA sola pregunta en la práctica, y la invariante de "no entendí" del barrido no miraba
 las lecciones de la vida real (su línea de ejercicio lleva ":" y quedaba fuera de la comparación).
 
+### Etapa L — Comportamiento de clase: continuidad, lenguaje y escalera de "no entendí" (10 de agosto)
+
+Tres quejas más, ninguna de matemáticas. Todas de **cómo se comporta el tutor**:
+
+1. **"Apariencia de robot"** — al pedir otro ejercicio cambiaban los números y todo lo demás se
+   repetía palabra por palabra (la introducción de la práctica y el recordatorio del método; el
+   cliente los señaló con un recuadro). Ahora rotan las introducciones, los arranques, el recordatorio
+   de cada tema y las frases de acierto. El QA **mide** la repetición: menos de la mitad de lo que dice
+   el tutor puede ser literal de la tanda anterior.
+2. **"Enseña un ejercicio y culmina la clase"** — se acababa de verdad: resuelto el ejercicio, el tutor
+   callaba hasta que el alumno escribiera. Ahora enlaza el tramo siguiente y la clase **progresa**: dos
+   aciertos seguidos suben el nivel, un fallo trae otro ejemplo resuelto. Acotado por cuatro vías: cada
+   tramo termina en una pregunta que solo el alumno puede contestar, un tope de 6 tramos, «Detener», y
+   cualquier consulta del alumno cancela el tramo pendiente.
+3. **Insistir en "no entendí" devolvía la MISMA respuesta** — medido: 4 «no entendí» seguidos daban 1
+   sola respuesta distinta en 4 de los 5 temas. Defecto **introducido por la corrección anterior**: al
+   arreglar que "no entendí" cambiaba el ejercicio, pasó a mantenerlo demasiado bien —correcto la
+   primera vez, literal desde la segunda—, y la comprobación de entonces probaba una re-explicación,
+   no la insistencia. Ahora hay una **escalera de simplificación**: otra forma de verlo → caso mínimo
+   con números pequeños e imagen cotidiana → la regla desnuda **y ejercicio del nivel fácil**.
+
+Ese último escalón cierra la petición del 7 de agosto (*bajar a un problema más fácil tras varios "no
+entendí"*), que figuraba como no construida en las etapas anteriores de este documento.
+
 ---
 
 ## 4. Estado verificado a 10 de agosto de 2026
 
 | Prueba | Resultado |
 |---|---|
-| Lógica (`npm run qa`) | **990 aprobadas · 0 fallidas** |
+| Lógica (`npm run qa`) | **1 046 aprobadas · 0 fallidas** |
 | Barrido por propiedades (`qa/barrido.mjs`) | **200 conversaciones · 1 800 turnos · 0 violaciones** |
 | Sesiones (`qa/sesiones.mjs`) | **126 comprobaciones · 0 fallidas** |
 | Aceptación en vivo (`qa/aceptacion.mjs`) | **24/24** |
@@ -240,16 +264,14 @@ cuadráticas y grados superiores, sistemas, inecuaciones, trigonometría, logari
 
 ## 6. Puntos abiertos
 
-1. **Bajar a un problema más fácil** tras varios "no entendí" seguidos: solicitado el 7 de agosto,
-   no implementado.
-2. **Ruta de IA sin verificar:** `qa/verificar.mjs` (las 4 intenciones con Gemini real) no se ha
+1. **Ruta de IA sin verificar:** `qa/verificar.mjs` (las 4 intenciones con Gemini real) no se ha
    ejecutado, porque consume saldo de la cuenta del cliente.
-3. **Despliegue automático:** los despliegues se disparan por *Deploy Hook*; el aviso por *push*
+2. **Despliegue automático:** los despliegues se disparan por *Deploy Hook*; el aviso por *push*
    de GitHub nunca ha llegado a funcionar.
-4. **La voz depende del equipo del alumno:** el tutor elige una voz masculina en español entre las que
+3. **La voz depende del equipo del alumno:** el tutor elige una voz masculina en español entre las que
    el navegador ofrece. En un equipo sin ninguna instalada se usa la disponible con el tono bajado. Lo
    que sí queda garantizado en cualquier equipo es que **no cambia de voz durante la sesión**.
-5. **Sin verificación por navegador:** todas las pruebas llegan al sistema por su interfaz de datos.
+4. **Sin verificación por navegador:** todas las pruebas llegan al sistema por su interfaz de datos.
    La sincronización de voz y pizarra y el comportamiento en móvil no están cubiertos por ellas.
 
 *(La rotación en ecuaciones lineales figuraba aquí el 8 de agosto: se corrigió el 10 de agosto con el
