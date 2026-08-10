@@ -8,7 +8,11 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "qa": "node qa/qa.mjs",
-    "qa:local": "node qa/qa.mjs"
+    "qa:local": "node qa/qa.mjs",
+    "qa:frontend": "node qa/frontend.mjs",
+    "qa:sesiones": "node qa/sesiones.mjs",
+    "qa:aceptacion": "node qa/aceptacion.mjs",
+    "qa:barrido": "node qa/barrido.mjs"
   },
   "engines": {
     "node": ">=18"

@@ -474,7 +474,11 @@ export class PSELight {
       return;
     }
 
+    // El resultado se anota por PREGUNTA, no de forma acumulada. En la práctica hay DOS ejercicios: si
+    // solo se marcara el acierto, bastaría con acertar el primero para que la clase subiera de nivel
+    // aunque el segundo se hubiera fallado. Cuenta cómo le fue en el ÚLTIMO que respondió.
     this._respondio = true;
+    this._acerto = false;
     if (checkAnswer(answer, expected).correct) {
       this._acerto = true;
       // El elogio VARÍA. Repetir siempre la misma frase es lo que hacía que el tutor pareciera un

@@ -455,6 +455,54 @@ async function unitTests() {
     check(`cursor: las claves de TEMA llevan la dificultad`, claves.filter((k) => /^(derivada|lineal|factorizacion|fraccion|suma|resta|multiplicacion|division):/.test(k))
       .every((k) => /:(facil|normal|dificil)$/.test(k)), claves.join(","));
   }
+  // ── RECARGAR LA PÁGINA (F5) no puede reiniciar la rotación. El cursor vive en el navegador; si no
+  //    se guarda con el resto de la sesión, al refrescar el alumno vuelve a ver el PRIMER ejemplo del
+  //    tema — justo la queja que el cursor vino a resolver, y basta con pulsar F5 para provocarla.
+  //    Se simula el ciclo completo: guardar → recargar → restaurar, con el mismo saneado del frontend.
+  {
+    const cursores = {};
+    const abrir = "Enséñame derivadas";
+    correrBoton({ query: abrir, cursores });
+    const vistos = [];
+    for (let i = 0; i < 3; i++) {
+      const r = correrBoton({ query: "otro ejemplo", seguimiento: "continuacion", contexto: abrir, currentTopic: abrir, cursores });
+      vistos.push(JSON.stringify(r.pizarras));
+    }
+    // "Recarga": se serializa a texto (como sessionStorage) y se restaura saneando, igual que app.js.
+    const guardado = JSON.parse(JSON.stringify({ cursores }));
+    const tras = {};
+    for (const [k, v] of Object.entries(guardado.cursores)) {
+      if (/^[a-z_]{1,20}:[a-z]{1,10}$/.test(k) && Number.isInteger(v) && v >= -1 && v < 1000) tras[k] = v;
+    }
+    check("recarga (F5): el cursor sobrevive al guardado de sesión", Object.keys(tras).length === Object.keys(cursores).length,
+      `${Object.keys(cursores).length} → ${Object.keys(tras).length}`);
+    const r4 = correrBoton({ query: "otro ejemplo", seguimiento: "continuacion", contexto: abrir, currentTopic: abrir, cursores: tras });
+    check("recarga (F5): tras recargar NO se repite un ejemplo ya visto", !vistos.includes(JSON.stringify(r4.pizarras)),
+      JSON.stringify(r4.pizarras).slice(0, 60));
+    // Y el estado guardado debe ser serializable sin perder nada (sin funciones ni referencias).
+    check("recarga (F5): el estado del cursor es serializable", JSON.stringify(cursores) === JSON.stringify(guardado.cursores));
+  }
+
+  // ── TOPE DE CLAVES DEL CURSOR: si el motor genera más de las que el servidor acepta, las que sobran
+  //    se descartan EN SILENCIO y esa rotación deja de avanzar (el alumno ve repeticiones, sin error).
+  //    Se recorre TODO el motor y se cuenta, para que añadir una rotación nueva no rompa otra sin avisar.
+  {
+    const cursores = {};
+    const TODOS = ["Enséñame derivadas", "Enséñame ecuaciones lineales", "Explícame la factorización",
+      "Enséñame fracciones", "Enséñame a sumar", "Enséñame a restar", "Enséñame a multiplicar", "Enséñame a dividir"];
+    for (const t of TODOS) {
+      correrBoton({ query: t, cursores });
+      for (const [q, seg] of [["otro ejemplo", "continuacion"], ["dame un problema más difícil", "mas_dificil"],
+        ["ahora uno más fácil", "mas_facil"], ["quiero practicar", "practicar"],
+        ["dame un ejemplo de la vida real", "continuacion"],
+        ["otro ejemplo de la vida real diferente a la velocidad", "continuacion"], ["no entendí", "reexplicar"]]) {
+        correrBoton({ query: q, seguimiento: seg, contexto: t, currentTopic: t, cursores });
+      }
+    }
+    const n = Object.keys(cursores).length;
+    check(`cursor: el motor genera ${n} claves, por debajo del tope del servidor (80)`, n < 80, String(n));
+  }
+
   // ── INSISTIR EN "NO ENTENDÍ": cada vez debe explicarse MÁS SENCILLO, no repetir lo mismo.
   //    Se comprobó que 4 «no entendí» seguidos devolvían UNA sola respuesta distinta en 4 de los 5
   //    temas: el alumno decía tres veces que no entendía y recibía tres veces el mismo texto, que es

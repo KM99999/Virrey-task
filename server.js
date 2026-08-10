@@ -76,10 +76,16 @@ app.post("/api/query", async (req, res) => {
   // generador lo avanza y se devuelve en la respuesta para que el navegador lo guarde. Sustituye a
   // deducir la posición del texto ya mostrado, que se perdía y hacía repetir la misma lección.
   // Se saneia entero (claves, tipos y rango) porque viene del cliente.
+  // El tope de claves NO es decorativo: si se supera, las que sobran se descartan EN SILENCIO y esa
+  // rotación deja de avanzar — el alumno vuelve a ver lo mismo, sin ningún error visible. El motor
+  // puede generar hoy 33 claves (8 temas × 3 niveles + 5 de la vida real + 3 de redacción + 1 del
+  // contador de "no entendí"), así que 40 dejaba un margen de solo 7. Se sube a 80 y el QA comprueba
+  // que el motor se mantiene por debajo, para que añadir una rotación nueva no rompa otra sin avisar.
+  const MAX_CURSORES = 80;
   const cursores = {};
   const curRaw = req.body?.cursores;
   if (curRaw && typeof curRaw === "object" && !Array.isArray(curRaw)) {
-    for (const k of Object.keys(curRaw).slice(0, 40)) {
+    for (const k of Object.keys(curRaw).slice(0, MAX_CURSORES)) {
       const v = curRaw[k];
       if (/^[a-z_]{1,20}:[a-z]{1,10}$/.test(k) && Number.isInteger(v) && v >= -1 && v < 1000) cursores[k] = v;
     }

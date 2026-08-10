@@ -69,7 +69,12 @@ let lastParte = "";         // "concepto" | "resolucion": qué parte está viend
 const SESSION_KEY = "mathia_sesion_v1";
 function persistSession() {
   try {
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ lastTopicQuery, historial, lastLessonSummary, lastExercise, lastResuelto }));
+    // El CURSOR de rotación y las expresiones ya vistas se guardan con lo demás. Sin ellos, recargar la
+    // página (F5) reiniciaba la rotación: el alumno volvía a ver el PRIMER ejemplo del tema, que es
+    // exactamente la queja que el cursor vino a resolver. Es un caso real —basta con refrescar— y el
+    // resto del estado de la sesión ya se guardaba, así que estos se quedaban descolgados.
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ lastTopicQuery, historial, lastLessonSummary,
+      lastExercise, lastResuelto, cursores: cursoresRotacion, vistas: expresionesVistas }));
   } catch { /* sessionStorage no disponible (modo privado, etc.): seguimos sin persistir */ }
 }
 function restoreSession() {
@@ -81,9 +86,20 @@ function restoreSession() {
     if (typeof s.lastLessonSummary === "string") lastLessonSummary = s.lastLessonSummary;
     if (s.lastExercise && typeof s.lastExercise === "object") lastExercise = s.lastExercise;
     if (typeof s.lastResuelto === "string") lastResuelto = s.lastResuelto;
+    // El cursor se restaura SANEADO: viene de sessionStorage, que el propio navegador puede tener
+    // manipulado o de una versión anterior. Solo enteros con clave del formato "tema:nivel".
+    if (s.cursores && typeof s.cursores === "object" && !Array.isArray(s.cursores)) {
+      for (const [k, v] of Object.entries(s.cursores)) {
+        if (/^[a-z_]{1,20}:[a-z]{1,10}$/.test(k) && Number.isInteger(v) && v >= -1 && v < 1000) cursoresRotacion[k] = v;
+      }
+    }
+    if (Array.isArray(s.vistas)) for (const x of s.vistas) if (typeof x === "string") expresionesVistas.push(x);
   } catch { /* estado corrupto: se ignora y se empieza limpio */ }
 }
-restoreSession();
+// OJO: `restoreSession()` NO se llama aquí. Ahora también restaura el cursor de rotación y las
+// expresiones vistas, que se declaran más abajo con `const`; llamarla antes de esas declaraciones
+// lanzaría un ReferenceError al cargar la página y la aplicación no arrancaría. Se llama justo
+// después de declararlas (busca "restoreSession()" más abajo).
 
 // El EJEMPLO que el tutor acaba de RESOLVER en la pizarra (p. ej. "2(x + 3) = 16"), que NO es lo
 // mismo que el ejercicio de PRÁCTICA ni que la consulta que abrió el tema: cuando el alumno pide
@@ -196,6 +212,11 @@ function siguienteTramo({ acerto, aciertos, tramos, max }) {
 // a la mitad de la lista. Y la ventana es CORTA a propósito: con memoria ilimitada, en cuanto se han
 // visto todos los ejemplos la rotación se queda clavada en el primero y repite siempre el mismo.
 const expresionesVistas = [];
+// Ya están declaradas las dos memorias que restaura la sesión (cursor y expresiones vistas), así que
+// AHORA es seguro recuperar el estado de una recarga.
+restoreSession();
+while (expresionesVistas.length > 4) expresionesVistas.shift();   // por si la sesión guardada traía más
+
 function recordarExpresiones(lsg) {
   for (const d of flattenLSG(lsg) || []) {
     if (d.tipo !== "pizarra" || !d.contenido) continue;
