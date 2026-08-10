@@ -3,8 +3,8 @@
 **Proyecto:** Math IA — prototipo web de tutor de matemáticas (avatar + pizarra + voz).
 **En vivo:** https://math-ia.onrender.com · versión desplegada verificable en `/api/health`.
 **Repositorio:** https://github.com/KM99999/Virrey-task (rama `main`).
-**Periodo:** 9 de julio – 10 de agosto de 2026 · **193 commits**.
-**Estado a 10 de agosto de 2026:** commit `cf9ef36` desplegado; Etapas 1 y 2 completas y verificadas.
+**Periodo:** 9 de julio – 10 de agosto de 2026 · **194 commits**.
+**Estado a 10 de agosto de 2026:** commit `8e47a98` desplegado; Etapas 1 y 2 completas y verificadas.
 
 ---
 
@@ -187,15 +187,38 @@ defectuoso un producto correcto (el verificador no sabía leer paréntesis ni de
 común), y una de lógica medía la posición de la lista en vez de la dificultad. Los verificadores
 ampliados se probaron contra respuestas erróneas a propósito: siguen rechazándolas.
 
+### Etapa K — Las cuatro capturas del cliente (10 de agosto)
+
+Cuatro defectos reportados **con capturas de pantalla**, reproducidos uno a uno contra el servidor:
+
+1. **Enunciado incoherente** — la lección de la vida real da la derivada YA calculada (2q) y pide
+   EVALUARLA, pero el enunciado se leía como si pidiera derivar otra vez; y al fallar, la pista
+   explicaba *la regla de la potencia* cuando lo que había que hacer era **sustituir** un número.
+   Al reescribirlo aparecieron dos trampas más, ambas detectadas por las propias pruebas:
+   `sustituye q = 5` se lee como igualdad resuelta (el alumno puede tomar 5 por respuesta, siendo 10),
+   y `s'(t) = 2t` se parsea como la ecuación `t = 2t`, cuya solución sería 0 — al pedir "explícame los
+   pasos" sobre esa línea se narraba un despeje ajeno al ejercicio.
+2. **"No entendí" cambiaba el caso real** — la pizarra iba de una fábrica y la re-explicación pasaba a
+   un coche. Ahora "no entendí"/"explícalo mejor"/"¿por qué?" mantiene el caso y añade una explicación
+   NUEVA (mantenerlo sin cambiar de palabras sería la otra queja: "lo mismo, como un bucle").
+3. **Dos ejercicios, uno calificado** — el segundo se anunciaba como "(extra)" y nunca se validaba.
+   Ahora se califican **los dos**, en los cinco temas, cada respuesta comprobada.
+4. **La voz cambiaba de mujer a varón** — no se elegía por género y `onvoiceschanged` re-elegía voz a
+   mitad de sesión. Ahora se prefiere una voz masculina y queda **fijada** en la primera locución.
+
+Dos de estos defectos estaban **certificados como correctos** por las propias pruebas: el QA exigía
+literalmente UNA sola pregunta en la práctica, y la invariante de "no entendí" del barrido no miraba
+las lecciones de la vida real (su línea de ejercicio lleva ":" y quedaba fuera de la comparación).
+
 ---
 
 ## 4. Estado verificado a 10 de agosto de 2026
 
 | Prueba | Resultado |
 |---|---|
-| Lógica (`npm run qa`) | **933 aprobadas · 0 fallidas** |
+| Lógica (`npm run qa`) | **990 aprobadas · 0 fallidas** |
 | Barrido por propiedades (`qa/barrido.mjs`) | **200 conversaciones · 1 800 turnos · 0 violaciones** |
-| Sesiones (`qa/sesiones.mjs`) | **132 comprobaciones · 0 fallidas** |
+| Sesiones (`qa/sesiones.mjs`) | **126 comprobaciones · 0 fallidas** |
 | Aceptación en vivo (`qa/aceptacion.mjs`) | **24/24** |
 | Contrato de Etapas 1 y 2, punto por punto | **12/12 · 129 comprobaciones** |
 | Auditoría independiente del motor | **368 comprobaciones** |
@@ -223,6 +246,11 @@ cuadráticas y grados superiores, sistemas, inecuaciones, trigonometría, logari
    ejecutado, porque consume saldo de la cuenta del cliente.
 3. **Despliegue automático:** los despliegues se disparan por *Deploy Hook*; el aviso por *push*
    de GitHub nunca ha llegado a funcionar.
+4. **La voz depende del equipo del alumno:** el tutor elige una voz masculina en español entre las que
+   el navegador ofrece. En un equipo sin ninguna instalada se usa la disponible con el tono bajado. Lo
+   que sí queda garantizado en cualquier equipo es que **no cambia de voz durante la sesión**.
+5. **Sin verificación por navegador:** todas las pruebas llegan al sistema por su interfaz de datos.
+   La sincronización de voz y pizarra y el comportamiento en móvil no están cubiertos por ellas.
 
 *(La rotación en ecuaciones lineales figuraba aquí el 8 de agosto: se corrigió el 10 de agosto con el
 cursor explícito descrito en la Etapa J.)*
