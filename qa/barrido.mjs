@@ -105,6 +105,11 @@ const SEGS = [
   "no entendí", "no lo entendí", "explícalo mejor", "dame un problema más difícil",
   "ahora uno más fácil", "dame un ejercicio", "quiero practicar", "resuélvela",
   "explícame los pasos", "dame un ejemplo de la vida real", "otro de la vida real", "¿por qué?",
+  // MULETILLAS y CORTESÍA: lo que un alumno teclea de verdad entre ejercicio y ejercicio. No estaban
+  // en el barrido, y por eso no se vio que "ok", "listo", "vale" y "perfecto" SALÍAN del motor
+  // determinista con un tema del alcance activo (la IA llegaba a escribir en la pizarra la propia
+  // frase del alumno). Van aquí para que esa clase entera quede vigilada en cada ejecución.
+  "ok", "vale", "listo", "perfecto", "entendido", "siguiente", "dale", "gracias", "hola",
 ];
 // PATRÓN REAL DEL CLIENTE: repite LA MISMA frase muchas veces seguidas. El barrido encadenaba frases
 // DISTINTAS, y esa diferencia escondía una clase entera de defectos: con frases variadas la rotación
@@ -175,6 +180,14 @@ async function conversar(tema, apertura, semilla, fraseFija = "") {
     // I2. La lección debe tener contenido.
     if (!pizarras.length) anota(conv, "lección SIN pizarra (pantalla vacía)");
     if (!dichos.length) anota(conv, "lección SIN explicación hablada");
+    // I2b. La pizarra NUNCA debe limitarse a repetir lo que escribió el alumno. Es la forma visible de
+    //      que la consulta se ha ido por un camino que no sabía qué hacer con ella: el alumno teclea
+    //      "ok" y ve en la pizarra su propia frase anterior como si fuera la lección.
+    if (pizarras.length === 1 && hist.length) {
+      const p0 = String(pizarras[0]).trim().toLowerCase();
+      if ([...hist, texto].some((h) => String(h).trim().toLowerCase() === p0))
+        anota(conv, `la pizarra solo repite lo que escribió el alumno ("${pizarras[0]}")`);
+    }
     // I3. La práctica calificable debe ser matemáticamente correcta.
     const pc = practicaOK(preg);
     if (pc === false) anota(conv, `PRÁCTICA MAL CALIFICADA: "${preg.texto}" → ${preg.respuesta}`);

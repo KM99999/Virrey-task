@@ -197,7 +197,13 @@ app.post("/api/query", async (req, res) => {
         // resolver la que NO se pidió. En lineales, fracciones y aritmética no hay tal ambigüedad.
         if (!esDeriv && !esFactor) candidatos.push(ejercicio, `derivada de ${ejercicio}`, `factoriza ${ejercicio}`);
       }
-      if (contexto) candidatos.push(contexto);
+      // El TEMA solo sirve de último recurso cuando NO sabemos qué hay en pantalla. Si el frontend sí
+      // nos dijo el ejercicio, no se puede caer al tema: `contexto` es la consulta que ABRIÓ el tema
+      // ("deriva 3x²"), y usarla significa re-explicar un ejercicio ANTERIOR en vez del que el alumno
+      // tiene delante. Se vio así: tras unos turnos de ejemplos de la vida real y un par de "ok/hola",
+      // un "no entendí" volvía al primer ejercicio de la sesión. Sin este recurso, la consulta sigue al
+      // flujo normal y la re-enseña la lección determinista del tema, que sí mantiene el caso actual.
+      if (contexto && !ejercicio) candidatos.push(contexto);
       let mismo = null;
       for (const c of candidatos) {
         const intento = processStepByStep(c, "");

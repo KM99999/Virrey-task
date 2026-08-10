@@ -1756,6 +1756,42 @@ function extraerFraccionSuma(texto) {
 function esSaludoOMetaBoton(n) {
   return /^(hola|buenas|buenos dias|buenas tardes|buenas noches|hey|ola|que tal|como estas|gracias|muchas gracias|ok|okay|vale|listo|perfecto|adios|chao|hi|hello|thanks|thank you)\b[\s!.?]*$/.test(n);
 }
+// MULETILLAS DE CONTINUAR: "ok", "vale", "listo", "siguiente", "dale"… El alumno no pregunta nada ni
+// cambia de tema: dice "sigo aquí, continúa". Van aparte de los saludos porque, con un tema núcleo
+// ACTIVO, no deben tratarse igual: se comprobó que "ok", "listo", "vale" y "perfecto" SALÍAN del motor
+// determinista y acababan en la IA, que además escribía en la pizarra la propia frase del alumno.
+// Con la clase encadenada, lo que toca aquí es justamente seguir la clase.
+// Se distinguen dos cosas que parecen la misma. ACUSE = "te he oído" ("ok", "vale", "listo"): el
+// alumno NO ha pedido nada, así que meterle una lección entera es tan malo como mandarlo a la IA;
+// se le responde con una nota breve que retoma el hilo. PEDIR SEGUIR = "siguiente", "adelante",
+// "dale": eso sí es pedir que la clase avance, y ahí toca lección (lo maneja esReteachBoton).
+const MULETILLA_ACUSE = /^(ok|okay|oka|vale|listo|lista|perfecto|genial|guay|bien|claro|entendido|entendida|ya|ya esta)\b[\s!.,?]*$/;
+// CORTESÍA: saludo, agradecimiento o despedida. No pide lección, pero tampoco debe salir del motor
+// (con un tema activo se iba a la IA y la pizarra mostraba el texto del alumno).
+const CORTESIA = /^(hola|holi|buenas|buenos dias|buenas tardes|buenas noches|hey|ola|que tal|como estas|gracias|muchas gracias|mil gracias|adios|chao|hasta luego|nos vemos|hi|hello|thanks|thank you|bye)\b[\s!.,?]*$/;
+const NOMBRE_TEMA = { derivada: "las derivadas", lineal: "las ecuaciones lineales",
+  factorizacion: "la factorización", fraccion: "las fracciones", suma: "la suma", resta: "la resta",
+  multiplicacion: "la multiplicación", division: "la división" };
+// Respuesta breve y DETERMINISTA a la cortesía: ni inventa lección ni gasta IA. Lleva su propia
+// pregunta de cierre para que el PRE Light no añada una y acabe montando un ejercicio de la nada.
+function cortesiaLSG(tema, query) {
+  const n = normBoton(query);
+  const despide = /^(adios|chao|hasta luego|nos vemos|bye)/.test(n);
+  const agradece = /gracias|thanks|thank you/.test(n);
+  const t = NOMBRE_TEMA[tema] || "el tema";
+  const texto = despide ? `¡Hasta luego! Cuando vuelvas seguimos con ${t} donde lo dejamos.`
+    : agradece ? `¡A ti! Seguimos con ${t} cuando quieras.`
+    : `¡Hola de nuevo! Estamos con ${t}. Seguimos donde lo dejamos cuando me digas.`;
+  return {
+    escena: "cortesia", intencion: "explicar", duracion_estimada: 10, _mock: true,
+    directivas: [
+      { tipo: "avatar", accion: "sonreir" },
+      { tipo: "hablar", texto },
+      { tipo: "pizarra", accion: "escribir", contenido: `Seguimos con ${t}` },
+      { tipo: "preguntar", texto: "¿Quieres otro ejemplo, un ejercicio para practicar, o subir el nivel?", respuesta: "", esperar_respuesta: true, si_correcto: "continuar", si_incorrecto: "continuar" },
+    ],
+  };
+}
 // ¿La consulta es un SEGUIMIENTO de re-explicación / ayuda / "otro" sobre el tema ACTIVO (sin nombrar un
 // tema nuevo)? Cubre "no entendí", "explícalo mejor", "otra vez", "para dummies", "¿por qué?", "no sé",
 // "ayúdame", "otro", "más", "resuélveme otro". Sirve para que, con un tema núcleo activo, estas consultas
@@ -1764,12 +1800,18 @@ function esReteachBoton(q, seguimiento) {
   const n = normBoton(q);
   // Un SALUDO/META nunca es una re-explicación, aunque llegue con un tipo de seguimiento (defensa: el
   // servidor pone "reexplicar" si hay contexto, y no queremos convertir "hola/gracias" en una lección).
-  if (!n || esSaludoOMetaBoton(n)) return false;
+  // Un SALUDO o un ACUSE DE RECIBO ("ok", "entendido") no es una re-explicación, aunque llegue con un
+  // tipo de seguimiento: el servidor pone "reexplicar" por defecto cuando hay contexto, y sin esta
+  // defensa un simple "entendido" se convertía en una lección entera que el alumno no había pedido.
+  if (!n || esSaludoOMetaBoton(n) || MULETILLA_ACUSE.test(n)) return false;
   if (["reexplicar", "continuacion", "practicar", "resolver_otro", "mas_facil", "mas_dificil"].includes(seguimiento)) return true;
   if (/\bno\s+(lo\s+|la\s+|me\s+|se\s+lo\s+)?(entend|entiend|comprend|capt|pill)/.test(n)) return true;
   if (/explica\w*\s+(lo\s+|me\s+)?(mejor|otra vez|de nuevo|de otra forma|nuevamente|bien)/.test(n)) return true;
   if (/para dummies|mas simple|mas facil de entender|no me queda claro|estoy perdid|me perd[ií]|sigo sin entend|ni idea|no lo veo/.test(n)) return true;
-  if (/\botr[oa]\b|\bmas\b|resuelv|de nuevo|otra vez|sigue|contin[uú]a/.test(n)) return true;
+  // "siguiente / adelante / dale / venga / sigamos" es pedir explícitamente que la clase AVANCE, así
+  // que sí toca lección. Se distingue del simple acuse de recibo ("ok", "vale"), que solo merece una
+  // nota breve: dar una lección entera a quien solo ha dicho "ok" es empujarle contenido que no pidió.
+  if (/\botr[oa]\b|\bmas\b|resuelv|de nuevo|otra vez|sigue|contin[uú]a|siguiente|adelante|\bdale\b|\bvenga\b|sigamos|continuemos|prosigue/.test(n)) return true;
   const p = n.split(/\s+/).filter(Boolean).length;
   if (p <= 3 && /(no se|ayud|auxilio|por que|porque)/.test(n)) return true;
   return false;
@@ -2118,6 +2160,20 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
       return commonRet(temaActivo, GEN_RESUELTA[temaActivo]({ ...opsRe, nivel: "facil" }));
     }
     return commonRet(temaActivo, genReteach(opsRe));
+  }
+
+  // ── MULETILLAS Y CORTESÍA con un tema núcleo ACTIVO ──
+  // Un "ok" o un "listo" en mitad de una clase de derivadas no es un tema nuevo: es "continúa". Y un
+  // "gracias" no es una consulta de matemáticas. Ninguno de los dos debe salir del motor determinista:
+  // se comprobó que lo hacían, y la lección que llegaba escribía en la pizarra la propia frase del
+  // alumno ("Enséñame derivadas") como si fuera contenido. Rompía la garantía de que un tema del
+  // alcance nunca depende de la IA, y encima costaba una llamada.
+  // NO se convierte en una lección entera: el alumno no ha pedido una. Se responde con una nota corta
+  // que retoma el hilo y le ofrece por dónde seguir — sin ejercicio nuevo, sin IA y sin poder escribir
+  // en la pizarra nada que no hayamos escrito nosotros.
+  if (temaActivo) {
+    const nMul = normBoton(query);
+    if (MULETILLA_ACUSE.test(nMul) || CORTESIA.test(nMul)) return commonRet(temaActivo, cortesiaLSG(temaActivo, query));
   }
 
   return null; // no es ninguno de los 4 botones → flujo normal (Gemini)

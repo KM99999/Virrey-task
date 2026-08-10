@@ -983,12 +983,31 @@ async function unitTests() {
       check(`red de seguridad [${tema}] "${q}": práctica calificable coherente`, r.nPreg === 1 && checkAnswer(r.q.respuesta, r.q.respuesta).correct === true);
     }
   }
-  // Un SALUDO con tema activo NO debe secuestrarse como lección (debe seguir a Gemini/normal), NI
-  // siquiera si por el contexto el servidor le pusiera "reexplicar" (defensa: "hola" no es re-explicar).
+  // Un SALUDO o una MULETILLA ("ok", "listo") con tema activo NO debe convertirse en una lección: el
+  // alumno no ha pedido una. Pero TAMPOCO debe salir del motor determinista, que es lo que hacía antes:
+  // se comprobó que "ok", "vale", "listo" y "perfecto" acababan en la IA con un tema del alcance activo,
+  // y la lección que volvía escribía en la pizarra la PROPIA FRASE del alumno como si fuera contenido.
+  // La respuesta correcta es una nota breve que retoma el hilo: sin ejercicio nuevo y sin IA.
+  const esNotaBreve = (r) => !!r && r.tema && r.nPreg <= 1 && !r.qs.some((x) => String(x.respuesta || "").trim())
+    && r.pizarras.length <= 1;
   for (const [, ctx] of temasCtx) {
-    for (const saludo of ["hola", "gracias", "ok", "buenos días"]) {
-      check(`red de seguridad: "${saludo}" NO se convierte en lección`, correrBoton({ query: saludo, seguimiento: "", contexto: "", currentTopic: ctx }) === null);
-      check(`red de seguridad: "${saludo}" NO se secuestra ni con contexto/reexplicar`, correrBoton({ query: saludo, seguimiento: "reexplicar", contexto: ctx, currentTopic: ctx }) === null);
+    // Acuses de recibo y cortesía: nota breve. ("siguiente", "adelante", "dale" van aparte: eso SÍ es
+    // pedir que la clase avance, y se comprueba como continuación más abajo.)
+    for (const saludo of ["hola", "gracias", "ok", "buenos días", "vale", "listo", "perfecto", "entendido"]) {
+      const rs = correrBoton({ query: saludo, seguimiento: "", contexto: "", currentTopic: ctx });
+      check(`red de seguridad: "${saludo}" NO se convierte en lección`, esNotaBreve(rs),
+        rs ? `nPreg=${rs.nPreg} pizarras=${rs.pizarras.length}` : "null (se iría a la IA)");
+      check(`red de seguridad: "${saludo}" NO deja el motor determinista`, !!rs, rs ? "ok" : "null");
+      // Ni siquiera si el servidor le pone "reexplicar" por venir con contexto: "hola" no es
+      // re-explicar, así que tampoco entonces puede salir una lección con ejercicio.
+      check(`red de seguridad: "${saludo}" NO se secuestra ni con contexto/reexplicar`,
+        esNotaBreve(correrBoton({ query: saludo, seguimiento: "reexplicar", contexto: ctx, currentTopic: ctx })));
+    }
+    // Pedir explícitamente que la clase avance SÍ debe dar lección determinista, no una nota.
+    for (const seguir of ["siguiente", "adelante", "dale", "sigamos"]) {
+      const rs = correrBoton({ query: seguir, seguimiento: "", contexto: "", currentTopic: ctx });
+      check(`red de seguridad: "${seguir}" SÍ continúa la clase (lección determinista)`,
+        !!rs && rs.nPreg === 1 && !!String(rs.q?.respuesta || "").trim(), rs ? `nPreg=${rs.nPreg}` : "null");
     }
   }
   // ── EXCLUSIÓN + "otro ejemplo de la vida real" en los 4 temas (queja del cliente): pedir "que no sea
