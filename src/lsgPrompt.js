@@ -595,6 +595,11 @@ export function fraccionResueltaLSG(opts) {
   // PRÁCTICA: otra fracción DISTINTA que resuelve el alumno (calificable).
   dir.push({ tipo: "pizarra", accion: "escribir", contenido: `${B.texto} = ?` });
   dir.push({ tipo: "preguntar", texto: `¿Cuánto es ${B.texto}? Escríbelo en su forma más simple.`, respuesta: B.final, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" });
+  // En un seguimiento, lo PRIMERO que se ve y se oye es la suma nueva: si no, todas las lecciones
+  // abrían igual y el alumno las veía idénticas aunque las fracciones cambiaran.
+  // En un seguimiento, lo PRIMERO que se ve y se oye es la suma NUEVA. Sin esto todas las lecciones
+  // abrían con la misma frase de concepto y el alumno las veía idénticas aunque las fracciones cambiaran.
+  if (o.seguimiento && !o.practica) aperturaEjemplo(dir, `Vamos con otra suma de fracciones: ${A.texto}.`, A.texto);
   if (o.mantener) aperturaReexplicacion(dir, SIMPLE_FRACCION, o.simplificacion);
   return { escena: "fraccion_resuelta", intencion: o.concepto ? "aprender" : "resolver", duracion_estimada: 60, _mock: true, directivas: dir };
 }
@@ -1079,6 +1084,7 @@ function aritmeticaLSG(opts, cfg) {
   dir.push({ tipo: "hablar", texto: `Así, ${E.texto} ${eq} ${E.answer}. Ahora te toca a ti.` });
   dir.push({ tipo: "pizarra", accion: "escribir", contenido: `${P.texto} = ?` });
   dir.push({ tipo: "preguntar", texto: pregArit(P), respuesta: String(P.answer), esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" });
+  if (opts.seguimiento && !opts.practica) aperturaEjemplo(dir, `Vamos con otro: ${E.texto}.`, E.texto);
   if (opts.mantener) aperturaReexplicacion(dir, cfg.simple, opts.simplificacion);
   return { escena: cfg.escena, intencion: opts.concepto ? "aprender" : "resolver", duracion_estimada: 60, _mock: true, directivas: dir };
 }
@@ -1153,6 +1159,7 @@ export function linealResueltaLSG(opts = {}) {
   dir.push({ tipo: "hablar", texto: `Comprobado: ${sol.varName} = ${sol.answer}. Ahora te toca a ti con otra ecuación parecida.` });
   dir.push({ tipo: "pizarra", accion: "escribir", contenido: solP.original });
   dir.push({ tipo: "preguntar", texto: `¿Cuánto vale ${solP.varName} en ${solP.original}? Escribe solo el número.`, respuesta: solP.answer, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" });
+  if (opts.seguimiento && !opts.practica) aperturaEjemplo(dir, `Vamos con otra ecuación: ${sol.original}.`, sol.original);
   if (opts.mantener) aperturaReexplicacion(dir, SIMPLE_LINEAL, opts.simplificacion);
   return { escena: "lineal_resuelta", intencion: opts.concepto ? "aprender" : "resolver", duracion_estimada: 70, _mock: true, directivas: dir };
 }
@@ -1222,6 +1229,7 @@ export function derivadaResueltaLSG(opts = {}) {
     { tipo: "pizarra", accion: "escribir", contenido: practica },
     { tipo: "preguntar", texto: `¿Cuál es la derivada de ${practica}?`, respuesta: derP, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
   );
+  if (opts.seguimiento && !opts.practica) aperturaEjemplo(dir, `Vamos con otra función: ${ejemplo}.`, ejemplo);
   if (opts.mantener) aperturaReexplicacion(dir, SIMPLE_DERIVADA, opts.simplificacion);
   return { escena: "derivada_resuelta", intencion: opts.concepto ? "aprender" : "resolver", duracion_estimada: 65, _mock: true, directivas: dir };
 }
@@ -1244,6 +1252,34 @@ const AVISO_REEXPLICA = [
   "Vale, vamos a bajar un escalón. Mismo ejemplo, pero te lo explico de la forma más sencilla que sé, con números pequeños.",
   "Tranquilo, esto le pasa a todo el mundo. Vamos a lo MÁS simple: olvídate del ejercicio grande un momento y quédate solo con la idea.",
 ];
+// ANUNCIA DE QUÉ VA ESTA LECCIÓN, lo primero de todo.
+//
+// Queja del cliente, con captura: "si pido ejemplos distintos, se repite el mismo ejemplo". Y tenía
+// razón en lo que veía, aunque el ejemplo SÍ cambiaba. Al pedir otro, la lección abría siempre con la
+// MISMA frase hablada y la MISMA primera línea de pizarra (el concepto: "Derivada: razón de cambio…"),
+// y la expresión nueva no aparecía hasta varios pasos después. Su captura está en el paso 2 de 11: lo
+// que él veía era, literalmente, idéntico cada vez. Medir "la lección entera es distinta" —que es lo
+// que yo comprobaba— no sirve de nada si lo PRIMERO que se ve nunca cambia.
+//
+// Por eso, en un seguimiento, lo primero que se dice y se escribe identifica ESTE ejemplo concreto.
+// Pone lo CONCRETO delante de lo general: intercambia las dos primeras frases habladas de la lección.
+// En las lecciones de la vida real, la primera frase era la definición general de la derivada / de las
+// ecuaciones / de las fracciones —la MISMA en varios escenarios— y el caso concreto ("En una tienda
+// compraste 3 cuadernos…") venía detrás. Quien mira los primeros segundos oye siempre lo mismo y
+// concluye, con razón, que le están repitiendo el ejemplo. Invirtiéndolas, lo primero identifica el caso.
+function concretoPrimero(dir) {
+  const idx = [];
+  for (let i = 0; i < dir.length && idx.length < 2; i++) if (dir[i].tipo === "hablar") idx.push(i);
+  if (idx.length === 2) { const t = dir[idx[0]]; dir[idx[0]] = dir[idx[1]]; dir[idx[1]] = t; }
+  return dir;
+}
+function aperturaEjemplo(dir, frase, pizarra) {
+  const i = dir.findIndex((d) => d.tipo === "avatar");
+  const nuevas = [{ tipo: "hablar", texto: frase }];
+  if (pizarra) nuevas.push({ tipo: "pizarra", accion: "escribir", contenido: pizarra });
+  dir.splice(i >= 0 ? i + 1 : 0, 0, ...nuevas);
+  return dir;
+}
 function aperturaReexplicacion(dir, extra, nivel = 0) {
   const n = Math.max(0, Math.min(2, Number(nivel) || 0));
   dir.splice(1, 0, { tipo: "hablar", texto: AVISO_REEXPLICA[n] });
@@ -1463,6 +1499,7 @@ export function derivadaAplicadaLSG(opts = {}) {
     { tipo: "pizarra", accion: "escribir", contenido: `derivada 2${c.varSym}  en ${c.uRate}   ·   sustituye ${c.varSym} por ${c.tP}` },
     { tipo: "preguntar", texto: `Ya tenemos la derivada: 2${c.varSym}. Sustituye ${c.varSym} por ${c.tP} (${c.punto(c.tP)}) y calcula: ¿cuánto vale? Escribe solo el número.`, respuesta: String(vP), esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
   ];
+  aperturaEjemplo(dir, `Veámoslo con ${c.obj}.`, `Ejemplo: ${c.obj}`);
   if (opts.mantener) aperturaReexplicacion(dir, [
     `Míralo de otra forma: ${c.sym}(${c.varSym}) = ${c.varSym}² dice el TOTAL acumulado, y la derivada 2${c.varSym} dice lo que se añade JUSTO en ese punto. Son dos cosas distintas: una es el montón entero y la otra, lo que crece el montón en ese instante. Por eso ${c.punto(c.tE)} el valor es 2 × ${c.tE} = ${vE}, y más adelante es mayor.`,
     `Vamos con números pequeños y sin fórmulas. Con ${c.varSym} = 1 el total es 1; con ${c.varSym} = 2 es 4; con ${c.varSym} = 3 es 9. Fíjate en lo que SUBE cada vez: de 1 a 4 sube 3, y de 4 a 9 sube 5. Sube cada vez más. La derivada es exactamente eso: cuánto sube en ese punto, ni antes ni después.`,
@@ -1536,6 +1573,7 @@ export function factorizacionResueltaLSG(opts = {}) {
     { tipo: "pizarra", accion: "escribir", contenido: practica },
     { tipo: "preguntar", texto: `¿Cómo se factoriza ${practica}? Escríbelo como producto de dos paréntesis.`, respuesta: facP, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
   );
+  if (opts.seguimiento && !opts.practica) aperturaEjemplo(dir, `Vamos con otra expresión: ${ejemplo}.`, ejemplo);
   if (opts.mantener) aperturaReexplicacion(dir, SIMPLE_FACTORIZ, opts.simplificacion);
   return { escena: "factorizacion_resuelta", intencion: opts.concepto ? "aprender" : "resolver", duracion_estimada: 65, _mock: true, directivas: dir };
 }
@@ -1578,6 +1616,7 @@ export function linealAplicadaLSG(opts = {}) {
   dir.push({ tipo: "hablar", texto: `${c.histP} Resuélvela.` });
   dir.push({ tipo: "pizarra", accion: "escribir", contenido: solP.original });
   dir.push({ tipo: "preguntar", texto: `¿Cuánto vale x en ${solP.original}? Escribe solo el número.`, respuesta: solP.answer, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" });
+  concretoPrimero(dir);
   if (opts.mantener) aperturaReexplicacion(dir, [
     `Dicho de otra manera: la x es el dato que NO conoces, y la ecuación ${sol.original} es la frase del problema escrita con números. Resolverla es ir quitando de alrededor de la x todo lo que la acompaña, haciendo lo contrario de lo que hay (si suma, se resta; si multiplica, se divide), hasta dejarla sola.`,
     "Piensa en una balanza con dos platillos que están en equilibrio. El signo igual es el fiel de la balanza. Puedes quitar lo mismo de los dos platillos, o partir los dos por la mitad, y seguirá equilibrada. Eso es todo lo que hacemos: quitar y partir a los DOS lados a la vez, hasta que en un platillo quede solo la x.",
@@ -1612,6 +1651,7 @@ export function fraccionAplicadaLSG(opts = {}) {
     { tipo: "pizarra", accion: "escribir", contenido: `${c.pa}/${c.pd} + ${c.pb}/${c.pd} = ?` },
     { tipo: "preguntar", texto: `¿Cuánto es ${c.pa}/${c.pd} + ${c.pb}/${c.pd}? Escribe la fracción.`, respuesta: `${psum}/${c.pd}`, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
   ];
+  concretoPrimero(dir);
   if (opts.mantener) aperturaReexplicacion(dir, [
     `Otra forma de verlo: el número de ABAJO (${c.d}) dice en cuántos trozos iguales está partido el todo, y ese número no cambia al juntar. El de ARRIBA dice cuántos trozos tienes. Por eso ${c.a} trozos y ${c.b} trozos son ${c.a} + ${c.b} trozos de los mismos ${c.d}.`,
     `Hazlo con las manos: parte una pizza en ${c.d} porciones iguales. Coges ${c.a} porciones, y luego ${c.b} más. ¿Cuántas porciones tienes? ${c.a + c.b}. ¿De cuántas estaba partida la pizza? De ${c.d}, eso no ha cambiado. Pues eso es ${c.a}/${c.d} + ${c.b}/${c.d} = ${c.a + c.b}/${c.d}.`,
@@ -1660,6 +1700,7 @@ export function factorizacionAplicadaLSG(opts = {}) {
     { tipo: "pizarra", accion: "escribir", contenido: exprP },
     { tipo: "preguntar", texto: `¿Cómo se factoriza ${exprP}? Escríbelo como producto de dos paréntesis.`, respuesta: facP, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
   );
+  concretoPrimero(dir);
   if (opts.mantener) aperturaReexplicacion(dir, [
     "Puesto de otra manera: factorizar es lo CONTRARIO de multiplicar. Si al multiplicar dos paréntesis te queda una resta de dos cuadrados, entonces desde esa resta puedes volver atrás y recuperar los dos paréntesis. Por eso siempre puedes comprobar tu respuesta multiplicándola: si vuelves a la expresión del principio, está bien.",
     "Vamos con el caso más pequeño: x² - 4. ¿Qué número multiplicado por sí mismo da 4? El 2. ¿Y qué letra por sí misma da x²? La x. Pues ya está: se escribe (x - 2)(x + 2), primero restando y después sumando. Siempre son esas dos raíces, una con menos y otra con más.",

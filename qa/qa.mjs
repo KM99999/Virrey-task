@@ -455,6 +455,42 @@ async function unitTests() {
     check(`cursor: las claves de TEMA llevan la dificultad`, claves.filter((k) => /^(derivada|lineal|factorizacion|fraccion|suma|resta|multiplicacion|division):/.test(k))
       .every((k) => /:(facil|normal|dificil)$/.test(k)), claves.join(","));
   }
+  // ── LO PRIMERO QUE SE VE Y SE OYE tiene que identificar ESTE ejemplo.
+  //    Queja del cliente, con captura: pedía ejemplos distintos y "se repite el mismo". El ejemplo SÍ
+  //    cambiaba —lo medía yo comparando la lección ENTERA y daba 8 de 8 distintas—, pero la lección
+  //    abría siempre con la misma frase hablada y la misma primera línea de pizarra (el concepto), y la
+  //    expresión nueva no salía hasta varios pasos después. Su captura está parada en el paso 2 de 11:
+  //    lo que él veía era idéntico cada vez, y tenía razón. Medir la lección completa no vale: hay que
+  //    medir el ARRANQUE, que es lo único que ve quien encadena peticiones.
+  for (const [label, abrir, pedir, minDistintas] of [
+    ["derivadas · otro ejemplo",   "Enséñame derivadas",           "Por favor, muéstrame otro ejemplo.", 6],
+    ["derivadas · vida real",      "Enséñame derivadas",           "Dame un ejemplo de la vida real.",   6],
+    ["lineales · otro ejemplo",    "Enséñame ecuaciones lineales", "Por favor, muéstrame otro ejemplo.", 6],
+    ["factorización · otro",       "Explícame la factorización",   "Por favor, muéstrame otro ejemplo.", 6],
+    ["fracciones · otro ejemplo",  "Enséñame fracciones",          "Por favor, muéstrame otro ejemplo.", 6],
+    ["suma · otro ejemplo",        "Enséñame a sumar",             "Por favor, muéstrame otro ejemplo.", 6],
+    ["lineales · vida real",       "Enséñame ecuaciones lineales", "Dame un ejemplo de la vida real.",   3],
+    ["fracciones · vida real",     "Enséñame fracciones",          "Dame un ejemplo de la vida real.",   3],
+  ]) {
+    const cursores = {}; let previo = "";
+    const ini = correrBoton({ query: abrir, cursores });
+    previo = ini.resumen;
+    const arranques = [];
+    for (let i = 0; i < 6; i++) {
+      const r = correrBoton({ query: pedir, seguimiento: "continuacion", contexto: abrir, currentTopic: abrir, previo, cursores });
+      if (!r) break;
+      const dicho1 = ((r.flat || []).find((d) => d.tipo === "hablar") || {}).texto || "";
+      const visto1 = (r.pizarras || [])[0] || "";
+      arranques.push(`${dicho1}||${visto1}`);
+      previo = r.resumen;
+    }
+    const seguidas = arranques.filter((a, i) => i > 0 && a === arranques[i - 1]).length;
+    check(`arranque [${label}]: NO abre igual que la lección anterior`, seguidas === 0,
+      `${seguidas} arranques idénticos al anterior — p.ej. "${(arranques[0] || "").slice(0, 70)}"`);
+    check(`arranque [${label}]: al menos ${minDistintas} arranques distintos de 6`, new Set(arranques).size >= minDistintas,
+      `distintos=${new Set(arranques).size}`);
+  }
+
   // ── RECARGAR LA PÁGINA (F5) no puede reiniciar la rotación. El cursor vive en el navegador; si no
   //    se guarda con el resto de la sesión, al refrescar el alumno vuelve a ver el PRIMER ejemplo del
   //    tema — justo la queja que el cursor vino a resolver, y basta con pulsar F5 para provocarla.
@@ -667,7 +703,11 @@ async function unitTests() {
     for (let i = 0; i < 6; i++) {
       const r = correrBoton({ query: i === 0 ? "dame un ejemplo de derivadas de la vida real" : "otro ejemplo", seguimiento: i === 0 ? "" : "continuacion", contexto: "Enséñame derivadas", currentTopic: "derivadas", previo });
       if (!r) break;
-      const obj = (r.flat.find((d) => /Veámoslo con/.test(d.texto || ""))?.texto.match(/Veámoslo con ([^:]+):/) || [])[1];
+      // El escenario se nombra ahora en la PRIMERA frase ("Veámoslo con un coche.") además de en la
+      // que lo desarrolla ("Veámoslo con un coche: su posición…"). Se acepta cualquiera de las dos:
+      // antes se exigían dos puntos y, al anteponer el caso, la comprobación dejó de encontrar nada
+      // y daba 0 escenarios con la rotación funcionando perfectamente.
+      const obj = (r.flat.find((d) => /Veámoslo con/.test(d.texto || ""))?.texto.match(/Veámoslo con ([^:.]+)[:.]/) || [])[1];
       if (obj) set.add(obj);
       previo = r.resumen;
     }
