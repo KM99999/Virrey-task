@@ -3,8 +3,8 @@
 **Proyecto:** Math IA — prototipo web de tutor de matemáticas (avatar + pizarra + voz).
 **En vivo:** https://math-ia.onrender.com · versión desplegada verificable en `/api/health`.
 **Repositorio:** https://github.com/KM99999/Virrey-task (rama `main`).
-**Periodo:** 9 de julio – 10 de agosto de 2026 · **197 commits**.
-**Estado a 10 de agosto de 2026:** commit `f3ac0c2` desplegado; Etapas 1 y 2 completas y verificadas.
+**Periodo:** 9 de julio – 10 de agosto de 2026 · **201 commits**.
+**Estado a 10 de agosto de 2026:** commit `b0aa6ef` desplegado; Etapas 1 y 2 completas y verificadas.
 
 ---
 
@@ -234,13 +234,60 @@ Tres quejas más, ninguna de matemáticas. Todas de **cómo se comporta el tutor
 Ese último escalón cierra la petición del 7 de agosto (*bajar a un problema más fácil tras varios "no
 entendí"*), que figuraba como no construida en las etapas anteriores de este documento.
 
+### Etapa M — Lo que el alumno teclea de verdad (10 de agosto)
+
+Revisión a fondo con las cinco baterías en verde, buscando por donde ninguna miraba: 247 turnos con
+toda respuesta calificable verificada con matemática escrita aparte, conversaciones de 25 turnos,
+respuestas erróneas a propósito, entradas adversas (cursor manipulado, unicode, coma decimal) y
+alternancia de temas. Cero problemas ahí. El defecto salió al probar lo que un alumno escribe entre
+ejercicio y ejercicio:
+
+- Con un tema del alcance ACTIVO, escribir **"ok", "vale", "listo", "perfecto", "hola" o "gracias"**
+  salía del motor determinista y acababa en la IA. Rompía la garantía, costaba una llamada y lo que
+  volvía era visiblemente roto: la pizarra mostraba **la propia frase anterior del alumno**. Causa: esas
+  palabras estaban en la lista de "saludo", cuya implementación devolvía `null` — es decir, *que lo
+  resuelva la IA*. Correcto no dar lección; incorrecto mandarlo al modelo. Ahora se distinguen tres
+  cosas: **acuse de recibo** (nota breve), **pedir seguir** ("siguiente", "adelante" → lección) y
+  **cortesía** (nota breve).
+- Destapado por el anterior: tras unos ejemplos de la vida real y un par de "ok", un "no entendí"
+  volvía al **primer ejercicio de la sesión**, porque al re-explicar se caía al *tema* como último
+  recurso. Ese recurso solo se usa ya cuando no sabemos qué hay en pantalla.
+
+### Etapa N — El navegador, y lo que se ve al empezar (10 de agosto)
+
+Dos frentes que ninguna prueba cubría.
+
+**El navegador.** Todas las pruebas hablaban con el servidor; ninguna cargaba `public/app.js`. Si el
+frontend falla al cargarse la página queda muerta y las cinco baterías siguen en verde. Se creó
+`qa/frontend.mjs` (carga en un DOM simulado: primera visita, recarga con sesión guardada y seis formas
+de sesión corrupta). Con él aparecieron tres defectos:
+
+1. **Recargar la página (F5) reiniciaba la rotación:** el cursor no se guardaba con el resto de la
+   sesión, así que al refrescar volvía el PRIMER ejemplo del tema.
+2. En la práctica, **acertar el primer ejercicio tapaba fallar el segundo** (la clase subía de nivel).
+3. El **tope de claves del cursor** estaba a siete de romperse (40 aceptadas, 33 generadas); pasarse no
+   da error, descarta claves en silencio y esa rotación deja de avanzar. Subido a 80, con comprobación.
+
+**Lo que se ve al empezar.** El cliente insistió: "pido ejemplos distintos y se repite el mismo".
+Reproducido su historial exacto, el servidor rotaba bien —9 lecciones distintas de 10— pero **la
+lección abría siempre igual**: misma frase hablada y misma primera línea de pizarra (el concepto), con
+la expresión nueva varios pasos más abajo. Su captura está parada en el **paso 2 de 11**, y sus
+consultas van a 2-4 segundos una de otra: nunca llegaba a ver el ejemplo, solo la apertura. Ahora, en
+un seguimiento, lo primero que se dice y se escribe **identifica ese ejemplo** ("Vamos con otra
+función: 2x³", "Veámoslo con una fábrica").
+
+Mi comprobación decía "8 de 8 distintas" y era cierta: comparaba la lección ENTERA. El alumno ve el
+arranque. Hay ahora una comprobación que mide el ARRANQUE en 8 combinaciones de tema y petición.
+
 ---
 
 ## 4. Estado verificado a 10 de agosto de 2026
 
 | Prueba | Resultado |
 |---|---|
-| Lógica (`npm run qa`) | **1 046 aprobadas · 0 fallidas** |
+| Lógica (`npm run qa`) | **1 146 aprobadas · 0 fallidas** |
+| Carga del frontend (`node qa/frontend.mjs`) | **10 escenarios · 0 fallidos** |
+| Auditoría independiente | **247 turnos · 307 preguntas · 292 verificadas aparte · 0 fallos** |
 | Barrido por propiedades (`qa/barrido.mjs`) | **200 conversaciones · 1 800 turnos · 0 violaciones** |
 | Sesiones (`qa/sesiones.mjs`) | **126 comprobaciones · 0 fallidas** |
 | Aceptación en vivo (`qa/aceptacion.mjs`) | **24/24** |
@@ -301,6 +348,7 @@ cursor explícito descrito en la Etapa J.)*
 npm install
 
 QA_SKIP_LIVE=1 npm run qa            # lógica, sin coste ni red
+node qa/frontend.mjs                 # ¿arranca la página? (8 escenarios de carga)
 node qa/barrido.mjs                  # 200 conversaciones por propiedades (1 800 turnos)
 node qa/sesiones.mjs                 # conversaciones guionizadas de varios turnos
 node qa/aceptacion.mjs               # 24 interacciones de la guía de aceptación
