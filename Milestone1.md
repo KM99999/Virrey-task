@@ -3,8 +3,8 @@
 **Proyecto:** Math IA — prototipo web de tutor de matemáticas (avatar + pizarra + voz).
 **En vivo:** https://math-ia.onrender.com · versión desplegada verificable en `/api/health`.
 **Repositorio:** https://github.com/KM99999/Virrey-task (rama `main`).
-**Periodo:** 9 de julio – 8 de agosto de 2026 · **190 commits**.
-**Estado a 8 de agosto de 2026:** commit `7ac9246` desplegado; Etapas 1 y 2 completas y verificadas.
+**Periodo:** 9 de julio – 10 de agosto de 2026 · **193 commits**.
+**Estado a 10 de agosto de 2026:** commit `cf9ef36` desplegado; Etapas 1 y 2 completas y verificadas.
 
 ---
 
@@ -160,15 +160,42 @@ cliente aún no había reportado:** en una sesión de aritmética, cualquier seg
 motor determinista hacia la IA. Después encontró un segundo: la red de seguridad no rotaba el
 ejemplo, así que "y otro más" repetía la misma lección.
 
+### Etapa J — Cursor de rotación y la frase repetida (10 de agosto)
+
+El barrido encadenaba frases **distintas**; el cliente repite **la misma** muchas veces seguidas. Esa
+sola diferencia escondía una clase entera de defectos. Añadido ese patrón al barrido (6 frases × 10
+aperturas) y una invariante nueva —al pedir "otro", dos lecciones seguidas no pueden compartir el
+ejemplo ni el ejercicio—, el barrido pasó de 200 a 1 800 turnos y sacó cuatro defectos:
+
+1. **La rotación adivinaba su posición.** Deducía por dónde iba **leyendo el texto ya mostrado**; en
+   cuanto esa deducción fallaba, volvía al principio y repetía la lección. Sustituida por un **cursor
+   explícito** por tema y nivel que viaja con la conversación (el navegador lo guarda, el servidor lo
+   avanza y lo devuelve); la lectura del texto queda solo como respaldo. Repitiendo la misma frase
+   ocho veces: derivadas 2 → **8** lecciones distintas, factorización 2 → **8**, lineales **8**.
+2. **En una sesión de factorización, "no entendí" derivaba el ejercicio** — cambiaba de operación,
+   calculaba lo que nadie pidió y lo narraba como una resta, justo donde el alumno acababa de decir
+   que no entendía. El desglose paso a paso no sabía factorizar, así que ganaba la lectura siguiente.
+   Ahora sabe factorizar (con comprobación multiplicando de vuelta) y la lectura del tema es
+   **exclusiva**: una lectura que falla deja re-enseñar el tema, nunca cambiar de operación.
+3. Tras un desglose, el navegador guardaba `Resultado: 41` como "el ejercicio en pantalla", y el
+   siguiente "resuélvela" desglosaba un resultado.
+4. Las lecciones de la vida real no rotaban con cursor y entregaban como práctica una expresión que
+   también está en la lista numérica, así que la lección siguiente abría con lo recién practicado.
+
+Y otra corrección **al propio control de calidad**: dos comprobaciones de aceptación daban por
+defectuoso un producto correcto (el verificador no sabía leer paréntesis ni desarrollar un factor
+común), y una de lógica medía la posición de la lista en vez de la dificultad. Los verificadores
+ampliados se probaron contra respuestas erróneas a propósito: siguen rechazándolas.
+
 ---
 
-## 4. Estado verificado a 8 de agosto de 2026
+## 4. Estado verificado a 10 de agosto de 2026
 
 | Prueba | Resultado |
 |---|---|
-| Lógica (`npm run qa`) | **915 aprobadas · 0 fallidas** |
-| Barrido por propiedades (`qa/barrido.mjs`) | **140 conversaciones · 1 260 turnos · 0 violaciones** |
-| Sesiones (`qa/sesiones.mjs`) | **134 comprobaciones · 0 fallidas** |
+| Lógica (`npm run qa`) | **933 aprobadas · 0 fallidas** |
+| Barrido por propiedades (`qa/barrido.mjs`) | **200 conversaciones · 1 800 turnos · 0 violaciones** |
+| Sesiones (`qa/sesiones.mjs`) | **132 comprobaciones · 0 fallidas** |
 | Aceptación en vivo (`qa/aceptacion.mjs`) | **24/24** |
 | Contrato de Etapas 1 y 2, punto por punto | **12/12 · 129 comprobaciones** |
 | Auditoría independiente del motor | **368 comprobaciones** |
@@ -190,15 +217,15 @@ cuadráticas y grados superiores, sistemas, inecuaciones, trigonometría, logari
 
 ## 6. Puntos abiertos
 
-1. **Rotación en ecuaciones lineales:** al repetir muchas veces la misma petición todavía puede
-   repetirse una lección dos veces seguidas. La corrección completa pide un cursor de rotación
-   propio en vez de deducir la posición del texto ya visto.
-2. **Bajar a un problema más fácil** tras varios "no entendí" seguidos: solicitado el 7 de agosto,
+1. **Bajar a un problema más fácil** tras varios "no entendí" seguidos: solicitado el 7 de agosto,
    no implementado.
-3. **Ruta de IA sin verificar:** `qa/verificar.mjs` (las 4 intenciones con Gemini real) no se ha
+2. **Ruta de IA sin verificar:** `qa/verificar.mjs` (las 4 intenciones con Gemini real) no se ha
    ejecutado, porque consume saldo de la cuenta del cliente.
-4. **Despliegue automático:** los despliegues se disparan por *Deploy Hook*; el aviso por *push*
+3. **Despliegue automático:** los despliegues se disparan por *Deploy Hook*; el aviso por *push*
    de GitHub nunca ha llegado a funcionar.
+
+*(La rotación en ecuaciones lineales figuraba aquí el 8 de agosto: se corrigió el 10 de agosto con el
+cursor explícito descrito en la Etapa J.)*
 
 ---
 
@@ -224,8 +251,8 @@ cuadráticas y grados superiores, sistemas, inecuaciones, trigonometría, logari
 npm install
 
 QA_SKIP_LIVE=1 npm run qa            # lógica, sin coste ni red
-node qa/barrido.mjs                  # 140 conversaciones por propiedades
-node qa/sesiones.mjs                 # 6 conversaciones guionizadas
+node qa/barrido.mjs                  # 200 conversaciones por propiedades (1 800 turnos)
+node qa/sesiones.mjs                 # conversaciones guionizadas de varios turnos
 node qa/aceptacion.mjs               # 24 interacciones de la guía de aceptación
 node qa/verificar.mjs                # IA real (consume saldo de Gemini)
 ```
