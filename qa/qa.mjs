@@ -194,14 +194,15 @@ async function unitTests() {
     const q = flat.find((d) => d.tipo === "preguntar");
     const qi = flat.indexOf(q);
     let board = ""; for (let i = qi - 1; i >= 0; i--) if (flat[i].tipo === "pizarra") { board = flat[i].contenido; break; }
+    const qs = flat.filter((d) => d.tipo === "preguntar");
     const pizarras = flat.filter((d) => d.tipo === "pizarra").map((d) => d.contenido);
     const hablar2 = flat.filter((d) => d.tipo === "hablar").slice(0, 2).map((d) => d.texto).join(" ");
     // `resumen` replica resumenLeccion() del frontend: EXPRESIONES primero (pizarras + pregunta) y la
     // prosa al final, para que el ejemplo mostrado sobreviva el recorte de `previo` (el concepto que abre
     // "enséñame [tema]" es largo). Es lo que se envía como `previo` y lo que permite ROTAR el ejemplo.
     const resumen = [...pizarras, q ? q.texto : "", hablar2].filter(Boolean).join(" · ").slice(0, 600);
-    return { tema: b.tema, modelo: b.modelo, intencion: b.intencion, lsg, flat, q, board, pizarras, hablar2, resumen,
-      nPreg: flat.filter((d) => d.tipo === "preguntar").length };
+    return { tema: b.tema, modelo: b.modelo, intencion: b.intencion, lsg, flat, q, qs, board, pizarras, hablar2, resumen,
+      nPreg: qs.length };
   };
   const bateriaBoton = (label, body, expTema) => {
     const r = correrBoton(body);
@@ -446,6 +447,41 @@ async function unitTests() {
     const claves = Object.keys(cursores).sort();
     check(`cursor: la clave es tema:nivel`, claves.every((k) => /^[a-z_]+:(facil|normal|dificil)$/.test(k)) && claves.length >= 2, claves.join(","));
   }
+  // ── "NO ENTENDÍ" sobre una lección de la VIDA REAL: debe re-explicar el MISMO caso, no cambiarlo.
+  //    Queja del cliente, con captura: la pizarra mostraba una FÁBRICA (costo marginal) y al pedir
+  //    "no entendí, ¿puedes explicarme mejor?" el sistema respondió con un COCHE (posición y tiempo).
+  //    Pedir ayuda con lo que está en pantalla no puede cambiar el ejercicio de la pantalla.
+  //    Y al pedir OTRO ejemplo sí debe cambiar: se comprueban las dos caras.
+  for (const [label, abrir, expTema] of [
+    ["derivadas",     "Enséñame derivadas de la vida real",             "derivada"],
+    ["lineales",      "Ejemplo de ecuaciones lineales de la vida real", "lineal"],
+    ["fracciones",    "Ejemplo de fracciones de la vida real",          "fraccion"],
+    ["factorización", "Ejemplo de factorización de la vida real",       "factorizacion"],
+  ]) {
+    // El ESCENARIO se identifica por la PRIMERA pizarra, que es la que plantea el caso concreto
+    // ("una fábrica — costo total: C(q) = q²"). Si cambia, al alumno le han cambiado el ejercicio
+    // que tenía delante. Se compara así, y no por una lista de sustantivos, para que la comprobación
+    // no dependa de que yo enumere bien todos los escenarios existentes.
+    const caso = (r) => String((r.pizarras || [])[0] || "").replace(/\s+/g, " ").trim();
+    for (const frase of ["no entendí", "no entendí, ¿puedes explicarme mejor?", "explícalo mejor", "¿por qué?"]) {
+      const cursores = {};
+      const r1 = correrBoton({ query: abrir, cursores });
+      const r2 = correrBoton({ query: frase, seguimiento: "reexplicar", contexto: abrir, currentTopic: abrir, previo: r1.resumen, cursores });
+      check(`vida real [${label}] "${frase}": sigue el mismo tema`, !!r2 && r2.tema === expTema, r2 ? r2.tema : "null");
+      check(`vida real [${label}] "${frase}": NO cambia de caso real`, !!r2 && caso(r2) === caso(r1), `${caso(r1)} → ${caso(r2)}`);
+      // …y tampoco vale devolver la MISMA lección palabra por palabra: el alumno ha dicho que no
+      // entiende, así que debe oír una explicación NUEVA del mismo caso. (Las dos quejas del cliente
+      // tiran en sentidos opuestos: "me cambia el ejercicio" y "me muestra lo mismo, como un bucle".)
+      const dicho = (r) => (r.flat || []).filter((d) => d.tipo === "hablar").map((d) => d.texto).join(" ");
+      check(`vida real [${label}] "${frase}": lo explica con OTRAS palabras`, !!r2 && dicho(r2) !== dicho(r1) && dicho(r2).length > dicho(r1).length * 0.9);
+    }
+    // La otra cara: pedir OTRO ejemplo SÍ debe cambiar de caso.
+    const cur2 = {};
+    const a = correrBoton({ query: abrir, cursores: cur2 });
+    const b2 = correrBoton({ query: "dame otro ejemplo de la vida real", seguimiento: "continuacion", contexto: abrir, currentTopic: abrir, previo: a.resumen, cursores: cur2 });
+    check(`vida real [${label}] "otro ejemplo": SÍ cambia de caso real`,
+      !!b2 && JSON.stringify(b2.pizarras) !== JSON.stringify(a.pizarras), JSON.stringify(b2?.pizarras || []).slice(0, 60));
+  }
   // ── QUEJAS DEL CLIENTE (ronda derivadas): 1) "dame otro ejemplo" = EJEMPLO resuelto, NO ejercicio de
   //    práctica; 2) la derivada aplicada rota por los 5 escenarios (no 3); 3) FALSO NEGATIVO: una ecuación
   //    con x en AMBOS lados ("5x - 7 = 2x + 5") debe calificar bien la respuesta correcta.
@@ -645,7 +681,13 @@ async function unitTests() {
       if (!r) continue;
       check(`practicar [${q}]: intención = practicar`, r.intencion === "practicar", r.intencion);
       check(`practicar [${q}]: NO resuelve paso a paso (da ejercicios)`, esPracticar(r) && !resuelvePaso(r));
-      check(`practicar [${q}]: entrega un reto CALIFICABLE`, r.nPreg === 1 && !!r.q && checkAnswer(r.q.respuesta, r.q.respuesta).correct === true, `nPreg=${r.nPreg} resp=${r.q?.respuesta}`);
+      // LOS DOS ejercicios de la pizarra se califican. Antes esta comprobación exigía `nPreg === 1`:
+      // daba por CORRECTO justo lo que el cliente reportó como defecto ("me deja dos ejercicios, pero
+      // sólo me valida uno"). Ahora se exige que cada ejercicio escrito tenga su pregunta con respuesta
+      // calificable, y que ninguna quede sin verdad-base.
+      const retos = r.pizarras.filter((c) => /^Ejercicio \d/.test(String(c))).length;
+      check(`practicar [${q}]: califica LOS ${retos} ejercicios que deja`, r.nPreg === retos && retos >= 1, `ejercicios=${retos} preguntas=${r.nPreg}`);
+      check(`practicar [${q}]: cada reto es CALIFICABLE`, r.qs.length > 0 && r.qs.every((x) => !!String(x.respuesta || "").trim() && checkAnswer(x.respuesta, x.respuesta).correct === true), r.qs.map((x) => x.respuesta).join(" | "));
     }
     // Dificultad por TEXTO: "más complejos" → nivel difícil. Se comprueba lo que hace difícil a una
     // ecuación —un paso EXTRA antes de despejar—, no una forma concreta: paréntesis que distribuir,

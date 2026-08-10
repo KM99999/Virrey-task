@@ -115,28 +115,54 @@ export function chunkForSpeech(text) {
   return out.length ? out : [s];
 }
 
+// VOZ DEL TUTOR: MASCULINA y ESTABLE. Dos defectos reportados por el cliente en una misma frase
+// ("cambia de voz de mujer a voz de varón"):
+//   · no se elegía por género — se tomaba la PRIMERA voz en español que ofreciera el navegador, que
+//     en Chrome ("Google español") es femenina y en Windows puede ser Helena o Pablo según el equipo;
+//   · y `onvoiceschanged` vuelve a dispararse cuando el navegador termina de cargar las voces remotas,
+//     así que se RE-ELEGÍA a mitad de la sesión y el tutor cambiaba de voz mientras hablaba.
+// Ahora se prefiere una voz masculina conocida, y la elegida se BLOQUEA en cuanto empieza a hablar:
+// pase lo que pase con la lista de voces, el tutor no cambia de voz dentro de una sesión.
+const VOZ_MASCULINA = /\b(pablo|[áa]lvaro|ra[úu]l|jorge|diego|juan|carlos|enrique|miguel|gonzalo|andr[ée]s|crist[íi]an|liberto|arnau|el[íi]as|mateo|tom[áa]s|luciano|male|hombre|masculin)\b/i;
+const VOZ_FEMENINA = /\b(helena|sabina|elvira|dalia|m[óo]nica|paulina|luc[íi]a|laura|marisol|catalina|isabela|salom[ée]|camila|ver[óo]nica|pen[ée]lope|esperanza|tania|sof[íi]a|valentina|renata|larissa|yolanda|paloma|estrella|female|mujer|femenin)\b/i;
+
 export class TTS {
   constructor() {
     this.synth = typeof window !== "undefined" ? window.speechSynthesis : null;
     this.enabled = !!this.synth;
     this.voice = null;
+    this.masculina = false;
+    this._fijada = false;   // una vez que ha empezado a hablar, la voz YA NO se cambia
     this.rate = 0.95; // un poco más pausado: se entiende mejor y suena menos entrecortado
     this.pitch = 1.0;
     this._pickVoice();
-    // Las voces cargan async en algunos navegadores.
+    // Las voces cargan async en algunos navegadores. Se vuelve a elegir SOLO mientras no esté fijada
+    // y no se haya encontrado ya una masculina (si llega tarde, se aprovecha; si ya habla, no se toca).
     if (this.synth && "onvoiceschanged" in this.synth) {
       this.synth.onvoiceschanged = () => this._pickVoice();
     }
   }
 
   _pickVoice() {
-    if (!this.synth) return;
-    const voices = this.synth.getVoices() || [];
-    this.voice =
-      voices.find((v) => /^es[-_]ES/i.test(v.lang)) ||
-      voices.find((v) => /^es[-_]MX/i.test(v.lang)) ||
-      voices.find((v) => /^es/i.test(v.lang)) ||
-      null;
+    if (!this.synth || this._fijada || this.masculina) return;
+    const es = (this.synth.getVoices() || []).filter((v) => /^es/i.test(v.lang));
+    if (!es.length) return;
+    // Preferencia por variante: España, luego América, luego cualquier español.
+    const grupos = [
+      es.filter((v) => /^es[-_]ES/i.test(v.lang)),
+      es.filter((v) => /^es[-_](MX|US|419|AR|CO|CL|PE)/i.test(v.lang)),
+      es,
+    ];
+    let elegida = null;
+    for (const g of grupos) { elegida = g.find((v) => VOZ_MASCULINA.test(v.name)); if (elegida) break; }
+    this.masculina = !!elegida;
+    // Sin voz masculina instalada, se descarta al menos la que se sabe femenina...
+    if (!elegida) for (const g of grupos) { elegida = g.find((v) => !VOZ_FEMENINA.test(v.name)); if (elegida) break; }
+    if (!elegida) elegida = grupos.find((g) => g.length)?.[0] || es[0];
+    this.voice = elegida || null;
+    // ...y se BAJA el tono, que es lo único que queda en manos de la aplicación para que la voz
+    // disponible suene masculina. Con una voz masculina real el tono se deja natural.
+    this.pitch = this.masculina ? 0.95 : 0.7;
   }
 
   hasSpanishVoice() {
@@ -147,7 +173,7 @@ export class TTS {
   describe() {
     if (!this.enabled) return "sin TTS (subtítulos)";
     if (!this.voice) return "voz del sistema (sin es-ES)";
-    return `voz: ${this.voice.name}`;
+    return `voz: ${this.voice.name}${this.masculina ? " (masculina)" : " (tono grave)"}`;
   }
 
   /**
@@ -161,6 +187,9 @@ export class TTS {
     // muestran el texto ORIGINAL (esto no los toca: solo afecta a la locución).
     const spoken = normalizeForSpeech(text);
     if (!spoken || signal?.aborted) return Promise.resolve();
+    // A partir de la PRIMERA locución la voz queda fijada: aunque el navegador siga cargando voces y
+    // dispare `onvoiceschanged`, el tutor no cambiará de voz a mitad de la lección.
+    if (this.voice) this._fijada = true;
 
     // Sin voz real: retardo proporcional (subtítulos temporizados).
     if (!this.enabled || !this.voice) {

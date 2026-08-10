@@ -537,6 +537,16 @@ export class PSELight {
 export function buildHint(question, board, nivel) {
   const t = `${question || ""} ${board || ""}`.toLowerCase();
   const b = (board || "").toLowerCase();
+  // SUSTITUIR en una derivada YA calculada ("la derivada es 2q, ¿cuánto vale con q = 5?"). NO es
+  // derivar: es evaluar. Va ANTES de la rama de derivadas porque el enunciado contiene la palabra
+  // "derivada" y se llevaba la pista de la regla de la potencia — el alumno pedía ayuda para
+  // sustituir un número y se le respondía "baja el exponente y réstale una unidad". Incoherente, y
+  // reportado por el cliente: "pide derivar, y a la vez brinda un número 5".
+  if (/sustitu/.test(t) || /la derivada (ya |)?(est[aá] calculada|es)\s*[^,.]*[,.]?\s*(¿|sustituyendo|cu[aá]nto vale)/.test(t)) {
+    return nivel >= 2
+      ? "La derivada ya está hecha: donde aparece la letra, escribe el número que te dan y resuelve esa multiplicación."
+      : "Pista: no hay que derivar otra vez. Sustituye el valor en la expresión de la derivada y calcula.";
+  }
   // Derivadas (regla de la potencia): guiar con el MÉTODO, sin dar el resultado.
   if (/derivad|deriva|d\/dx/.test(t)) {
     return nivel >= 2

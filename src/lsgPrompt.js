@@ -541,7 +541,8 @@ export function fraccionResueltaLSG(opts) {
     recordatorio: dificil
       ? "Recuerda: si los denominadores son DISTINTOS, primero iguálalos (busca el mínimo común denominador), convierte cada fracción y luego suma los numeradores; al final, simplifica."
       : "Recuerda: con el MISMO denominador, suma los numeradores y deja el denominador igual; luego simplifica si se puede.",
-    reto1: A.texto, preg: `¿Cuánto es ${A.texto}? Escríbelo en su forma más simple.`, resp: A.final, reto2: B.texto,
+    reto1: A.texto, preg: `¿Cuánto es ${A.texto}? Escríbelo en su forma más simple.`, resp: A.final,
+    reto2: B.texto, preg2: `¿Cuánto es ${B.texto}? Escríbelo en su forma más simple.`, resp2: B.final,
   });
   const dir = [{ tipo: "avatar", accion: "sonreir" }];
   // ENSEÑAR el tema ("enséñame fracciones"): primero el CONCEPTO (qué es una fracción) y la REGLA,
@@ -776,17 +777,32 @@ function elegirBoton(listas, { evitar, instancia, seguimiento, nivel, cursores }
 // segundo queda como reto extra). Si el alumno se traba, puede pedir "resuélvelo" y pasa a modo resolver.
 // Cada generador núcleo delega aquí cuando opts.practica es true (misma "escena confiable" → PRE Light la
 // respeta). La intención resultante es "practicar" (una de las 4 del acuerdo), no "resolver".
-function practicaLSG(escena, { recordatorio, reto1, preg: pregTxt, resp, reto2 }) {
+// LOS DOS ejercicios se califican, uno tras otro. Antes se escribían los dos en la pizarra pero solo
+// se preguntaba el primero: el segundo se anunciaba como "(extra)" y nunca se validaba, así que el
+// alumno lo resolvía y nadie le decía si estaba bien (queja del cliente: "me deja dos ejercicios,
+// pero sólo me valida uno"). Se presentan de uno en uno —cada enunciado en la pizarra justo antes de
+// su pregunta— para que las pistas ante un error se refieran al ejercicio que se está resolviendo y
+// no al otro (con los dos escritos de golpe, la pista del Ejercicio 1 miraba el enunciado del 2).
+function practicaLSG(escena, { recordatorio, reto1, preg: pregTxt, resp, reto2, preg2, resp2 }) {
+  const dobles = !!(reto2 && preg2 && String(resp2 ?? "").trim());
   const dir = [
     { tipo: "avatar", accion: "sonreir" },
-    { tipo: "hablar", texto: "¡A practicar! Estos ejercicios son para que los resuelvas TÚ. Tómate tu tiempo y escribe tu respuesta abajo; si te trabas, dime «resuélvelo» y lo hacemos juntos." },
+    { tipo: "hablar", texto: dobles
+      ? "¡A practicar! Te dejo DOS ejercicios para que los resuelvas TÚ. Los haremos uno a uno y te digo si cada respuesta está bien. Si te trabas, dime «resuélvelo» y lo hacemos juntos."
+      : "¡A practicar! Estos ejercicios son para que los resuelvas TÚ. Tómate tu tiempo y escribe tu respuesta abajo; si te trabas, dime «resuélvelo» y lo hacemos juntos." },
   ];
   if (recordatorio) dir.push({ tipo: "hablar", texto: recordatorio });
   dir.push({ tipo: "pizarra", accion: "escribir", contenido: `Ejercicio 1:  ${reto1}` });
-  if (reto2) dir.push({ tipo: "pizarra", accion: "escribir", contenido: `Ejercicio 2 (extra):  ${reto2}` });
   dir.push({ tipo: "hablar", texto: "Empieza por el Ejercicio 1 y escribe tu respuesta." });
   dir.push({ tipo: "preguntar", texto: pregTxt, respuesta: String(resp), esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" });
-  return { escena, intencion: "practicar", duracion_estimada: 45, _mock: true, directivas: dir };
+  if (dobles) {
+    dir.push({ tipo: "hablar", texto: "Vamos con el Ejercicio 2, el último." });
+    dir.push({ tipo: "pizarra", accion: "escribir", contenido: `Ejercicio 2:  ${reto2}` });
+    dir.push({ tipo: "preguntar", texto: preg2, respuesta: String(resp2), esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" });
+  } else if (reto2) {
+    dir.push({ tipo: "pizarra", accion: "escribir", contenido: `Ejercicio 2 (extra):  ${reto2}` });
+  }
+  return { escena, intencion: "practicar", duracion_estimada: dobles ? 70 : 45, _mock: true, directivas: dir };
 }
 
 // ════════ ARITMÉTICA BÁSICA: suma, resta, multiplicación, división (pedida por el cliente) ════════
@@ -1000,7 +1016,8 @@ function aritmeticaLSG(opts, cfg) {
   const eq = E.aproximado ? "≈" : "=";
   if (opts.practica) return practicaLSG(cfg.escena, {
     recordatorio: `Recuerda: para ${cfg.verbo}, ${cfg.rec}`,
-    reto1: E.texto, preg: pregArit(E), resp: E.answer, reto2: P.texto,
+    reto1: E.texto, preg: pregArit(E), resp: E.answer,
+    reto2: P.texto, preg2: pregArit(P), resp2: P.answer,
   });
   const dir = [{ tipo: "avatar", accion: "sonreir" }];
   if (opts.concepto) {
@@ -1062,7 +1079,8 @@ export function linealResueltaLSG(opts = {}) {
   const solP = solveLinearSteps(practica) || solveLinearSteps(lista[1]);
   if (opts.practica) return practicaLSG("lineal_resuelta", {
     recordatorio: "Recuerda: para hallar la incógnita, despéjala pasando los números al otro lado con la operación inversa (lo que suma, resta; lo que multiplica, divide), hasta dejar la x sola.",
-    reto1: sol.original, preg: `¿Cuánto vale ${sol.varName} en ${sol.original}? Escribe solo el número.`, resp: sol.answer, reto2: solP.original,
+    reto1: sol.original, preg: `¿Cuánto vale ${sol.varName} en ${sol.original}? Escribe solo el número.`, resp: sol.answer,
+    reto2: solP.original, preg2: `¿Cuánto vale ${solP.varName} en ${solP.original}? Escribe solo el número.`, resp2: solP.answer,
   });
   const dir = [{ tipo: "avatar", accion: "sonreir" }];
   // ENSEÑAR el tema ("enséñame ecuaciones lineales"): primero el CONCEPTO y la REGLA, no saltar directo
@@ -1109,7 +1127,8 @@ export function derivadaResueltaLSG(opts = {}) {
   const derP = computeDerivative("derivada de " + practica) || "0";
   if (opts.practica) return practicaLSG("derivada_resuelta", {
     recordatorio: "Recuerda la regla de la potencia: baja el exponente multiplicando delante y réstale 1 (la derivada de xⁿ es n·xⁿ⁻¹). En un polinomio, deriva término a término.",
-    reto1: ejemplo, preg: `¿Cuál es la derivada de ${ejemplo}?`, resp: derE, reto2: practica,
+    reto1: ejemplo, preg: `¿Cuál es la derivada de ${ejemplo}?`, resp: derE,
+    reto2: practica, preg2: `¿Cuál es la derivada de ${practica}?`, resp2: computeDerivative("derivada de " + practica) || "",
   });
   const pm = partesMonomio(ejemplo);
   // Un POLINOMIO (varios términos) no tiene un único exponente que "bajar": se deriva TÉRMINO A TÉRMINO.
@@ -1154,6 +1173,20 @@ export function derivadaResueltaLSG(opts = {}) {
 // aparece (la lección previa era de otro tipo y su resumen no nombra ningún escenario), varía según la
 // longitud del texto previo para no repetir SIEMPRE el primero. Todos los escenarios son válidos, así que
 // cualquier índice da una lección correcta: esto solo aporta VARIEDAD (evita repetir el mismo caso real).
+// RE-EXPLICAR una lección de la vida real: MISMO caso, otras palabras. Mantener el escenario resuelve
+// media queja del cliente ("le pedí que me enseñe mejor el ejercicio de la pizarra y me muestra otro
+// diferente"); si además se devolviera la lección IDÉNTICA, se caería en la otra queja que ya había
+// hecho antes ("me muestra lo mismo a cada momento, como un bucle"). Así que al mantener el caso se
+// abre con un aviso explícito y se añade UNA explicación nueva, más concreta, del mismo ejemplo.
+function aperturaReexplicacion(dir, extra) {
+  dir.splice(1, 0,
+    { tipo: "hablar", texto: "Sin problema: es el MISMO ejemplo que tienes en la pizarra, no lo cambio. Vamos más despacio y te lo cuento con otras palabras." });
+  if (extra) {
+    const i = dir.findIndex((d) => d.tipo === "pizarra");
+    dir.splice(i >= 0 ? i + 1 : dir.length, 0, { tipo: "hablar", texto: extra });
+  }
+  return dir;
+}
 // `cur` = { cursores, clave }: igual que en las listas numéricas, la posición explícita manda sobre lo
 // deducido del texto. Sin ella, dos peticiones de "un ejemplo de la vida real" separadas por otro turno
 // devolvían el MISMO escenario, porque la deducción solo mira la lección inmediatamente anterior.
@@ -1180,6 +1213,14 @@ function idxEscenario(list, evitarRaw, keyOf, cur = null) {
   // que pedir "otro de la vida real" recorra TODOS los escenarios aunque entre medias haya habido otros
   // turnos (una re-explicación, un ejercicio) que borran el rastro en el texto.
   const m = cur && cursorMapa(cur.cursores);
+  // MANTENER el escenario: el alumno ha dicho "no entendí" sobre lo que tiene DELANTE. Re-explicar con
+  // OTRO caso real es cambiarle el ejercicio justo cuando ha pedido ayuda con éste. (Queja del cliente:
+  // "le pedí que me enseñe mejor el ejercicio de la pizarra y me muestra otro diferente" — la lección
+  // iba de una fábrica y la re-explicación pasó a un coche.) Solo se rota cuando pide OTRO ejemplo.
+  // Se devuelve la posición ACTUAL sin más comprobaciones: `evitarRaw` contiene, por definición, el
+  // escenario que se acaba de mostrar, así que mirar si está "evitado" haría que mantener no se
+  // aplicara NUNCA (era el error de la primera versión de este arreglo).
+  if (m && cur.clave && cur.mantener && Number.isInteger(m[cur.clave])) return m[cur.clave] % list.length;
   if (m && cur.clave && Number.isInteger(m[cur.clave])) {
     for (let step = 1; step <= list.length; step++) {
       const j = (m[cur.clave] + step) % list.length;
@@ -1278,7 +1319,7 @@ export function derivadaAplicadaLSG(opts = {}) {
   const pool = soloNoVel ? DERIV_VIDA.filter((s) => !s.speed) : DERIV_VIDA;
   // Clave de cursor distinta según el pool: al excluir la velocidad la lista es más corta y una
   // posición compartida apuntaría a otro escenario. Cada lista lleva la suya.
-  const cur = { cursores: opts.cursores, clave: soloNoVel ? "derivada_vida_novel:normal" : "derivada_vida:normal" };
+  const cur = { cursores: opts.cursores, clave: soloNoVel ? "derivada_vida_novel:normal" : "derivada_vida:normal", mantener: opts.mantener };
   const c = pool[idxEscenario(pool, opts.evitar, (s) => s.key, cur)];
   const vE = 2 * c.tE, vP = 2 * c.tP;   // t²→2t: valor de la derivada en el ejemplo y en la práctica
   const dir = [
@@ -1294,9 +1335,28 @@ export function derivadaAplicadaLSG(opts = {}) {
     { tipo: "pizarra", accion: "escribir", contenido: `derivada: ${c.sym}'(${c.varSym}) = 2${c.varSym}  (${c.uRate})` },
     { tipo: "hablar", texto: `Por ejemplo, ${c.punto(c.tE)} vale 2 × ${c.tE} = ${vE} ${c.uRate}. La derivada da el valor EXACTO en ese punto, no un promedio.` },
     { tipo: "hablar", texto: "Como ves, la derivada mide a qué ritmo cambian las cosas del día a día. Ahora te toca a ti." },
-    { tipo: "pizarra", accion: "escribir", contenido: `derivada = 2${c.varSym}.   Halla su valor ${c.punto(c.tP)}.` },
-    { tipo: "preguntar", texto: `Si la derivada es 2${c.varSym}, ¿cuánto vale ${c.punto(c.tP)}? Escribe solo el número.`, respuesta: String(vP), esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
+    // El enunciado dice EXPLÍCITAMENTE que la derivada YA está calculada y que solo hay que sustituir.
+    // Antes se leía "derivada = 2q. Halla su valor al producir el artículo número 5", y el alumno lo
+    // entendía como que le pedían DERIVAR y a la vez le daban un número suelto (queja del cliente:
+    // "pide derivar, y a la vez brinda un número 5"). Ahora se nombra la sustitución y se escribe
+    // "${c.varSym} = ${c.tP}" en la pizarra, que es exactamente lo que hay que hacer.
+    { tipo: "hablar", texto: `Ojo: la derivada ya está calculada, es 2${c.varSym}. Aquí NO hay que volver a derivar: solo hay que sustituir ${c.varSym} por ${c.tP} y hacer la multiplicación.` },
+    // El dato a sustituir se escribe "${c.varSym} por ${c.tP}", NO "${c.varSym} = ${c.tP}": con el signo
+    // igual, la pizarra se lee como una igualdad ya resuelta y el alumno puede tomar ${c.tP} por la
+    // respuesta, cuando la respuesta es 2 × ${c.tP}. Es la misma clase de incoherencia (la pizarra
+    // dice una cosa y la calificación otra) que el cliente reportó, y la detecta el propio QA.
+    // Esta línea lleva las UNIDADES del escenario ("soles por artículo adicional" / "euros por unidad"),
+    // y NO un signo igual. Las unidades hacen falta porque dos escenarios pueden compartir variable y
+    // punto —la tienda y la fábrica usan los dos q y 5— y sin ellas la pizarra escribía exactamente la
+    // misma línea en ambos: al pedir otro ejemplo se veía repetido (lo detectó el barrido).
+    // Y se evita el "=" porque una línea como "s'(t) = 2t" se puede leer como la ecuación t = 2t, cuya
+    // solución sería 0: al pedir "explícame los pasos" sobre ella se narraba un despeje que no tiene
+    // nada que ver con el ejercicio. Sin "=" no hay ecuación que malinterpretar.
+    { tipo: "pizarra", accion: "escribir", contenido: `derivada 2${c.varSym}  en ${c.uRate}   ·   sustituye ${c.varSym} por ${c.tP}` },
+    { tipo: "preguntar", texto: `Ya tenemos la derivada: 2${c.varSym}. Sustituye ${c.varSym} por ${c.tP} (${c.punto(c.tP)}) y calcula: ¿cuánto vale? Escribe solo el número.`, respuesta: String(vP), esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
   ];
+  if (opts.mantener) aperturaReexplicacion(dir,
+    `Míralo de otra forma: ${c.sym}(${c.varSym}) = ${c.varSym}² dice el TOTAL acumulado, y la derivada 2${c.varSym} dice lo que se añade JUSTO en ese punto. Son dos cosas distintas: una es el montón entero y la otra, lo que crece el montón en ese instante. Por eso ${c.punto(c.tE)} el valor es 2 × ${c.tE} = ${vE}, y más adelante es mayor.`);
   return { escena: "derivada_resuelta", intencion: "aprender", duracion_estimada: 80, _mock: true, directivas: dir };
 }
 
@@ -1339,7 +1399,8 @@ export function factorizacionResueltaLSG(opts = {}) {
   const facP = computeFactorization(practica);
   if (opts.practica) return practicaLSG("factorizacion_resuelta", {
     recordatorio: "Recuerda la diferencia de cuadrados: a² - b² = (a - b)(a + b). Identifica a y b (las raíces de cada cuadrado) y aplica la regla.",
-    reto1: ejemplo, preg: `¿Cómo se factoriza ${ejemplo}? Escríbelo como producto de dos paréntesis.`, resp: facE, reto2: practica,
+    reto1: ejemplo, preg: `¿Cómo se factoriza ${ejemplo}? Escríbelo como producto de dos paréntesis.`, resp: facE,
+    reto2: practica, preg2: `¿Cómo se factoriza ${practica}? Escríbelo como producto de dos paréntesis.`, resp2: computeFactorization(practica) || "",
   });
   const dir = [{ tipo: "avatar", accion: "sonreir" }];
   // ENSEÑAR el tema ("enséñame factorización"): primero el CONCEPTO (qué es factorizar) y la REGLA, y
@@ -1383,7 +1444,7 @@ const LINEAL_VIDA = [
     eqP: "3x + 4 = 19", histP: "Otro taxi cobra 4 de base y 3 por kilómetro; pagaste 19. Los kilómetros recorridos cumplen esta ecuación." },
 ];
 export function linealAplicadaLSG(opts = {}) {
-  const c = LINEAL_VIDA[idxEscenario(LINEAL_VIDA, opts.evitar, (s) => s.key, { cursores: opts.cursores, clave: "lineal_vida:normal" })];
+  const c = LINEAL_VIDA[idxEscenario(LINEAL_VIDA, opts.evitar, (s) => s.key, { cursores: opts.cursores, clave: "lineal_vida:normal", mantener: opts.mantener })];
   const sol = solveLinearSteps(c.eqE), solP = solveLinearSteps(c.eqP);
   const dir = [
     { tipo: "avatar", accion: "sonreir" },
@@ -1400,6 +1461,8 @@ export function linealAplicadaLSG(opts = {}) {
   dir.push({ tipo: "hablar", texto: `${c.histP} Resuélvela.` });
   dir.push({ tipo: "pizarra", accion: "escribir", contenido: solP.original });
   dir.push({ tipo: "preguntar", texto: `¿Cuánto vale x en ${solP.original}? Escribe solo el número.`, respuesta: solP.answer, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" });
+  if (opts.mantener) aperturaReexplicacion(dir,
+    `Dicho de otra manera: la x es el dato que NO conoces, y la ecuación ${sol.original} es la frase del problema escrita con números. Resolverla es ir quitando de alrededor de la x todo lo que la acompaña, haciendo lo contrario de lo que hay (si suma, se resta; si multiplica, se divide), hasta dejarla sola.`);
   return { escena: "lineal_resuelta", intencion: "aprender", duracion_estimada: 80, _mock: true, directivas: dir };
 }
 
@@ -1417,7 +1480,7 @@ const FRACC_VIDA = [
     pHist: "De otra hora, dedicas 4/9 a un tema y 3/9 a otro.", pd: 9, pa: 4, pb: 3 },
 ];
 export function fraccionAplicadaLSG(opts = {}) {
-  const c = FRACC_VIDA[idxEscenario(FRACC_VIDA, opts.evitar, (s) => s.key, { cursores: opts.cursores, clave: "fraccion_vida:normal" })];
+  const c = FRACC_VIDA[idxEscenario(FRACC_VIDA, opts.evitar, (s) => s.key, { cursores: opts.cursores, clave: "fraccion_vida:normal", mantener: opts.mantener })];
   const sum = c.a + c.b, psum = c.pa + c.pb;
   const dir = [
     { tipo: "avatar", accion: "sonreir" },
@@ -1429,6 +1492,8 @@ export function fraccionAplicadaLSG(opts = {}) {
     { tipo: "pizarra", accion: "escribir", contenido: `${c.pa}/${c.pd} + ${c.pb}/${c.pd} = ?` },
     { tipo: "preguntar", texto: `¿Cuánto es ${c.pa}/${c.pd} + ${c.pb}/${c.pd}? Escribe la fracción.`, respuesta: `${psum}/${c.pd}`, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
   ];
+  if (opts.mantener) aperturaReexplicacion(dir,
+    `Otra forma de verlo: el número de ABAJO (${c.d}) dice en cuántos trozos iguales está partido el todo, y ese número no cambia al juntar. El de ARRIBA dice cuántos trozos tienes. Por eso ${c.a} trozos y ${c.b} trozos son ${c.a} + ${c.b} trozos de los mismos ${c.d}.`);
   return { escena: "fraccion_resuelta", intencion: "aprender", duracion_estimada: 70, _mock: true, directivas: dir };
 }
 
@@ -1440,7 +1505,7 @@ const FACTOR_VIDA = [
   { key: "multiplicar numeros calculo mental rapido truco aritmetica", tipo: "numero", A: 10, bb: 3, pN: 25 },
 ];
 export function factorizacionAplicadaLSG(opts = {}) {
-  const c = FACTOR_VIDA[idxEscenario(FACTOR_VIDA, opts.evitar, (s) => s.key, { cursores: opts.cursores, clave: "factorizacion_vida:normal" })];
+  const c = FACTOR_VIDA[idxEscenario(FACTOR_VIDA, opts.evitar, (s) => s.key, { cursores: opts.cursores, clave: "factorizacion_vida:normal", mantener: opts.mantener })];
   const exprP = `x² - ${c.pN}`, facP = computeFactorization(exprP);
   // El ejercicio de práctica de la lección aplicada ("x² - 16", "x² - 25") también está en la lista
   // numérica. Se marca como visto para que la siguiente lección numérica no lo presente como su
@@ -1472,6 +1537,8 @@ export function factorizacionAplicadaLSG(opts = {}) {
     { tipo: "pizarra", accion: "escribir", contenido: exprP },
     { tipo: "preguntar", texto: `¿Cómo se factoriza ${exprP}? Escríbelo como producto de dos paréntesis.`, respuesta: facP, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
   );
+  if (opts.mantener) aperturaReexplicacion(dir,
+    "Puesto de otra manera: factorizar es lo CONTRARIO de multiplicar. Si al multiplicar dos paréntesis te queda una resta de dos cuadrados, entonces desde esa resta puedes volver atrás y recuperar los dos paréntesis. Por eso siempre puedes comprobar tu respuesta multiplicándola: si vuelves a la expresión del principio, está bien.");
   return { escena: "factorizacion_resuelta", intencion: "aprender", duracion_estimada: 75, _mock: true, directivas: dir };
 }
 
@@ -1770,6 +1837,13 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
     // `evitar` combina el resumen previo (lo ya mostrado) + lo que el alumno pide EXCLUIR, para que la
     // rotación de escenario salte tanto lo anterior como lo excluido.
     const evitarAp = `${previo} ${excluir}`.trim();
+    // ¿RE-EXPLICAR lo de la pizarra o MOSTRAR OTRO caso? Si el alumno dice "no entendí" / "explícalo
+    // mejor" / "¿por qué?" quiere el MISMO escenario contado de otra forma; si pide "otro" / "diferente"
+    // / excluye algo, quiere uno distinto. Antes ambos rotaban, así que pedir ayuda con el ejercicio de
+    // la pizarra le cambiaba el ejercicio (queja del cliente, con captura: iba de una fábrica y le
+    // respondió con un coche).
+    const mantenerEscenario = !pideOtroDiferente
+      && (seguimiento === "reexplicar" || /no (lo )?entend|no comprend|no me qued|explica\w*\s*(me|lo)?\s*mejor|otra vez|de nuevo|nuevamente|por qu[eé]/.test(nQ));
     // Se despacha al MISMO tema, pero a su lección APLICADA determinista (no a la numérica). El tema se
     // toma de la consulta O del CONTEXTO activo. OJO: en un seguimiento ("explícalo con ejemplos de la
     // vida real"), el frontend manda como contexto/currentTopic la CONSULTA que abrió el tema (p.ej.
@@ -1782,10 +1856,11 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
     const hayLineal = solveLinearSteps(query) !== null || solveLinearSteps(contexto) !== null || solveLinearSteps(currentTopic) !== null;
     const hayDifCuad = /[a-z]\s*(?:\^\s*2|[²])\s*-\s*\d/i.test(enCtx);
     const hayFrac = /\d\s*\/\s*\d/.test(enCtx);
-    if (/deriv/.test(nQ) || /velocidad|aceleraci|variaci[oó]n/.test(nQ) || /deriv/.test(ctxTema)) return commonRet("derivada", derivadaAplicadaLSG({ evitar: evitarAp, excluir, cursores }));
-    if (/fracc/.test(tt) || (hayFrac && !hayLineal)) return commonRet("fraccion", fraccionAplicadaLSG({ evitar: evitarAp, cursores }));
-    if (/factoriz|diferencia de cuadrados/.test(tt) || hayDifCuad) return commonRet("factorizacion", factorizacionAplicadaLSG({ evitar: evitarAp, cursores }));
-    if (/ecuaci|lineal|primer grado|despej/.test(tt) || hayLineal) return commonRet("lineal", linealAplicadaLSG({ evitar: evitarAp, cursores }));
+    const apOpts = { evitar: evitarAp, cursores, mantener: mantenerEscenario };
+    if (/deriv/.test(nQ) || /velocidad|aceleraci|variaci[oó]n/.test(nQ) || /deriv/.test(ctxTema)) return commonRet("derivada", derivadaAplicadaLSG({ ...apOpts, excluir }));
+    if (/fracc/.test(tt) || (hayFrac && !hayLineal)) return commonRet("fraccion", fraccionAplicadaLSG(apOpts));
+    if (/factoriz|diferencia de cuadrados/.test(tt) || hayDifCuad) return commonRet("factorizacion", factorizacionAplicadaLSG(apOpts));
+    if (/ecuaci|lineal|primer grado|despej/.test(tt) || hayLineal) return commonRet("lineal", linealAplicadaLSG(apOpts));
     // ARITMÉTICA: no tiene versión "de la vida real" propia, pero es un tema GARANTIZADO y no debe
     // salir del motor determinista. Se re-enseña con su lección de concepto, que ya explica el
     // significado cotidiano ("sumar es juntar cantidades", "restar es quitar"). Sin esto, pedir
@@ -1896,7 +1971,12 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
     // `seguimiento: true` es imprescindible: sin él, elegirBoton devuelve SIEMPRE el primer ejemplo
     // de la lista en vez de rotar con `evitar`, así que un "y otro más" que llega por esta red de
     // seguridad (porque la frase no se reconoció como seguimiento) repetía la misma lección.
-    return commonRet(temaActivo, genReteach({ evitar: previo, seguimiento: true, concepto: true, cursores }));
+    // `mantener` distingue las dos peticiones que llegan por aquí: "no entendí" quiere el MISMO caso
+    // explicado de otra forma; "otro ejemplo" quiere uno distinto. Sin esta distinción, pedir ayuda
+    // con el ejercicio de la pizarra lo CAMBIABA por otro (queja del cliente, con captura).
+    const mantenerRe = !pideOtroDiferente
+      && (seguimiento === "reexplicar" || /no (lo )?entend|no comprend|no me qued|explica\w*\s*(me|lo)?\s*mejor|otra vez|de nuevo|nuevamente|por qu[eé]/.test(nQ));
+    return commonRet(temaActivo, genReteach({ evitar: previo, seguimiento: true, concepto: true, cursores, mantener: mantenerRe }));
   }
 
   return null; // no es ninguno de los 4 botones → flujo normal (Gemini)

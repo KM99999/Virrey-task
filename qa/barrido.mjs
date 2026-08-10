@@ -204,6 +204,15 @@ async function conversar(tema, apertura, semilla, fraseFija = "") {
     // I8. Pedir PRÁCTICA no debe resolvérsela.
     if (k > 0 && /quiero practicar|dame un ejercicio/i.test(texto) && !/¡A practicar!/.test(todo) && preg && !String(preg.respuesta || "").trim())
       anota(conv, "pidió practicar y no recibió un ejercicio calificable");
+    // I10. TODO ejercicio que se deja en la pizarra se califica. Si se escriben dos y solo se pregunta
+    //      uno, el alumno resuelve el segundo y nadie le dice si está bien (queja del cliente:
+    //      "me deja dos ejercicios, pero sólo me valida uno").
+    const retos = pizarras.filter((c) => /^\s*Ejercicio \d/.test(String(c))).length;
+    const preguntas = pasos.filter((p) => p.tipo === "preguntar");
+    if (retos && preguntas.length !== retos)
+      anota(conv, `deja ${retos} ejercicios y solo califica ${preguntas.length}`);
+    if (retos && preguntas.some((p) => !String(p.respuesta || "").trim()))
+      anota(conv, "un ejercicio de práctica quedó SIN respuesta con la que calificarlo");
     // I9. Al pedir OTRO, la lección no puede reutilizar el EJEMPLO trabajado ni el EJERCICIO de
     //     práctica de la anterior. Más estricta que I5 (que solo ve la lección ENTERA repetida):
     //     detecta "otro ejemplo pero la misma práctica" y el ejercicio practicado que reaparece como
