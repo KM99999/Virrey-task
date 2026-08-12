@@ -3,8 +3,8 @@
 **Proyecto:** Math IA — prototipo web de tutor de matemáticas (avatar + pizarra + voz).
 **En vivo:** https://math-ia.onrender.com · versión desplegada verificable en `/api/health`.
 **Repositorio:** https://github.com/KM99999/Virrey-task (rama `main`).
-**Periodo:** 9 de julio – 10 de agosto de 2026 · **201 commits**.
-**Estado a 10 de agosto de 2026:** commit `b0aa6ef` desplegado; Etapas 1 y 2 completas y verificadas.
+**Periodo:** 9 de julio – 11 de agosto de 2026 · **204 commits**.
+**Estado a 11 de agosto de 2026:** commit `6c4802b` desplegado; Etapas 1 y 2 completas y verificadas.
 
 ---
 
@@ -279,13 +279,41 @@ función: 2x³", "Veámoslo con una fábrica").
 Mi comprobación decía "8 de 8 distintas" y era cierta: comparaba la lección ENTERA. El alumno ve el
 arranque. Hay ahora una comprobación que mide el ARRANQUE en 8 combinaciones de tema y petición.
 
+### Etapa O — Cómo suena en español (11 de agosto)
+
+Dos quejas del cliente, con captura, y la voz masculina ya funcionando en su equipo (Microsoft Raul).
+
+- **"A todos los ejercicios pronuncia el mismo encabezado"**: la tanda de práctica abría con dos
+  párrafos —presentación y recordatorio del método— y el ejercicio venía después. Aunque esos párrafos
+  rotaban, lo primero que se oía seguía siendo un preámbulo. Ahora **abre con su ejercicio**, y el
+  recordatorio del método aparece **una vez por tema**, no en cada tanda.
+- **"En lugar de decir 'ene', dice 'yeni'"**: el diccionario del motor de voz no se puede corregir
+  desde la aplicación, pero sí lo que se le da a leer. La letra suelta venía de explicar la regla como
+  "la derivada de x elevado a n es n por x elevado a n menos 1"; ahora se explica con un exponente
+  **concreto** ("la derivada de x³ es 3x²"), que además se entiende mejor. La notación general se
+  mantiene en la pizarra, que no se lee en voz alta.
+
+Revisando **todas** las frases habladas aparecieron cuatro defectos más de pronunciación, ninguno
+reportado, y dos de ellos son de MATEMÁTICAS, no de estilo:
+
+| Escrito | Se oía | Ahora |
+|---|---|---|
+| `(x - 3)(x + 3)` | "equis menos 3 equis más 3" — **sin el "por"** | "equis menos 3 **por** equis más 3" |
+| `2(x + 3)` | "2 equis más 3" — se escribiría 2x + 3 | "2 **por,** equis más 3," |
+| `C'(q)` | "ce**'** cu" (la comilla, cruda) | "ce **prima de** cu" |
+| `s(t)` | "ese te" | "ese **de** te" |
+
+Comprobación permanente nueva: se recogen **todas** las frases habladas de muchas lecciones y se exige
+que no quede ningún símbolo, superíndice, comilla angular ni letra suelta sin nombre, más nueve
+expresiones concretas verificadas una a una.
+
 ---
 
-## 4. Estado verificado a 10 de agosto de 2026
+## 4. Estado verificado a 11 de agosto de 2026
 
 | Prueba | Resultado |
 |---|---|
-| Lógica (`npm run qa`) | **1 146 aprobadas · 0 fallidas** |
+| Lógica (`npm run qa`) | **1 162 aprobadas · 0 fallidas** |
 | Carga del frontend (`node qa/frontend.mjs`) | **10 escenarios · 0 fallidos** |
 | Auditoría independiente | **247 turnos · 307 preguntas · 292 verificadas aparte · 0 fallos** |
 | Barrido por propiedades (`qa/barrido.mjs`) | **200 conversaciones · 1 800 turnos · 0 violaciones** |
