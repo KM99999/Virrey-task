@@ -533,6 +533,10 @@ async function unitTests() {
       ["C'(q) = 2q", /ce prima de cu/, "la derivada con prima"],
       ["s(t) = t²", /ese de te/, "la notación de función"],
       ["A(L) = L²", /a de ele/, "la notación de función con mayúsculas"],
+      // Un coeficiente delante de un paréntesis es una MULTIPLICACIÓN: sin decirla, "2(x + 3)" se oye
+      // igual que 2x + 3, que es otra expresión. Misma clase que el producto de binomios.
+      ["2(x + 3) = 16", /2 por, equis más 3, igual a 16/, "el coeficiente que multiplica al paréntesis"],
+      ["3(x - 2) + 4 = 19", /^(?!.*[+\-−]).*$/s, "sin signos crudos al agrupar"],
       ["2/6 + 3/6", /2 entre 6 más 3 entre 6/, "la suma de fracciones"],
       ["12 × 4", /12 por 4/, "la multiplicación"],
       ["84 ÷ 4", /84 entre 4/, "la división"],

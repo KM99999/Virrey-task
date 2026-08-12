@@ -99,6 +99,13 @@ export function normalizeForSpeech(text) {
   s = s.replace(/(^|[^a-zñáéíóúü])([b-df-hj-np-tvwxz])(?=$|[^a-zñáéíóúü])/gi,
         (_, pre, l) => pre + (NOMBRE_LETRA[l.toLowerCase()] || l));
 
+  // 6b) COEFICIENTE por PARÉNTESIS: "2(x + 3)" se leía "2 equis más 3", que el alumno escribiría como
+  //     2x + 3 — otra expresión distinta. Se dice el "por" y se marcan los extremos del grupo con una
+  //     coma, para que la pausa haga audible qué va dentro: "2 por, equis más 3,".
+  //     Va DESPUÉS de convertir los operadores: al hacerlo antes, la coma quedaba justo delante del
+  //     "+" exterior ("…, + 4") y ese signo dejaba de casar con su regla, llegando crudo a la voz.
+  s = s.replace(/(\d)\s*\(([^()]*)\)/g, "$1 por, $2,");
+
   // 7) Paréntesis y comillas angulares → pausa (el motor los lee raro o los deletrea); limpiar espacios.
   //    Las « » venían de las propias frases del tutor («resuélvelo») y llegaban crudas a la voz.
   s = s.replace(/[()«»"“”]/g, " ").replace(/\s{2,}/g, " ").trim();
