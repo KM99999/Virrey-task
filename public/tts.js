@@ -51,6 +51,19 @@ export function normalizeForSpeech(text) {
   s = s.replace(/∫/g, " integral de ")
        .replace(/\bd\s*([xyzt])\b/gi, (_, l) => `de ${NOMBRE_LETRA[l.toLowerCase()]}`);
 
+  // 1d) NOTACIÓN DE FUNCIONES Y DERIVADAS, antes de tocar los paréntesis (abajo se convierten en
+  //     pausas y se perdería la información).
+  //       · "f(x)"    se leía "efe equis" → ahora "efe DE equis", que es como se dice en clase;
+  //       · "C'(q)"   dejaba la comilla suelta ("ce' cu"), que el motor lee como ruido → "ce prima de cu";
+  //       · ")(" es un PRODUCTO: "(x - 3)(x + 3)" se leía "equis menos 3 equis más 3", sin el "por",
+  //         y así el alumno oye una expresión que NO es la factorización. Es un error de matemáticas
+  //         hablado, no solo de estilo.
+  const letraNombre = (l) => NOMBRE_LETRA[l.toLowerCase()] || l;
+  s = s.replace(/\)\s*\(/g, ") por (");                                  // producto de binomios
+  s = s.replace(/([a-zñ])\s*'\s*\(\s*([a-zñ])\s*\)/gi, (_, f, v) => `${letraNombre(f)} prima de ${letraNombre(v)}`);
+  s = s.replace(/([a-zñ])\s*\(\s*([a-zñ])\s*\)/gi, (_, f, v) => `${letraNombre(f)} de ${letraNombre(v)}`);
+  s = s.replace(/([a-zñ])\s*'/gi, (_, f) => `${letraNombre(f)} prima`);  // prima suelta
+
   // 2) Símbolos matemáticos → palabras.
   s = s.replace(/\s*=\s*/g, " igual a ")
        .replace(/\s*[×·]\s*/g, " por ")
@@ -86,8 +99,9 @@ export function normalizeForSpeech(text) {
   s = s.replace(/(^|[^a-zñáéíóúü])([b-df-hj-np-tvwxz])(?=$|[^a-zñáéíóúü])/gi,
         (_, pre, l) => pre + (NOMBRE_LETRA[l.toLowerCase()] || l));
 
-  // 7) Paréntesis → pausa (el motor los lee raro); limpiar espacios.
-  s = s.replace(/[()]/g, " ").replace(/\s{2,}/g, " ").trim();
+  // 7) Paréntesis y comillas angulares → pausa (el motor los lee raro o los deletrea); limpiar espacios.
+  //    Las « » venían de las propias frases del tutor («resuélvelo») y llegaban crudas a la voz.
+  s = s.replace(/[()«»"“”]/g, " ").replace(/\s{2,}/g, " ").trim();
   return s;
 }
 

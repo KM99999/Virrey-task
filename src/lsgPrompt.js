@@ -641,7 +641,7 @@ const CONCEPTO_DERIVADA = [
   { marca: "Derivada: razón de cambio", bloques: [
     ["Una derivada mide la RAPIDEZ con la que cambia una función: en cada punto indica cuánto crece o decrece, es decir, la pendiente de su gráfica. Por eso sirve, por ejemplo, para obtener la velocidad a partir de la posición.",
      "Derivada: razón de cambio (la pendiente) de una función"],
-    ["Para derivar una potencia usamos la REGLA DE LA POTENCIA: se baja el exponente multiplicando delante y se le resta 1. Es decir, la derivada de x elevado a n es n por x elevado a n menos 1. Veámoslo con un ejemplo.",
+    ["Para derivar una potencia usamos la REGLA DE LA POTENCIA: se baja el exponente multiplicando delante y se le resta 1. Por ejemplo, la derivada de x³ es 3x², y la de x⁵ es 5x⁴. Veámoslo con calma.",
      "Regla de la potencia:  la derivada de xⁿ es n·xⁿ⁻¹"],
   ] },
   { marca: "Derivada: cuánto sube o baja", bloques: [
@@ -811,11 +811,12 @@ const INTRO_PRACTICA_1 = [
   "Turno tuyo: resuelve este ejercicio y escribe abajo tu respuesta. Si se te resiste, escribe «resuélvelo» y lo vemos paso a paso.",
   "Ahora practicas tú. Escribe tu respuesta cuando lo tengas; si te atascas, pide «resuélvelo» y lo hacemos juntos.",
 ];
+// Enlace al SEGUNDO ejercicio (el primero se anuncia solo, al abrir la tanda).
 const ARRANQUE_PRACTICA = [
-  "Empieza por el Ejercicio 1 y escribe tu respuesta.",
-  "Vamos con el Ejercicio 1: escribe abajo lo que te dé.",
-  "Comienza con el primero y anota tu resultado.",
-  "Adelante con el Ejercicio 1; escribe tu respuesta cuando lo tengas.",
+  "Vamos con el último.",
+  "Y ahora el segundo.",
+  "Queda uno.",
+  "Seguimos con el que falta.",
 ];
 // Elige un elemento AVANZANDO una posición por llamada, con la posición guardada en el cursor de la
 // conversación (`cursores`), que es el mismo mecanismo que ya evita repetir ejercicios.
@@ -829,17 +830,34 @@ function fraseRotada(lista, cursores, clave) {
 // `recordatorio` admite VARIAS redacciones del mismo método (array): se rota igual que la intro.
 function practicaLSG(escena, { recordatorio, reto1, preg: pregTxt, resp, reto2, preg2, resp2, cursores }) {
   const dobles = !!(reto2 && preg2 && String(resp2 ?? "").trim());
+  // EL EJERCICIO VA PRIMERO. Antes la tanda abría con dos párrafos largos —la presentación y el
+  // recordatorio del método— y el ejercicio no aparecía hasta después. Aunque esos párrafos rotaban
+  // entre varias redacciones, lo que el alumno oía al empezar era siempre un preámbulo, y por eso
+  // seguía pareciendo lo mismo cada vez (queja del cliente: "a todos los ejercicios pronuncia el
+  // mismo encabezado, dando la apariencia de un robot"). Ahora lo primero que se ve y se oye es SU
+  // ejercicio, que es distinto en cada tanda; la instrucción va detrás y es corta.
   const dir = [
     { tipo: "avatar", accion: "sonreir" },
+    { tipo: "hablar", texto: `Ejercicio 1: ${reto1}.` },
+    { tipo: "pizarra", accion: "escribir", contenido: `Ejercicio 1:  ${reto1}` },
     { tipo: "hablar", texto: fraseRotada(dobles ? INTRO_PRACTICA_2 : INTRO_PRACTICA_1, cursores, "frase_practica:intro") },
   ];
+  // El RECORDATORIO del método solo la primera vez de cada tanda de práctica seguida: repetir el
+  // mismo método en cada ejercicio es justo lo que sonaba a máquina. Se conserva la rotación de
+  // redacciones para cuando sí aparece.
   const recs = Array.isArray(recordatorio) ? recordatorio.filter(Boolean) : (recordatorio ? [recordatorio] : []);
-  if (recs.length) dir.push({ tipo: "hablar", texto: fraseRotada(recs, cursores, "frase_practica:rec") });
-  dir.push({ tipo: "pizarra", accion: "escribir", contenido: `Ejercicio 1:  ${reto1}` });
-  dir.push({ tipo: "hablar", texto: fraseRotada(ARRANQUE_PRACTICA, cursores, "frase_practica:inicio") });
+  // La marca es POR TEMA: al cambiar de tema el método es otro y sí hay que recordarlo; dentro del
+  // mismo tema, repetirlo en cada tanda es lo que sonaba a máquina.
+  const claveRec = `rec_${String(escena).replace(/_resuelta$/, "")}:practica`;
+  const m = cursorMapa(cursores);
+  const yaRecordado = !!m && Number.isInteger(m[claveRec]);
+  if (recs.length && !yaRecordado) {
+    dir.push({ tipo: "hablar", texto: fraseRotada(recs, cursores, "frase_practica:rec") });
+    if (m) m[claveRec] = 1;
+  }
   dir.push({ tipo: "preguntar", texto: pregTxt, respuesta: String(resp), esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" });
   if (dobles) {
-    dir.push({ tipo: "hablar", texto: "Vamos con el Ejercicio 2, el último." });
+    dir.push({ tipo: "hablar", texto: `${fraseRotada(ARRANQUE_PRACTICA, cursores, "frase_practica:inicio")} Ejercicio 2: ${reto2}.` });
     dir.push({ tipo: "pizarra", accion: "escribir", contenido: `Ejercicio 2:  ${reto2}` });
     dir.push({ tipo: "preguntar", texto: preg2, respuesta: String(resp2), esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" });
   } else if (reto2) {
@@ -1187,9 +1205,9 @@ export function derivadaResueltaLSG(opts = {}) {
   if (opts.practica) return practicaLSG("derivada_resuelta", {
     cursores: opts.cursores,
     recordatorio: [
-      "Recuerda la regla de la potencia: baja el exponente multiplicando delante y réstale 1 (la derivada de xⁿ es n·xⁿ⁻¹). En un polinomio, deriva término a término.",
+      "Recuerda la regla de la potencia: el exponente baja a multiplicar delante y, en su sitio, queda una unidad menos. Por ejemplo, la derivada de x³ es 3x². En un polinomio se deriva término a término.",
       "Te dejo el método a mano: el exponente pasa a multiplicar delante y, en su sitio, queda uno menos. Si hay varios términos, se hace con cada uno por separado.",
-      "Para derivar xⁿ: multiplica por el exponente y baja ese exponente en una unidad. Los polinomios se derivan término a término, sin mezclarlos.",
+      "Para derivar una potencia: multiplica por el exponente y bájalo en una unidad. Así, la derivada de x⁴ es 4x³. Los polinomios se derivan término a término, sin mezclarlos.",
     ],
     reto1: ejemplo, preg: `¿Cuál es la derivada de ${ejemplo}?`, resp: derE,
     reto2: practica, preg2: `¿Cuál es la derivada de ${practica}?`, resp2: computeDerivative("derivada de " + practica) || "",
@@ -1212,7 +1230,7 @@ export function derivadaResueltaLSG(opts = {}) {
     for (const d of dirsConcepto(varianteConcepto(opts.evitar, CONCEPTO_DERIVADA))) dir.push(d);
     dir.push({ tipo: "hablar", texto: `Vamos a derivar ${ejemplo}.` });
   } else {
-    dir.push({ tipo: "hablar", texto: `Vamos a derivar ${ejemplo}. Derivar mide qué tan rápido cambia una función. Para una potencia usamos la regla de la potencia: la derivada de xⁿ es n·xⁿ⁻¹.` });
+    dir.push({ tipo: "hablar", texto: `Vamos a derivar ${ejemplo}. Derivar mide qué tan rápido cambia una función. Para una potencia usamos la regla de la potencia: el exponente baja a multiplicar delante y se le resta una unidad.` });
   }
   dir.push(
     { tipo: "pizarra", accion: "escribir", contenido: ejemplo },

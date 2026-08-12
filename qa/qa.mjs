@@ -471,13 +471,19 @@ async function unitTests() {
     ["suma · otro ejemplo",        "Enséñame a sumar",             "Por favor, muéstrame otro ejemplo.", 6],
     ["lineales · vida real",       "Enséñame ecuaciones lineales", "Dame un ejemplo de la vida real.",   3],
     ["fracciones · vida real",     "Enséñame fracciones",          "Dame un ejemplo de la vida real.",   3],
+    // La PRÁCTICA también: el cliente la señaló aparte ("a todos los ejercicios pronuncia el mismo
+    // encabezado"). Abría con dos párrafos de preámbulo y el ejercicio venía después.
+    ["derivadas · practicar",      "Enséñame derivadas",           "dame ejercicios más complejos",      6],
+    ["lineales · practicar",       "Enséñame ecuaciones lineales", "quiero practicar",                   6],
+    ["fracciones · practicar",     "Enséñame fracciones",          "quiero practicar",                   6],
   ]) {
+    const esPractica = /practic|ejercicio/i.test(pedir);
     const cursores = {}; let previo = "";
     const ini = correrBoton({ query: abrir, cursores });
     previo = ini.resumen;
     const arranques = [];
     for (let i = 0; i < 6; i++) {
-      const r = correrBoton({ query: pedir, seguimiento: "continuacion", contexto: abrir, currentTopic: abrir, previo, cursores });
+      const r = correrBoton({ query: pedir, seguimiento: esPractica ? "practicar" : "continuacion", contexto: abrir, currentTopic: abrir, previo, cursores });
       if (!r) break;
       const dicho1 = ((r.flat || []).find((d) => d.tipo === "hablar") || {}).texto || "";
       const visto1 = (r.pizarras || [])[0] || "";
@@ -489,6 +495,50 @@ async function unitTests() {
       `${seguidas} arranques idénticos al anterior — p.ej. "${(arranques[0] || "").slice(0, 70)}"`);
     check(`arranque [${label}]: al menos ${minDistintas} arranques distintos de 6`, new Set(arranques).size >= minDistintas,
       `distintos=${new Set(arranques).size}`);
+  }
+
+  // ── PRONUNCIACIÓN EN ESPAÑOL de TODO lo que el tutor dice en voz alta.
+  //    Queja del cliente: "en lugar de decir 'ene', dice 'yeni'". El motor de voz del navegador no se
+  //    puede corregir desde aquí; lo que sí se controla es QUÉ se le da a leer. Se recoge todo lo
+  //    hablado en muchas lecciones y se comprueba que, tras la normalización, no quede nada que un
+  //    motor en español lea como ruido: símbolos matemáticos, superíndices, comillas angulares ni
+  //    letras sueltas sin su nombre (una "n" suelta se lee mal; "ene" dentro de una frase, no).
+  {
+    const CRUDOS = /[⁰¹²³⁴⁵⁶⁷⁸⁹ⁿ⁻×÷·√≈≠≤≥±∫π^]|«|»/;
+    const LETRA_SUELTA = /(^|[^a-zñáéíóúü])([b-df-hj-np-tvwxz])($|[^a-zñáéíóúü])/i;
+    const dichos = new Set();
+    for (const abrir of ["Enséñame derivadas", "Enséñame ecuaciones lineales", "Explícame la factorización",
+      "Enséñame fracciones", "Enséñame a sumar", "Enséñame a restar", "Enséñame a multiplicar", "Enséñame a dividir"]) {
+      const cursores = {};
+      const meter = (r) => { if (!r) return; for (const d of r.flat || []) if ((d.tipo === "hablar" || d.tipo === "preguntar") && d.texto) dichos.add(d.texto); };
+      meter(correrBoton({ query: abrir, cursores }));
+      for (const [q, seg] of [["otro ejemplo", "continuacion"], ["quiero practicar", "practicar"],
+        ["dame un problema más difícil", "mas_dificil"], ["ahora uno más fácil", "mas_facil"],
+        ["dame un ejemplo de la vida real", "continuacion"], ["no entendí", "reexplicar"]]) {
+        for (let i = 0; i < 3; i++) meter(correrBoton({ query: q, seguimiento: seg, contexto: abrir, currentTopic: abrir, cursores }));
+      }
+    }
+    const malos = [];
+    for (const t of dichos) {
+      const s = normalizeForSpeech(t);
+      if (CRUDOS.test(s)) malos.push(`símbolo crudo: "${s.slice(0, 80)}"`);
+      else if (LETRA_SUELTA.test(s)) malos.push(`letra suelta: "${s.slice(0, 80)}"`);
+    }
+    check(`pronunciación: ninguna de las ${dichos.size} frases habladas deja símbolos ni letras sueltas`,
+      malos.length === 0, malos.slice(0, 2).join(" · "));
+    // Expresiones concretas que se leían MAL. La primera no es cuestión de estilo: sin el "por", la
+    // factorización que se oye NO es la factorización que está escrita.
+    for (const [expr, debe, porque] of [
+      ["x² - 9 = (x - 3)(x + 3)", /menos 3 por equis más 3/, "el producto de los dos paréntesis"],
+      ["C'(q) = 2q", /ce prima de cu/, "la derivada con prima"],
+      ["s(t) = t²", /ese de te/, "la notación de función"],
+      ["A(L) = L²", /a de ele/, "la notación de función con mayúsculas"],
+      ["2/6 + 3/6", /2 entre 6 más 3 entre 6/, "la suma de fracciones"],
+      ["12 × 4", /12 por 4/, "la multiplicación"],
+      ["84 ÷ 4", /84 entre 4/, "la división"],
+    ]) {
+      check(`pronunciación: "${expr}" se lee bien (${porque})`, debe.test(normalizeForSpeech(expr)), normalizeForSpeech(expr));
+    }
   }
 
   // ── RECARGAR LA PÁGINA (F5) no puede reiniciar la rotación. El cursor vive en el navegador; si no

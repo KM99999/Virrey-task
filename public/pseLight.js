@@ -579,8 +579,8 @@ export function buildHint(question, board, nivel) {
   // Derivadas (regla de la potencia): guiar con el MÉTODO, sin dar el resultado.
   if (/derivad|deriva|d\/dx/.test(t)) {
     return nivel >= 2
-      ? "Regla de la potencia: baja el exponente multiplicando delante y réstale uno al exponente."
-      : "Pista: para derivar una potencia, usa la regla de la potencia (baja el exponente y réstale una unidad).";
+      ? "Regla de la potencia: el exponente baja a multiplicar delante y, en su sitio, queda una unidad menos."
+      : "Pista: para derivar una potencia, baja el exponente a multiplicar delante y réstale una unidad.";
   }
   // Factorización / diferencia de cuadrados: guiar con el método correcto (NO con "despejar la letra",
   // que es de ecuaciones lineales). Se detecta por la palabra o por el producto de binomios "(…)(…)".
