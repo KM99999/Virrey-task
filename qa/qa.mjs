@@ -497,6 +497,43 @@ async function unitTests() {
       `distintos=${new Set(arranques).size}`);
   }
 
+  // ── EL NIVEL SE RECUERDA: la clase no puede BAJAR de dificultad sola.
+  //    Queja del cliente: "me enseñaba derivar, primero monomios y luego polinomios. Pero luego volvió
+  //    a enseñarme monomios, y luego polinomios". En derivadas los polinomios están en el nivel
+  //    difícil y los monomios en el normal, así que subir y volver a bajar se nota inmediatamente.
+  //    Causa: el nivel se deducía SOLO de la consulta actual, de modo que "dame ejercicios más
+  //    complejos" duraba UN turno. Además dejaba sin efecto la progresión de la clase encadenada.
+  for (const [label, abrir, esDuro] of [
+    ["derivadas", "Enséñame derivadas", (s) => /[+-].*x/.test(s)],                    // polinomio
+    ["lineales", "Enséñame ecuaciones lineales", (s) => /\(|\/|x[^=]*=[^=]*x/.test(s)], // paréntesis, fracción o x en los dos lados
+    ["suma", "Enséñame a sumar", (s) => /\d{3}/.test(s)],                              // números de 3 cifras
+  ]) {
+    const cursores = {};
+    const cuerpo = (r) => {
+      const pz = r.pizarras || [];
+      const e = pz.find((c) => /^Ejercicio 1/.test(String(c))) || pz.find((c) => !String(c).includes(":") && /\d|x/.test(String(c))) || pz[0] || "";
+      return String(e).replace(/^Ejercicio 1:\s*/, "");
+    };
+    correrBoton({ query: abrir, cursores });
+    const subido = correrBoton({ query: "dame un problema más difícil", seguimiento: "mas_dificil", contexto: abrir, currentTopic: abrir, cursores });
+    check(`nivel [${label}]: "más difícil" sube de verdad`, esDuro(cuerpo(subido)), cuerpo(subido));
+    // Y los siguientes turnos, que NO piden nivel, tienen que seguir ahí.
+    let sigueDuro = true, ejemplos = [];
+    for (const [q, seg] of [["otro ejemplo", "continuacion"], ["quiero practicar", "practicar"],
+      ["dame otro ejercicio", "practicar"], ["otro ejemplo", "continuacion"]]) {
+      const r = correrBoton({ query: q, seguimiento: seg, contexto: abrir, currentTopic: abrir, cursores });
+      const c = cuerpo(r); ejemplos.push(c);
+      if (!esDuro(c)) sigueDuro = false;
+    }
+    check(`nivel [${label}]: NO baja solo en los turnos siguientes`, sigueDuro, ejemplos.join(" · "));
+    // Bajar solo cuando el alumno lo pide…
+    const bajado = correrBoton({ query: "ahora uno más fácil", seguimiento: "mas_facil", contexto: abrir, currentTopic: abrir, cursores });
+    check(`nivel [${label}]: "más fácil" sí baja`, !esDuro(cuerpo(bajado)), cuerpo(bajado));
+    // …y abrir el tema de nuevo vuelve a empezar en normal.
+    const reabierto = correrBoton({ query: abrir, cursores });
+    check(`nivel [${label}]: reabrir el tema vuelve a nivel normal`, cursores["nivel:actual"] === 1, String(cursores["nivel:actual"]));
+  }
+
   // ── PRONUNCIACIÓN EN ESPAÑOL de TODO lo que el tutor dice en voz alta.
   //    Queja del cliente: "en lugar de decir 'ene', dice 'yeni'". El motor de voz del navegador no se
   //    puede corregir desde aquí; lo que sí se controla es QUÉ se le da a leer. Se recoge todo lo

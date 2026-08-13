@@ -1959,11 +1959,31 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   // dígitos", "más avanzados" → nivel difícil; "más fácil/sencillo/básico" → fácil. (Queja del cliente:
   // pedía ejercicios "más complejos, como dividir números de 8 dígitos" y recibía uno trivial.)
   const nqNivel = normBoton(query);
-  const nivel = SEG_NIVEL[seguimiento]
+  const nivelPedido = SEG_NIVEL[seguimiento]
     || (/\bmas\s+f[aá]cil|sencill|b[aá]sic|\bsimple/.test(nqNivel) ? "facil"
       : /\bmas\s+(dif[ií]cil|complej|complicad|avanzad|dur)|\bcomplej|\bavanzad|\bdif[ií]cil|\d+\s*d[ií]gitos|numeros?\s+grandes|\bmas\s+grandes/.test(nqNivel) ? "dificil"
-      : "normal");
+      : null);
   const esSeg = SEG_OTRO.has(seguimiento) || !!SEG_NIVEL[seguimiento];
+  // EL NIVEL SE RECUERDA. Antes se deducía SOLO de la consulta actual, así que "dame ejercicios más
+  // complejos" duraba UN turno: el siguiente "otro ejemplo" volvía a nivel normal sin avisar. En
+  // derivadas eso se nota mucho, porque los polinomios están en el nivel difícil y los monomios en el
+  // normal — queja del cliente: "me enseñaba monomios, luego polinomios, y luego volvió a monomios".
+  // También dejaba sin efecto la progresión de la clase encadenada: subía de nivel tras dos aciertos y
+  // el tramo siguiente lo deshacía.
+  // Se guarda en el cursor, que ya viaja con la conversación. Abrir un tema NUEVO (no un seguimiento)
+  // vuelve a nivel normal, que es lo esperable al empezar de cero.
+  const CLAVE_NIVEL = "nivel:actual";
+  const mNivel = cursorMapa(cursores);
+  let nivel;
+  if (nivelPedido) {
+    nivel = nivelPedido;
+    if (mNivel) mNivel[CLAVE_NIVEL] = NIVELES.indexOf(nivel);
+  } else if ((esSeg || seguimiento) && mNivel && Number.isInteger(mNivel[CLAVE_NIVEL])) {
+    nivel = NIVELES[mNivel[CLAVE_NIVEL]] || "normal";      // seguimiento: se mantiene donde estaba
+  } else {
+    nivel = "normal";
+    if (mNivel) mNivel[CLAVE_NIVEL] = NIVELES.indexOf("normal");
+  }
   // En un seguimiento el tema es el ACTIVO (contexto); en una pulsación nueva, la propia consulta.
   const base = (esSeg && (contexto || currentTopic)) ? (contexto || currentTopic) : query;
   const n = normBoton(base);
