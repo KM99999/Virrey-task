@@ -497,6 +497,58 @@ async function unitTests() {
       `distintos=${new Set(arranques).size}`);
   }
 
+  // ── COHERENCIA ENTRE LO QUE ENSEÑA Y LO QUE DEJA, y SIN DUPLICAR en la pizarra.
+  //    Queja del cliente: "no hay coherencia en los ejercicios que enseña con los que deja: te enseña
+  //    derivadas de 3 monomios, pero te deja de dos" y "se duplica el contenido de la información".
+  //    Lo segundo lo causé yo al anunciar el ejemplo al principio: la expresión se escribía dos veces.
+  for (const [label, abrir, forma] of [
+    ["derivadas", "Enséñame derivadas", (s) => String(s).trim().split(/\s(?=[+-])/).filter((t) => t.trim()).length],
+    ["lineales", "Enséñame ecuaciones lineales", (s) => (/\(/.test(s) ? "par" : /[a-z]\s*\/\s*\d/.test(s) ? "frac"
+      : /x[^=]*=[^=]*x/.test(s) ? "dos" : /\dx[^=]*[+-][^=]*\dx/.test(s) ? "agr" : "simple")],
+  ]) {
+    for (const nivelQ of [null, "dame un problema más difícil"]) {
+      const cursores = {};
+      correrBoton({ query: abrir, cursores });
+      if (nivelQ) correrBoton({ query: nivelQ, seguimiento: "mas_dificil", contexto: abrir, currentTopic: abrir, cursores });
+      let descuadres = 0, duplicados = 0, ejemplo = "", practica = "";
+      for (let i = 0; i < 6; i++) {
+        const r = correrBoton({ query: "otro ejemplo", seguimiento: "continuacion", contexto: abrir, currentTopic: abrir, cursores });
+        if (!r) break;
+        const pz = (r.pizarras || []).map((c) => String(c));
+        // Ninguna línea de pizarra puede repetirse dentro de la MISMA lección.
+        const limpias = pz.map((c) => c.replace(/\s/g, ""));
+        if (limpias.some((c, k) => limpias.indexOf(c) !== k)) duplicados++;
+        const ej = pz.find((c) => !c.includes(":") && /\d|x/.test(c)) || "";
+        const mq = (r.q?.texto || "").match(/de (.+?)\?|en (.+?)\?/);
+        const pr = mq ? (mq[1] || mq[2]) : "";
+        if (ej && pr && forma(ej) !== forma(pr)) { descuadres++; ejemplo = ej; practica = pr; }
+      }
+      const nv = nivelQ ? "difícil" : "normal";
+      check(`coherencia [${label}/${nv}]: la práctica tiene la MISMA forma que el ejemplo`, descuadres === 0,
+        descuadres ? `${descuadres} descuadres, p.ej. "${ejemplo}" → "${practica}"` : "");
+      check(`coherencia [${label}/${nv}]: la pizarra NO repite líneas`, duplicados === 0, `${duplicados} lecciones con línea repetida`);
+    }
+  }
+
+  // ── PISTAS QUE CORRESPONDEN AL EJERCICIO.
+  //    Queja del cliente ("las indicaciones no son claras"), con la captura de una INTEGRAL a la que
+  //    el sistema respondía con la pista de aritmética: "recuerda el orden, primero × y ÷, luego + y −".
+  //    En los temas que el motor no garantiza no se inventa un método: se remite a la pizarra.
+  for (const [q, b, debe, no] of [
+    ["¿Cuál es la integral de 3x²?", "∫ 3x² dx", /pizarra/i, /orden|× y ÷|despejar|exponente/i],
+    ["¿Cuál es la solución del sistema de ecuaciones?", "2x + y = 5", /pizarra/i, /despejar|coeficiente/i],
+    ["¿Cuál es el límite cuando x tiende a 0?", "lim x→0", /pizarra|ejemplo/i, /orden|× y ÷/i],
+    ["¿Cuál es la derivada de x⁴ - 6x² + 9x?", "x⁴ - 6x² + 9x", /exponente/i, /orden|× y ÷/i],
+    ["¿Cuánto vale x en 2x + 5 = 15?", "2x + 5 = 15", /despejar|inversa/i, /exponente/i],
+    ["¿Cuánto es 24 + 17?", "24 + 17", /operaci[oó]n|paso a paso/i, /exponente|despejar/i],
+    ["¿Cómo se factoriza x² - 9?", "x² - 9", /cuadrados/i, /orden|despejar/i],
+  ]) {
+    for (const nivel of [1, 2]) {
+      const h = buildHint(q, b, nivel);
+      check(`pista [${q.slice(0, 34)}… n${nivel}]: corresponde al ejercicio`, debe.test(h) && !no.test(h), h.slice(0, 80));
+    }
+  }
+
   // ── PRACTICAR NO ES ENSEÑAR: al pedir práctica no puede explicarse el método.
   //    Queja del cliente: "me dice a practicar, y me sigue enseñando". Era literal: tras anunciar
   //    "¡A practicar!", el tutor recitaba la regla y RESOLVÍA un ejemplo ("la derivada de x³ es 3x²")

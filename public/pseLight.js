@@ -566,6 +566,17 @@ export class PSELight {
 export function buildHint(question, board, nivel) {
   const t = `${question || ""} ${board || ""}`.toLowerCase();
   const b = (board || "").toLowerCase();
+  // TEMAS QUE EL MOTOR NO GARANTIZA (integrales, límites, sistemas, matrices, logaritmos,
+  // trigonometría…): aquí NO se inventa un método. Antes caían en la rama de aritmética y el alumno
+  // recibía, ante una integral, la pista "recuerda el orden: primero × y ÷, luego + y −" —
+  // instrucciones que no tienen nada que ver con lo que se le pregunta (queja del cliente: "las
+  // indicaciones no son claras", con la captura de una integral). Se le remite a lo explicado en la
+  // pizarra, que es lo único que aquí podemos asegurar que corresponde a su ejercicio.
+  if (/∫|integral|l[ií]mite|\blim\b|sistema de ecuaciones|matri[cz]|logaritm|\blog\b|\bln\b|derivada parcial|trigonom|\bseno\b|\bcoseno\b|\btangente\b/.test(t)) {
+    return nivel >= 2
+      ? "Repasa en la pizarra el método que acabamos de aplicar en el ejemplo y sigue los mismos pasos con tu ejercicio."
+      : "Pista: vuelve al ejemplo resuelto de la pizarra y aplica el mismo procedimiento paso a paso.";
+  }
   // SUSTITUIR en una derivada YA calculada ("la derivada es 2q, ¿cuánto vale con q = 5?"). NO es
   // derivar: es evaluar. Va ANTES de la rama de derivadas porque el enunciado contiene la palabra
   // "derivada" y se llevaba la pista de la regla de la potencia — el alumno pedía ayuda para
@@ -608,8 +619,10 @@ export function buildHint(question, board, nivel) {
       ? "Para despejar la letra, primero pasa el número que la acompaña al otro lado con la operación inversa (si suma, resta; si resta, suma) y luego divide por el coeficiente."
       : "Pista: usa la operación inversa en ambos lados para dejar la letra sola.";
   }
-  // Aritmética con un operador.
-  if (/[×÷*+]|\d\s*\/\s*\d|\d\s*-\s*\d/.test(t)) {
+  // Aritmética con un operador. Solo si de verdad es ARITMÉTICA: números y un signo, sin letras de
+  // por medio. Sin esta condición, cualquier ejercicio con un "+" o un "*" —una integral, por
+  // ejemplo— se llevaba la pista del orden de las operaciones, que no le sirve de nada.
+  if (/\d\s*[×÷*+]\s*\d|\d\s*\/\s*\d|\d\s*-\s*\d/.test(t) && !/[a-z]\s*[²³⁴⁵⁶⁷⁸⁹^]|\bx\b|\bd[xyzt]\b/.test(t)) {
     return nivel >= 2
       ? "Resuelve paso a paso: identifica la operación y calcúlala con calma; recuerda el orden (primero × y ÷, luego + y −)."
       : "Pista: mira con calma qué operación pide el ejercicio y hazla paso a paso.";

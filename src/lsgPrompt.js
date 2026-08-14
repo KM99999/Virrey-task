@@ -721,7 +721,33 @@ function cursorParar(cursores, clave, lista, expr) {
 const offPractica = (n) => (n > 3 ? Math.floor(n / 2) : 1);
 // Rota una lista: con cursor avanza una posición; sin cursor busca el índice MÁS ALTO cuya forma
 // canónica aparece en `evitarRaw` (lo ya mostrado) y avanza desde ahí. Devuelve EJEMPLO y PRÁCTICA.
-function rotarBoton(lista, evitarRaw, cursores, clave) {
+// FORMA de un ejercicio: lo que hace que dos ejercicios se sientan "del mismo tipo". Sirve para que
+// la PRÁCTICA case con el EJEMPLO que se acaba de explicar. Queja del cliente: "no hay coherencia en
+// los ejercicios que enseña con los que deja: te enseña derivadas de 3 monomios, pero te deja de dos".
+// Tenía razón: la práctica salía a media vuelta de la lista y podía tener otra estructura.
+const formaPolinomio = (s) => String(s).trim().split(/\s(?=[+-])/).filter((t) => t.trim()).length; // nº de términos
+const formaLineal = (s) => {
+  const t = String(s);
+  if (/\(/.test(t)) return "parentesis";
+  if (/[a-z]\s*\/\s*\d/.test(t)) return "fraccion";
+  if (/x[^=]*=[^=]*x/.test(t)) return "dos lados";
+  if (/\dx[^=]*[+-][^=]*\dx/.test(t)) return "agrupar";
+  return "simple";
+};
+// Elige la PRÁCTICA: la primera de la lista, a partir de media vuelta, con la MISMA forma que el
+// ejemplo. Si ninguna coincide, se queda con la de media vuelta (mejor eso que repetir el ejemplo).
+function practicaAcorde(lista, idx, forma) {
+  const n = lista.length;
+  const base = (idx + offPractica(n)) % n;
+  if (typeof forma !== "function") return base;
+  const f = forma(lista[idx]);
+  for (let k = 0; k < n; k++) {
+    const j = (idx + offPractica(n) + k) % n;
+    if (j !== idx && forma(lista[j]) === f) return j;
+  }
+  return base;
+}
+function rotarBoton(lista, evitarRaw, cursores, clave, forma) {
   const hay = canonExpr(evitarRaw);
   let last = -1;
   for (let i = 0; i < lista.length; i++) {
@@ -733,7 +759,7 @@ function rotarBoton(lista, evitarRaw, cursores, clave) {
   }
   const n = lista.length;
   const idx = cursorFijar(cursores, clave, cursorSiguiente(cursores, clave, n, (last + 1) % n));
-  return { ejemplo: lista[idx], practica: lista[(idx + offPractica(n)) % n] };
+  return { ejemplo: lista[idx], practica: lista[practicaAcorde(lista, idx, forma)] };
 }
 // NIVELES de dificultad. Cada tema tiene TRES listas reales (fácil / normal / difícil), no una sola:
 // al pedir "algo más difícil" el ejercicio debe ser DE VERDAD más difícil (antes se caía siempre en la
@@ -746,7 +772,7 @@ const listaNivel = (listas, nivel) => listas[NIVELES.includes(nivel) ? nivel : "
 // ("otro ejemplo", "más fácil", "más difícil") rota dentro de la lista de ESE nivel con `evitar`.
 // `nombre` identifica el tema para el CURSOR de rotación (clave "tema:nivel"). Cada tema y cada nivel
 // llevan su propia posición, así que alternar entre temas o pedir "más difícil" no descoloca al otro.
-function elegirBoton(listas, { evitar, instancia, seguimiento, nivel, cursores } = {}, nombre = "") {
+function elegirBoton(listas, { evitar, instancia, seguimiento, nivel, cursores } = {}, nombre = "", forma = null) {
   const lista = listaNivel(listas, nivel);
   const clave = cursorClave(nombre, nivel);
   if (!seguimiento && instancia) {
@@ -755,7 +781,15 @@ function elegirBoton(listas, { evitar, instancia, seguimiento, nivel, cursores }
     // "resuelve 2x+3=8"; "deriva x⁵", "deriva 7x³") daban SIEMPRE la misma práctica ("2x + 5 = 15" / "x²"):
     // repetitiva y con dificultad descolgada del ejemplo. Ahora se elige de forma determinista según la
     // instancia (misma consulta → misma práctica; consultas distintas → prácticas distintas).
-    const pool = lista.filter((x) => canonExpr(x) !== canonExpr(instancia));
+    let pool = lista.filter((x) => canonExpr(x) !== canonExpr(instancia));
+    // …y de la MISMA forma que lo que él escribió (mismo nº de términos, mismo tipo de ecuación):
+    // dejarle practicar algo estructuralmente distinto de lo que acaba de ver es la incoherencia que
+    // reportó el cliente.
+    if (typeof forma === "function") {
+      const f = forma(instancia);
+      const mismos = pool.filter((x) => forma(x) === f);
+      if (mismos.length) pool = mismos;
+    }
     const cands = pool.length ? pool : lista;
     const h = canonExpr(instancia).split("").reduce((a, c) => a + c.charCodeAt(0), 0);
     // El cursor se ANCLA en el ejercicio que escribió el alumno (si está en la lista): así el siguiente
@@ -770,9 +804,9 @@ function elegirBoton(listas, { evitar, instancia, seguimiento, nivel, cursores }
   // aceptación del cliente lo da por hecho y hace la primera lección predecible.
   if (!seguimiento) {
     cursorFijar(cursores, clave, 0);
-    return { ejemplo: lista[0], practica: lista[offPractica(lista.length)] };
+    return { ejemplo: lista[0], practica: lista[practicaAcorde(lista, 0, forma)] };
   }
-  return rotarBoton(lista, evitar, cursores, clave);
+  return rotarBoton(lista, evitar, cursores, clave, forma);
 }
 
 // ── PRACTICAR: el alumno pide EJERCICIOS para resolverlos ÉL MISMO (no que se los resuelvan ni que le
@@ -1119,11 +1153,15 @@ const LINEALES = {
 const LINEALES_DOS_LADOS = ["4x - 3 = 2x + 5", "3x + 1 = x + 7", "5x - 2 = 3x + 6", "6x - 5 = 2x + 7", "4x + 1 = x + 10", "5x - 4 = 2x + 5", "3x + 2 = x + 8", "7x - 6 = 3x + 6"];
 const esDosLados = (eq) => /x[^=]*=[^=]*x/.test(canonExpr(eq || ""));
 export function linealResueltaLSG(opts = {}) {
-  let { ejemplo, practica } = elegirBoton(LINEALES, opts, "lineal");
+  let { ejemplo, practica } = elegirBoton(LINEALES, opts, "lineal", formaLineal);
   // Si el EJEMPLO tiene x en AMBOS lados, la práctica debe ser del MISMO tipo (dos lados), elegida de forma
   // determinista (misma consulta → misma práctica) y distinta del ejemplo. Sin esto, "5x - 7 = 2x + 5" daba
   // como práctica "2x + 5 = 15" (un solo lado) — tipo distinto, queja del cliente.
-  if (esDosLados(ejemplo)) {
+  // …pero SOLO si el ejemplo es de dos lados "a secas". Si además lleva paréntesis o denominador
+  // ("2(x + 4) = 3x - 1"), su dificultad está en el paso EXTRA, y cambiarlo por uno de dos lados sin
+  // paréntesis le deja una práctica más fácil que el ejemplo: la misma incoherencia que se quiere
+  // evitar, al revés. En ese caso manda `practicaAcorde`, que busca otro con la misma forma.
+  if (esDosLados(ejemplo) && formaLineal(ejemplo) === "dos lados") {
     const pool = LINEALES_DOS_LADOS.filter((x) => canonExpr(x) !== canonExpr(ejemplo));
     const cands = pool.length ? pool : LINEALES_DOS_LADOS;
     const h = canonExpr(ejemplo).split("").reduce((a, c) => a + c.charCodeAt(0), 0);
@@ -1179,7 +1217,7 @@ function partesMonomio(m) {
   return { a, n };
 }
 export function derivadaResueltaLSG(opts = {}) {
-  const { ejemplo, practica } = elegirBoton(DERIVADAS, opts, "derivada");
+  const { ejemplo, practica } = elegirBoton(DERIVADAS, opts, "derivada", formaPolinomio);
   const derE = computeDerivative("derivada de " + ejemplo) || "0";
   const derP = computeDerivative("derivada de " + practica) || "0";
   if (opts.practica) return practicaLSG("derivada_resuelta", {
@@ -1269,7 +1307,13 @@ function concretoPrimero(dir) {
 function aperturaEjemplo(dir, frase, pizarra) {
   const i = dir.findIndex((d) => d.tipo === "avatar");
   const nuevas = [{ tipo: "hablar", texto: frase }];
-  if (pizarra) nuevas.push({ tipo: "pizarra", accion: "escribir", contenido: pizarra });
+  // NO se repite en la pizarra lo que la lección ya va a escribir. Al anunciar el ejemplo al principio
+  // se estaba escribiendo la expresión dos veces —una aquí y otra en su sitio de siempre— y el alumno
+  // veía la misma línea duplicada en el tablero (queja del cliente: "se duplica el contenido de la
+  // información"). El anuncio HABLADO sí se mantiene: es lo que identifica la lección al arrancar.
+  const yaEscrita = pizarra && dir.some((d) => d.tipo === "pizarra" &&
+    String(d.contenido || "").replace(/\s/g, "") === String(pizarra).replace(/\s/g, ""));
+  if (pizarra && !yaEscrita) nuevas.push({ tipo: "pizarra", accion: "escribir", contenido: pizarra });
   dir.splice(i >= 0 ? i + 1 : 0, 0, ...nuevas);
   return dir;
 }
