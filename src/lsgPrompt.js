@@ -539,13 +539,6 @@ export function fraccionResueltaLSG(opts) {
 
   if (o.practica) return practicaLSG("fraccion_resuelta", {
     cursores: o.cursores,
-    recordatorio: dificil
-      ? ["Recuerda: si los denominadores son DISTINTOS, primero iguálalos (busca el mínimo común denominador), convierte cada fracción y luego suma los numeradores; al final, simplifica.",
-         "Con denominadores distintos no se puede sumar directamente: primero hay que partir las dos en trozos del mismo tamaño (el mínimo común denominador) y ya después juntar.",
-         "El orden aquí: común denominador, convertir cada fracción, sumar solo los de arriba y simplificar al final si se puede."]
-      : ["Recuerda: con el MISMO denominador, suma los numeradores y deja el denominador igual; luego simplifica si se puede.",
-         "Al tener el mismo denominador ya están partidas en trozos iguales: basta con juntar los de arriba y dejar el de abajo como está.",
-         "Con igual denominador solo se operan los números de arriba; el de abajo no cambia. Y al final, simplifica si se deja."],
     reto1: A.texto, preg: `¿Cuánto es ${A.texto}? Escríbelo en su forma más simple.`, resp: A.final,
     reto2: B.texto, preg2: `¿Cuánto es ${B.texto}? Escríbelo en su forma más simple.`, resp2: B.final,
   });
@@ -828,7 +821,7 @@ function fraseRotada(lista, cursores, clave) {
   return lista[i];
 }
 // `recordatorio` admite VARIAS redacciones del mismo método (array): se rota igual que la intro.
-function practicaLSG(escena, { recordatorio, reto1, preg: pregTxt, resp, reto2, preg2, resp2, cursores }) {
+function practicaLSG(escena, { reto1, preg: pregTxt, resp, reto2, preg2, resp2, cursores }) {
   const dobles = !!(reto2 && preg2 && String(resp2 ?? "").trim());
   // EL EJERCICIO VA PRIMERO. Antes la tanda abría con dos párrafos largos —la presentación y el
   // recordatorio del método— y el ejercicio no aparecía hasta después. Aunque esos párrafos rotaban
@@ -842,19 +835,14 @@ function practicaLSG(escena, { recordatorio, reto1, preg: pregTxt, resp, reto2, 
     { tipo: "pizarra", accion: "escribir", contenido: `Ejercicio 1:  ${reto1}` },
     { tipo: "hablar", texto: fraseRotada(dobles ? INTRO_PRACTICA_2 : INTRO_PRACTICA_1, cursores, "frase_practica:intro") },
   ];
-  // El RECORDATORIO del método solo la primera vez de cada tanda de práctica seguida: repetir el
-  // mismo método en cada ejercicio es justo lo que sonaba a máquina. Se conserva la rotación de
-  // redacciones para cuando sí aparece.
-  const recs = Array.isArray(recordatorio) ? recordatorio.filter(Boolean) : (recordatorio ? [recordatorio] : []);
-  // La marca es POR TEMA: al cambiar de tema el método es otro y sí hay que recordarlo; dentro del
-  // mismo tema, repetirlo en cada tanda es lo que sonaba a máquina.
-  const claveRec = `rec_${String(escena).replace(/_resuelta$/, "")}:practica`;
-  const m = cursorMapa(cursores);
-  const yaRecordado = !!m && Number.isInteger(m[claveRec]);
-  if (recs.length && !yaRecordado) {
-    dir.push({ tipo: "hablar", texto: fraseRotada(recs, cursores, "frase_practica:rec") });
-    if (m) m[claveRec] = 1;
-  }
+  // PRACTICAR NO ES ENSEÑAR: aquí NO se explica el método.
+  // Queja del cliente: "me dice a practicar, y me sigue enseñando". Tenía razón, y era literal: tras
+  // anunciar "¡A practicar!", el tutor soltaba el recordatorio de la regla e incluso resolvía un
+  // ejemplo ("la derivada de x³ es 3x²") justo antes de preguntarle a él exactamente eso. Quien pide
+  // practicar quiere resolver, no que le den la clase otra vez.
+  // El método NO se pierde: sigue estando a un paso de distancia, y solo cuando hace falta —si falla,
+  // la pista se lo recuerda (buildHint, cada vez más concreta); si dice "no entendí", vuelve la
+  // lección completa; si escribe "resuélvelo", se resuelve paso a paso.
   dir.push({ tipo: "preguntar", texto: pregTxt, respuesta: String(resp), esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" });
   if (dobles) {
     dir.push({ tipo: "hablar", texto: `${fraseRotada(ARRANQUE_PRACTICA, cursores, "frase_practica:inicio")} Ejercicio 2: ${reto2}.` });
@@ -1081,9 +1069,6 @@ function aritmeticaLSG(opts, cfg) {
   const eq = E.aproximado ? "≈" : "=";
   if (opts.practica) return practicaLSG(cfg.escena, {
     cursores: opts.cursores,
-    recordatorio: [`Recuerda: para ${cfg.verbo}, ${cfg.rec}`,
-      `Te dejo el método a mano: para ${cfg.verbo}, ${cfg.rec}`,
-      `Ten presente cómo se hace: para ${cfg.verbo}, ${cfg.rec}`],
     reto1: E.texto, preg: pregArit(E), resp: E.answer,
     reto2: P.texto, preg2: pregArit(P), resp2: P.answer,
   });
@@ -1149,11 +1134,6 @@ export function linealResueltaLSG(opts = {}) {
   const solP = solveLinearSteps(practica) || solveLinearSteps(lista[1]);
   if (opts.practica) return practicaLSG("lineal_resuelta", {
     cursores: opts.cursores,
-    recordatorio: [
-      "Recuerda: para hallar la incógnita, despéjala pasando los números al otro lado con la operación inversa (lo que suma, resta; lo que multiplica, divide), hasta dejar la x sola.",
-      "El método, por si acaso: quita de alrededor de la x lo que la acompaña, haciendo lo contrario de lo que hay, hasta que quede sola de un lado.",
-      "Ten presente el orden: primero los que suman o restan, después el número que multiplica a la x. Siempre lo mismo a los dos lados de la igualdad.",
-    ],
     reto1: sol.original, preg: `¿Cuánto vale ${sol.varName} en ${sol.original}? Escribe solo el número.`, resp: sol.answer,
     reto2: solP.original, preg2: `¿Cuánto vale ${solP.varName} en ${solP.original}? Escribe solo el número.`, resp2: solP.answer,
   });
@@ -1204,11 +1184,6 @@ export function derivadaResueltaLSG(opts = {}) {
   const derP = computeDerivative("derivada de " + practica) || "0";
   if (opts.practica) return practicaLSG("derivada_resuelta", {
     cursores: opts.cursores,
-    recordatorio: [
-      "Recuerda la regla de la potencia: el exponente baja a multiplicar delante y, en su sitio, queda una unidad menos. Por ejemplo, la derivada de x³ es 3x². En un polinomio se deriva término a término.",
-      "Te dejo el método a mano: el exponente pasa a multiplicar delante y, en su sitio, queda uno menos. Si hay varios términos, se hace con cada uno por separado.",
-      "Para derivar una potencia: multiplica por el exponente y bájalo en una unidad. Así, la derivada de x⁴ es 4x³. Los polinomios se derivan término a término, sin mezclarlos.",
-    ],
     reto1: ejemplo, preg: `¿Cuál es la derivada de ${ejemplo}?`, resp: derE,
     reto2: practica, preg2: `¿Cuál es la derivada de ${practica}?`, resp2: computeDerivative("derivada de " + practica) || "",
   });
@@ -1565,11 +1540,6 @@ export function factorizacionResueltaLSG(opts = {}) {
   const facP = computeFactorization(practica);
   if (opts.practica) return practicaLSG("factorizacion_resuelta", {
     cursores: opts.cursores,
-    recordatorio: [
-      "Recuerda la diferencia de cuadrados: a² - b² = (a - b)(a + b). Identifica a y b (las raíces de cada cuadrado) y aplica la regla.",
-      "El método a mano: busca la raíz de cada uno de los dos cuadrados y escribe el producto de su resta por su suma.",
-      "Ten presente que factorizar es lo contrario de multiplicar: cuando termines, multiplica tu respuesta y debe volver a salirte la expresión de partida.",
-    ],
     reto1: ejemplo, preg: `¿Cómo se factoriza ${ejemplo}? Escríbelo como producto de dos paréntesis.`, resp: facE,
     reto2: practica, preg2: `¿Cómo se factoriza ${practica}? Escríbelo como producto de dos paréntesis.`, resp2: computeFactorization(practica) || "",
   });

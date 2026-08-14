@@ -497,6 +497,34 @@ async function unitTests() {
       `distintos=${new Set(arranques).size}`);
   }
 
+  // ── PRACTICAR NO ES ENSEÑAR: al pedir práctica no puede explicarse el método.
+  //    Queja del cliente: "me dice a practicar, y me sigue enseñando". Era literal: tras anunciar
+  //    "¡A practicar!", el tutor recitaba la regla y RESOLVÍA un ejemplo ("la derivada de x³ es 3x²")
+  //    justo antes de preguntarle a él exactamente eso. Es la misma queja que ya había hecho antes
+  //    ("le pido ejercicios para yo resolverlos y me sigue enseñando"): entonces se arregló el
+  //    encaminamiento, pero el recordatorio del método se quedó dentro.
+  //    El método sigue disponible cuando hace falta: si falla, la pista; si dice "no entendí", la
+  //    lección; si escribe "resuélvelo", el paso a paso. Eso se comprueba aparte, más abajo.
+  for (const [tema, ctx] of [["derivada", "Enséñame derivadas"], ["lineal", "Enséñame ecuaciones lineales"],
+    ["factorizacion", "Explícame la factorización"], ["fraccion", "Enséñame fracciones"], ["suma", "Enséñame a sumar"]]) {
+    for (const q of ["quiero practicar", "dame ejercicios para resolverlos yo", "dame ejercicios más complejos"]) {
+      const r = correrBoton({ query: q, seguimiento: "practicar", contexto: ctx, currentTopic: ctx, cursores: {} });
+      if (!r) { check(`practicar sin enseñar [${tema}/"${q}"]: hay lección`, false, "null"); continue; }
+      const dicho = (r.flat || []).filter((d) => d.tipo === "hablar").map((d) => d.texto).join(" ");
+      // NADA de explicar la regla ni de resolver un ejemplo por el camino.
+      const enseña = /recuerda la regla|regla de la potencia|el exponente baja|para despejar|operación inversa|mínimo común|diferencia de cuadrados: a|se deriva término a término|columna por columna/i.test(dicho);
+      const resuelveEjemplo = /\bes\s+\d*[a-z]?[⁰¹²³⁴⁵⁶⁷⁸⁹]|derivada de \S+ es\b|=\s*\(/i.test(dicho);
+      check(`practicar sin enseñar [${tema}/"${q}"]: NO explica el método`, !enseña, dicho.slice(0, 90));
+      check(`practicar sin enseñar [${tema}/"${q}"]: NO resuelve ningún ejemplo`, !resuelveEjemplo, dicho.slice(0, 90));
+      check(`practicar sin enseñar [${tema}/"${q}"]: entrega ejercicios calificables`,
+        r.nPreg >= 1 && r.qs.every((x) => !!String(x.respuesta || "").trim()), `nPreg=${r.nPreg}`);
+    }
+    // Y el método SIGUE disponible en cuanto el alumno lo necesita: "no entendí" trae la explicación.
+    const ayuda = correrBoton({ query: "no entendí", seguimiento: "reexplicar", contexto: ctx, currentTopic: ctx, cursores: {} });
+    const dichoAyuda = (ayuda?.flat || []).filter((d) => d.tipo === "hablar").map((d) => d.texto).join(" ");
+    check(`practicar sin enseñar [${tema}]: al pedir ayuda SÍ se explica`, dichoAyuda.length > 200, `${dichoAyuda.length} caracteres`);
+  }
+
   // ── EL NIVEL SE RECUERDA: la clase no puede BAJAR de dificultad sola.
   //    Queja del cliente: "me enseñaba derivar, primero monomios y luego polinomios. Pero luego volvió
   //    a enseñarme monomios, y luego polinomios". En derivadas los polinomios están en el nivel
