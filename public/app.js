@@ -180,7 +180,7 @@ let tramosSeguidos = 0;
 let aciertosSeguidos = 0;
 let claseEnCurso = false;
 let temporizadorClase = null;
-const MAX_TRAMOS = 6;
+const MAX_TRAMOS = 12;
 // Cancela una continuación pendiente. La usa «Detener» y cualquier consulta que escriba el alumno:
 // si él toma la palabra, el tutor no debe arrancarle encima el tramo que tenía preparado.
 function cancelarContinuacion() {
@@ -194,11 +194,22 @@ function cancelarContinuacion() {
 //   · fallo                 → otro EJEMPLO RESUELTO antes de volver a pedirle que resuelva él;
 //   · tope de tramos        → el tutor deja de encadenar y le devuelve la palabra al alumno.
 function siguienteTramo({ acerto, aciertos, tramos, max }) {
-  if (tramos >= max) return { fin: true, aviso: "Hemos avanzado bastante. Dime por dónde seguimos: otro ejercicio, subir el nivel o cambiar de tema." };
+  if (tramos >= max) {
+    return { fin: true, aviso: "Llevamos un buen rato con este tema. Dime cómo seguimos: otro ejercicio, subir el nivel, verlo aplicado a la vida real, o cambiar de tema." };
+  }
   const n = acerto ? aciertos + 1 : 0;
+  // Si falla, primero se refuerza con un ejemplo resuelto antes de volver a examinarle.
+  if (!acerto) return { query: "muéstrame otro ejemplo resuelto", aciertos: 0, aviso: "No pasa nada: vemos otro ejemplo resuelto y lo intentas de nuevo…" };
+  // VARIAR EL TIPO DE LECCIÓN, no solo el ejercicio. Queja del cliente: "enseña unos cuantos
+  // ejercicios y se queda pausado, sin avanzar" y "no pasa de tema: está derivando polinomios y
+  // sigue, y sigue". Cada tercer tramo se pasa al ejemplo APLICADO del mismo tema (para qué sirve en
+  // la vida real), que ya existe en los cuatro temas de álgebra. Así la clase avanza en dificultad y
+  // además cambia de registro, en vez de encadenar ejercicios numéricos sin fin.
+  if ((tramos + 1) % 3 === 0) {
+    return { query: "dame un ejemplo de la vida real", aciertos: n, aviso: "Ahora veamos para qué sirve esto en la vida real…" };
+  }
   if (n >= 2) return { query: "dame un problema más difícil", aciertos: 0, aviso: "Vas bien: subimos un poco el nivel. Seguimos…" };
-  if (acerto) return { query: "dame otro ejercicio", aciertos: n, aviso: "Seguimos con la clase, va otro ejercicio…" };
-  return { query: "muéstrame otro ejemplo resuelto", aciertos: 0, aviso: "No pasa nada: vemos otro ejemplo resuelto y lo intentas de nuevo…" };
+  return { query: "dame otro ejercicio", aciertos: n, aviso: "Seguimos con la clase, va otro ejercicio…" };
 }
 
 // MEMORIA LARGA de las expresiones ya mostradas (x², 3x⁴, x² - 9, 24 + 17…), que se sigue enviando
@@ -469,6 +480,22 @@ const ui = {
   // Escribe la EXPLICACIÓN en la pizarra (no solo los números): el porqué de cada paso
   // queda escrito junto a la matemática, como en un cuaderno resuelto.
   writeBoardExplain(text) {
+    // La explicación hablada se escribe también en la pizarra para que quede el razonamiento, no solo
+    // los números. Pero si esa frase REPITE lo que la pizarra ya muestra, el alumno ve la misma línea
+    // dos veces seguidas (queja del cliente: "repite palabras cuando explica un ejercicio", con la
+    // captura de "Ejercicio 1: 3/4 + 1/6." escrito encima de "Ejercicio 1: 3/4 + 1/6").
+    // Se compara sin espacios ni puntuación contra las últimas líneas escritas: si una de ellas ya
+    // contiene lo mismo, la frase se dice en voz alta pero no se vuelve a escribir.
+    const clave = (t) => String(t).toLowerCase().replace(/[\s.,:;¡!¿?«»"'()]/g, "");
+    const k = clave(text);
+    if (k) {
+      const ultimas = [...els.board.children].slice(-4);
+      for (const prev of ultimas) {
+        const p = clave(prev.textContent);
+        if (!p) continue;
+        if (p === k || (p.length > 8 && k.includes(p)) || (k.length > 8 && p.includes(k))) return prev;
+      }
+    }
     const line = document.createElement("div");
     line.className = "board-explain reveal";
     line.textContent = text;
@@ -490,7 +517,12 @@ const ui = {
     els.feedback.hidden = true;
   },
   setCaption(text) {
-    els.caption.textContent = text || "";
+    // No repetir en el pie lo que ya está en la caja de resultado: al acertar, el mensaje se mostraba
+    // a la vez en los dos sitios ("¡Muy bien! Has aplicado el método correctamente." dos veces, en la
+    // captura del cliente). El pie se limpia en ese caso.
+    const t = text || "";
+    if (t && !els.feedback.hidden && els.feedback.textContent.trim() === t.trim()) { els.caption.textContent = ""; return; }
+    els.caption.textContent = t;
   },
   // LA CLASE CONTINÚA al terminar una lección. Antes el alumno resolvía el ejercicio, salía
   // "¡Lección completada!" y ahí se acababa todo — el tutor no volvía a hablar hasta que el alumno

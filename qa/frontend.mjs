@@ -34,22 +34,40 @@ const get = (id) => { if (!cache.has(id)) cache.set(id, nodo(id)); return cache.
 
 const almacen = new Map();
 const g = globalThis;
-g.window = { speechSynthesis: null, SpeechRecognition: null, webkitSpeechRecognition: null,
+
+// Instala un global de forma PORTABLE entre versiones de Node.
+// Desde Node 21, `navigator` ya existe en globalThis como propiedad de SOLO LECTURA (un getter), así
+// que la asignación directa `globalThis.navigator = …` lanza en módulos ES:
+//     TypeError: Cannot set property navigator of #<Object> which has only a getter
+// Es el fallo que reportó el cliente al ejecutar esta prueba en Node 24. `defineProperty` funciona en
+// todas las versiones (la propiedad es configurable), y si aun así no se pudiera redefinir, se sigue
+// adelante con el `navigator` propio de Node en vez de abortar la prueba.
+function definirGlobal(nombre, valor) {
+  try {
+    Object.defineProperty(g, nombre, { value: valor, configurable: true, writable: true });
+    return true;
+  } catch {
+    try { g[nombre] = valor; return true; } catch { return false; }
+  }
+}
+definirGlobal("window", { speechSynthesis: null, SpeechRecognition: null, webkitSpeechRecognition: null,
   addEventListener() {}, matchMedia: () => ({ matches: false, addEventListener() {} }),
-  location: { href: "http://localhost/" } };
-g.document = {
+  location: { href: "http://localhost/" } });
+definirGlobal("document", {
   getElementById: (id) => (ids.has(id) ? get(id) : null),
   querySelector: () => nodo("q"), querySelectorAll: () => [],
   createElement: (t) => nodo(t), createElementNS: (_ns, t) => nodo(t),
   addEventListener() {}, body: nodo("body"), documentElement: nodo("html"), readyState: "complete",
-};
-g.sessionStorage = { getItem: (k) => (almacen.has(k) ? almacen.get(k) : null),
+});
+const almacenApi = { getItem: (k) => (almacen.has(k) ? almacen.get(k) : null),
   setItem: (k, v) => almacen.set(k, String(v)), removeItem: (k) => almacen.delete(k) };
-g.localStorage = g.sessionStorage;
-g.navigator = { language: "es-ES", userAgent: "node", mediaDevices: undefined };
-g.SpeechSynthesisUtterance = class { constructor(t) { this.text = t; } };
-g.fetch = async () => ({ ok: true, text: async () => JSON.stringify({ pasos: [], lsg: {}, cursores: {} }) });
-g.alert = () => {};
+definirGlobal("sessionStorage", almacenApi);
+definirGlobal("localStorage", almacenApi);
+// `navigator` es el que falla en Node 21+: se instala con defineProperty.
+const navOk = definirGlobal("navigator", { language: "es-ES", userAgent: "node", mediaDevices: undefined });
+definirGlobal("SpeechSynthesisUtterance", class { constructor(t) { this.text = t; } });
+definirGlobal("fetch", async () => ({ ok: true, text: async () => JSON.stringify({ pasos: [], lsg: {}, cursores: {} }) }));
+definirGlobal("alert", () => {});
 
 let ok = 0; const fallos = [];
 async function cargar(nombre, sesion) {
@@ -65,7 +83,9 @@ async function cargar(nombre, sesion) {
   }
 }
 
-console.log("═══ Carga del frontend (public/app.js) ═══\n");
+console.log("═══ Carga del frontend (public/app.js) ═══");
+console.log(`Node ${process.version} · navigator instalado: ${navOk ? "sí" : "no (se usa el de Node)"}
+`);
 // Sesión limpia (primera visita) y sesión guardada (recarga con F5): son caminos DISTINTOS, porque al
 // recargar se restauran tema, historial, cursor de rotación y expresiones ya vistas.
 await cargar("primera visita (sin sesión guardada)", null);

@@ -12,7 +12,8 @@
     "qa:frontend": "node qa/frontend.mjs",
     "qa:sesiones": "node qa/sesiones.mjs",
     "qa:aceptacion": "node qa/aceptacion.mjs",
-    "qa:barrido": "node qa/barrido.mjs"
+    "qa:barrido": "node qa/barrido.mjs",
+    "qa:todo": "node qa/qa.mjs && node qa/frontend.mjs && node qa/sesiones.mjs && node qa/aceptacion.mjs && node qa/barrido.mjs"
   },
   "engines": {
     "node": ">=18"
@@ -30,8 +31,5 @@
   "dependencies": {
     "dotenv": "^16.4.5",
     "express": "^4.19.2"
-  },
-  "devDependencies": {
-    "jsdom": "^29.1.1"
   }
 }

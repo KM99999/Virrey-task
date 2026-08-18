@@ -49,6 +49,71 @@ const CACHE = new Map(); // clave -> respuesta ya generada
 const CACHE_MAX = 300;
 const cacheKey = (q, intent, modo) => (modo || "auto") + "::" + intent + "::" + q.toLowerCase().replace(/\s+/g, " ").trim();
 
+
+// ── PROTECCIÓN DEL ENDPOINT: LÍMITE DE SOLICITUDES ────────────────────────────────────────────────
+// Pedido por el cliente para evitar consumo indebido de la cuota de Gemini. La clave del diseño es
+// QUÉ se limita: las lecciones de los temas garantizados NO cuestan nada (las calcula el motor
+// determinista), así que limitarlas solo estorbaría —incluidas las propias baterías de prueba, que
+// hacen 1 800 turnos seguidos—. Lo que gasta cuota es la llamada a Gemini, y es lo que se controla.
+//
+// Tres capas, todas en memoria (sin dependencias nuevas; el servicio corre en una sola instancia):
+//   1. Tope general por IP, generoso, contra abuso o bucles del navegador.
+//   2. Tope de llamadas a la IA por IP, mucho más estricto.
+//   3. Tope GLOBAL diario de llamadas a la IA: pase lo que pase, la cuota no se puede vaciar en un día.
+// Al superarse se responde 429 con un mensaje claro en español, no con un error crudo.
+const LIMITES = {
+  // Tope general MUY holgado (50 por segundo): su único fin es cortar un bucle desbocado del navegador
+  // o un script que martillee el servicio. NO es lo que protege la cuota —eso lo hace el tope de IA de
+  // abajo, que es preciso—, y por eso no debe estorbar al uso legítimo ni a las baterías de prueba,
+  // que el cliente tiene que poder ejecutar. Se probó con 300/min y con 1 200/min: encadenando las
+  // cinco baterías contra un servidor local (sin latencia de red) se superaban las dos y las pruebas
+  // daban falsos fallos. Un alumno real no pasa de unas pocas consultas por minuto.
+  generalPorMinuto: Number(process.env.LIMITE_GENERAL_MIN || 3000),
+  iaPorMinuto: Number(process.env.LIMITE_IA_MIN || 15),
+  iaPorHora: Number(process.env.LIMITE_IA_HORA || 120),
+  iaPorDiaGlobal: Number(process.env.LIMITE_IA_DIA || 500),
+};
+const ventanas = new Map();   // "ip|tipo" -> { hasta, n }
+const iaHoy = { dia: "", n: 0 };
+function cuenta(clave, ventanaMs, tope) {
+  const ahora = Date.now();
+  const v = ventanas.get(clave);
+  if (!v || ahora > v.hasta) { ventanas.set(clave, { hasta: ahora + ventanaMs, n: 1 }); return { ok: true, quedan: tope - 1 }; }
+  v.n++;
+  return { ok: v.n <= tope, quedan: Math.max(0, tope - v.n), esperaSeg: Math.ceil((v.hasta - ahora) / 1000) };
+}
+// Limpieza perezosa: sin esto el mapa crecería sin fin en un servicio de larga vida.
+setInterval(() => { const t = Date.now(); for (const [k, v] of ventanas) if (t > v.hasta) ventanas.delete(k); }, 60_000).unref?.();
+
+const ipDe = (req) => (req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.ip || "desconocida";
+
+// ¿Esta consulta puede acabar llamando a Gemini? Solo se cuenta contra la cuota si NO la resuelve el
+// motor determinista. Se decide más abajo, justo antes de llamar; aquí solo se prepara el contador.
+function permisoIA(req) {
+  const ip = ipDe(req);
+  const hoy = new Date().toISOString().slice(0, 10);
+  if (iaHoy.dia !== hoy) { iaHoy.dia = hoy; iaHoy.n = 0; }
+  if (iaHoy.n >= LIMITES.iaPorDiaGlobal) {
+    return { ok: false, motivo: "Se ha alcanzado el límite diario de consultas a la inteligencia artificial. Los temas garantizados (ecuaciones, derivadas, factorización, fracciones y aritmética) siguen funcionando con normalidad.", esperaSeg: 3600 };
+  }
+  const min = cuenta(`${ip}|ia-min`, 60_000, LIMITES.iaPorMinuto);
+  if (!min.ok) return { ok: false, motivo: "Vas muy rápido con los temas avanzados. Espera unos segundos y vuelve a intentarlo.", esperaSeg: min.esperaSeg };
+  const hora = cuenta(`${ip}|ia-hora`, 3_600_000, LIMITES.iaPorHora);
+  if (!hora.ok) return { ok: false, motivo: "Has hecho muchas consultas de temas avanzados en la última hora. Inténtalo más tarde; los temas garantizados siguen disponibles.", esperaSeg: hora.esperaSeg };
+  return { ok: true, consumir: () => { iaHoy.n++; } };
+}
+
+// Capa 1: tope general por IP sobre /api/query (no distingue tipo de consulta).
+app.use("/api/query", (req, res, next) => {
+  const r = cuenta(`${ipDe(req)}|gen`, 60_000, LIMITES.generalPorMinuto);
+  if (r.ok) return next();
+  res.set("Retry-After", String(r.esperaSeg || 60));
+  return res.status(429).json({
+    error: "Demasiadas solicitudes seguidas. Espera unos segundos y vuelve a intentarlo.",
+    reintentar_en_segundos: r.esperaSeg || 60,
+  });
+});
+
 // Endpoint principal: recibe { query } y devuelve el LSG procesado.
 app.post("/api/query", async (req, res) => {
   const query = typeof req.body?.query === "string" ? req.body.query.trim() : "";
@@ -288,6 +353,18 @@ app.post("/api/query", async (req, res) => {
       return res.json({ ...cached, cacheado: true });
     }
 
+    // LÍMITE DE IA: se comprueba AQUÍ, no al entrar, porque hasta este punto la consulta pudo haberse
+    // resuelto con el motor determinista, que no gasta cuota. Solo se cuenta lo que de verdad puede
+    // acabar en una llamada al modelo. En modo "demo" tampoco se llama, así que no se cuenta.
+    let permiso = { ok: true, consumir: () => {} };
+    if (modo !== "demo") {
+      permiso = permisoIA(req);
+      if (!permiso.ok) {
+        res.set("Retry-After", String(permiso.esperaSeg || 60));
+        return res.status(429).json({ error: permiso.motivo, reintentar_en_segundos: permiso.esperaSeg || 60 });
+      }
+    }
+
     // 2) Generar el LSG. Modo "demo" → contenido básico sin IA; "ia" → SIEMPRE intenta Gemini
     //    (sin bloqueo por enfriamiento); auto (vacío) → intenta IA con enfriamiento tras 429.
     const gen = await generateLSG(
@@ -297,6 +374,8 @@ app.post("/api/query", async (req, res) => {
     );
     let { lsg: rawLsg, source, model } = gen;
     const { usage, cached } = gen;
+    // Solo cuenta contra la cuota si la lección vino REALMENTE del modelo (no de la caché ni del mock).
+    if (source === "gemini" && !cached) permiso.consumir();
 
     // 3) PRE Light: validar y normalizar en bloques predecibles. Si la IA devolvió un JSON válido
     //    pero con estructura INESPERADA (processLSG lanza), NO devolvemos un 502: caemos al contenido

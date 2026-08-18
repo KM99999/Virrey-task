@@ -760,8 +760,8 @@ async function unitTests() {
     const APP = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
     const i = APP.indexOf("function siguienteTramo("), j = APP.indexOf("\n}", i);
     const { siguienteTramo } = new Function(APP.slice(i, j + 2) + "\nreturn { siguienteTramo };")();
-    const MAX = 6;
-    // Acertando siempre: debe SUBIR de nivel cada dos aciertos, no repetir el mismo tramo sin fin.
+    const MAX = 12;
+    // Acertando siempre: debe SUBIR de nivel, VARIAR el tipo de lección y no repetir el mismo tramo.
     let aciertos = 0, tramos = 0; const pedidos = [];
     for (let k = 0; k < MAX; k++) {
       const p = siguienteTramo({ acerto: true, aciertos, tramos, max: MAX });
@@ -771,6 +771,12 @@ async function unitTests() {
     check("la clase continúa: acertando, el tutor encadena varios tramos", pedidos.length === MAX, `tramos=${pedidos.length}`);
     check("la clase PROGRESA: acertando dos seguidos sube el nivel", pedidos.filter((q) => /dif[íi]cil/.test(q)).length >= 2, pedidos.join(" · "));
     check("la clase no repite siempre lo mismo", new Set(pedidos).size >= 2, pedidos.join(" · "));
+    // Y CAMBIA DE REGISTRO: no puede ser todo ejercicio numérico (queja del cliente: "no pasa de
+    // tema, está derivando polinomios y sigue, y sigue"). Cada tercer tramo va al ejemplo aplicado.
+    check("la clase VARÍA el tipo de lección (no solo ejercicios numéricos)",
+      pedidos.filter((q) => /vida real/.test(q)).length >= 3, pedidos.join(" · "));
+    check("la clase no encadena dos veces seguidas la misma petición",
+      !pedidos.some((q, i) => i > 0 && q === pedidos[i - 1]), pedidos.join(" · "));
     // Fallando: se refuerza con un EJEMPLO RESUELTO antes de volver a pedirle que resuelva él.
     const falla = siguienteTramo({ acerto: false, aciertos: 1, tramos: 0, max: MAX });
     check("la clase refuerza tras un fallo (ejemplo resuelto, no otro examen)", /ejemplo/.test(falla.query) && falla.aciertos === 0, falla.query);
