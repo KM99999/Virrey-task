@@ -1004,21 +1004,29 @@ function extraerOperacion(text) {
 const ARIT = {
   suma: { escena: "suma_resuelta", lista: SUMAS, verbo: "sumar", pasos: pasosSuma,
     simple: ["Hazlo con los dedos o con objetos: si tienes 4 lápices y te dan 3 más, los cuentas todos y son 7. Sumar es solo eso, juntar y contar cuántos hay.", "Con números grandes es lo mismo, solo que por partes: primero juntas las unidades, luego las decenas. Si al juntar unidades te pasas de 9, esa decena que sobra la pasas a la columna de al lado. Nada más."],
+    partes: (a, b, r) => `Cada número tiene su nombre: ${a} y ${b} son los SUMANDOS, y ${r} es la SUMA o total.`,
+    rotuloPartes: "partes:  sumando + sumando = suma",
     rec: "suma columna por columna de derecha a izquierda; si una columna pasa de 9, escribes las unidades y llevas 1.", concepto: [
     "Sumar es JUNTAR cantidades para saber cuántas hay en total.", "Suma:  juntar cantidades → total",
     "Cuando los números tienen varias cifras, sumamos columna por columna, de derecha a izquierda (primero las unidades, luego las decenas…). Si una columna pasa de 9, escribimos la cifra de las unidades y LLEVAMOS 1 a la siguiente. Veámoslo con un ejemplo."] },
   resta: { escena: "resta_resuelta", lista: RESTAS, verbo: "restar", pasos: pasosResta,
     simple: ["Piénsalo como quitar: tienes 9 caramelos, te comes 5, ¿cuántos quedan? 4. Restar es solo eso, ver qué queda al quitar una parte.", "Con números grandes vas por columnas. Y si arriba tienes menos que abajo, le pides 1 a la columna de la izquierda, que vale 10 y te saca del apuro. Es como cambiar un billete de 10 en monedas para poder pagar."],
+    partes: (a, b, r) => `Cada número tiene su nombre: ${a} es el MINUENDO (de donde se quita), ${b} es el SUSTRAENDO (lo que se quita) y ${r} es la DIFERENCIA (lo que queda).`,
+    rotuloPartes: "partes:  minuendo − sustraendo = diferencia",
     rec: "resta columna por columna de derecha a izquierda; si arriba hay menos que abajo, pides prestada una unidad (vale 10) a la columna de la izquierda.", concepto: [
     "Restar es QUITAR una cantidad de otra: cuánto queda al sacar una parte.", "Resta:  quitar una cantidad de otra",
     "Restamos columna por columna, de derecha a izquierda. Si arriba hay menos que abajo, pedimos PRESTADA una unidad a la columna de la izquierda, que vale 10. Veámoslo con un ejemplo."] },
   multiplicacion: { escena: "multiplicacion_resuelta", lista: MULTIS, verbo: "multiplicar", pasos: pasosMult,
     simple: ["Multiplicar es sumar lo mismo varias veces: 3 × 4 es 4 + 4 + 4, o sea 12. Si te bloqueas, súmalo y saldrá igual.", "Con un número de dos cifras, pártelo: 12 × 4 es 10 × 4 más 2 × 4, o sea 40 + 8 = 48. Partir el número en decenas y unidades lo vuelve fácil."],
+    partes: (a, b, r) => `Cada número tiene su nombre: ${a} y ${b} son los FACTORES, y ${r} es el PRODUCTO.`,
+    rotuloPartes: "partes:  factor × factor = producto",
     rec: "descompón el número de dos cifras en decenas y unidades, multiplica cada parte y suma los resultados.", concepto: [
     "Multiplicar es SUMAR el mismo número varias veces: una forma rápida de sumar repetido.", "Multiplicar:  sumar el mismo número varias veces",
     "Para multiplicar por un número de dos cifras, lo descomponemos en decenas y unidades, multiplicamos por cada parte y sumamos. Veámoslo con un ejemplo."] },
   division: { escena: "division_resuelta", lista: DIVIS, verbo: "dividir", pasos: pasosDiv,
     simple: ["Dividir es repartir: 12 caramelos entre 3 niños, ¿cuántos a cada uno? 4. Reparte de uno en uno y cuenta cuántos le tocan a cada uno.", "Y hay un truco: la división es la multiplicación al revés. Para 84 ÷ 4, pregúntate qué número por 4 da 84. Si sabes multiplicar, ya sabes dividir."],
+    partes: (a, b, r) => `Cada número tiene su nombre: ${a} es el DIVIDENDO (lo que se reparte), ${b} es el DIVISOR (entre cuántos) y ${r} es el COCIENTE (lo que toca a cada uno).`,
+    rotuloPartes: "partes:  dividendo ÷ divisor = cociente",
     rec: "busca el número que, multiplicado por el divisor, da el total (la división es la inversa de multiplicar).", concepto: [
     "Dividir es REPARTIR una cantidad en partes iguales, o ver cuántas veces cabe un número en otro.", "Dividir:  repartir en partes iguales",
     "Dividir es la operación INVERSA de multiplicar: buscamos el número que, multiplicado por el divisor, da el total. Veámoslo con un ejemplo."] },
@@ -1110,6 +1118,12 @@ function aritmeticaLSG(opts, cfg) {
   if (opts.concepto) {
     dir.push({ tipo: "hablar", texto: cfg.concepto[0] });
     dir.push({ tipo: "pizarra", accion: "escribir", contenido: cfg.concepto[1] });
+    // CÓMO SE LLAMA CADA NÚMERO. Petición del cliente: "debe enseñar las partes de una resta
+    // (minuendo, sustraendo y diferencia)". Es vocabulario básico del tema y no se enseñaba en
+    // ninguna de las cuatro operaciones. Se dice sobre el ejemplo concreto que se va a resolver,
+    // para que el nombre quede pegado a un número que el alumno está viendo.
+    if (cfg.rotuloPartes) dir.push({ tipo: "pizarra", accion: "escribir", contenido: cfg.rotuloPartes });
+    if (cfg.partes) dir.push({ tipo: "hablar", texto: cfg.partes(...parseAB(E.texto), E.answer) });
     dir.push({ tipo: "hablar", texto: cfg.concepto[2] });
   }
   dir.push(
@@ -1903,13 +1917,26 @@ function extraerExclusion(q) {
 // ¿El resumen/tema indica que la lección ACTIVA es de tipo APLICADO (vida real)? — para que un
 // seguimiento que pide OTRO ejemplo / uno DIFERENTE / "que no sea X" siga siendo aplicado (otro caso de
 // la vida real) en vez de caer en la lección numérica o repetir el mismo.
+// ¿La lección que el alumno tiene delante es APLICADA (caso real / problema de enunciado)? Se recuerda
+// en el cursor, no se deduce del texto anterior: basta un "ok" o un "hola" entre medias para que el
+// resumen `previo` deje de contener las marcas del caso, y entonces un "no entendí" le cambiaba el
+// problema por una operación suelta. Con la marca, el modo sobrevive a esos turnos intermedios.
+const CLAVE_APLICADO = "aplicado:actual";
+function marcarAplicado(cursores, valor) {
+  const m = cursorMapa(cursores);
+  if (m) m[CLAVE_APLICADO] = valor ? 1 : 0;
+}
+function enModoAplicado(cursores) {
+  const m = cursorMapa(cursores);
+  return !!m && m[CLAVE_APLICADO] === 1;
+}
 function esContextoAplicado(texto) {
   // Se detecta por la FRASE-CONCEPTO inicial de cada lección aplicada (estable, sea cual sea el escenario),
   // más marcas de escenario como respaldo.
   // "sigue la fórmula" y "halla su valor" son marcas del RESUMEN de la derivada APLICADA (aparecen en la
   // 2.ª frase y en el tablero de práctica), presentes sea cual sea el escenario → así un "otro ejemplo"
   // tras una analogía sigue siendo APLICADO y rota por los 5 escenarios (no cae a la lección numérica).
-  return /mide la rapidez con la que algo cambia|sigue la f[oó]rmula|halla su valor|sirven para encontrar un dato|repartimos un todo|significado muy visual|multiplicar r[aá]pido|imagina un coche|imagina una planta|imagina un tanque|compraste \d|una pizza está cortada|un pastel se corta|de tu dinero del mes|una hora de estudio|un taxi cobra|una l[aá]mina cuadrada|recortar un cuadrado/i.test(String(texto || ""));
+  return /mide la rapidez con la que algo cambia|sigue la f[oó]rmula|halla su valor|sirven para encontrar un dato|repartimos un todo|significado muy visual|multiplicar r[aá]pido|imagina un coche|imagina una planta|imagina un tanque|compraste \d|una pizza está cortada|un pastel se corta|de tu dinero del mes|una hora de estudio|un taxi cobra|una l[aá]mina cuadrada|recortar un cuadrado|te regalan \d|van \d+ alumnos|ahorraste \d|gastaste \d|presta \d|se sacan \d|en cada caja vienen|compras \d+ entradas|filas con \d|repartes \d|sobres iguales|cajas de \d|el enunciado se traduce a una operaci[oó]n/i.test(String(texto || ""));
 }
 // Tema NÚCLEO (uno de los 4) al que pertenece un texto, por palabra clave o por la FORMA de la expresión
 // ("2x + 5 = 15" → lineal, "x² - 9" → factorización). null si no es de ningún tema núcleo.
@@ -1945,6 +1972,82 @@ const GEN_RESUELTA = { derivada: derivadaResueltaLSG, lineal: linealResueltaLSG,
 // MUTA aquí (el generador que se use escribe su nueva posición) y el servidor lo devuelve para que el
 // navegador lo guarde y lo reenvíe. Es lo que garantiza que "otro ejemplo" recorra la lista entera sin
 // repetir, en vez de deducir la posición del texto ya visto (que se perdía y hacía repetir la lección).
+// ── ARITMÉTICA EN LA VIDA REAL: PROBLEMAS DE ENUNCIADO ────────────────────────────────────────────
+// Petición repetida del cliente: "cuando te enseñan a sumar, no sólo es todo el tiempo desarrollar
+// ejercicios como 3+2=5; también hay ejercicios de aplicación, como: si tengo 3 manzanas y me
+// regalan 10, ¿ahora cuántas tengo?" — y después, para la resta: "debe enseñar su aplicación".
+// Hasta ahora la aritmética era el ÚNICO tema sin lección aplicada: al pedir un ejemplo de la vida
+// real se re-enseñaba el concepto con números sueltos. Aquí están los problemas con enunciado.
+//
+// Los números salen de la MISMA lista del nivel activo, así que un problema de enunciado en nivel
+// difícil lleva números de nivel difícil: la clase no baja de golpe al cambiar de tipo de lección.
+const ARIT_VIDA = {
+  suma: [
+    { hist: (a, b) => `Tienes ${a} manzanas y te regalan ${b} más.`, preg: (a, b) => `¿Cuántas manzanas tienes ahora?`, unidad: "manzanas" },
+    { hist: (a, b) => `En una excursión van ${a} alumnos en un autobús y ${b} en otro.`, preg: () => `¿Cuántos alumnos van en total?`, unidad: "alumnos" },
+    { hist: (a, b) => `Ahorraste ${a} soles el mes pasado y ${b} este mes.`, preg: () => `¿Cuánto llevas ahorrado?`, unidad: "soles" },
+  ],
+  resta: [
+    { hist: (a, b) => `Tenías ${a} soles y gastaste ${b} en el mercado.`, preg: () => `¿Cuánto dinero te queda?`, unidad: "soles" },
+    { hist: (a, b) => `Una biblioteca tiene ${a} libros y presta ${b}.`, preg: () => `¿Cuántos libros quedan en la estantería?`, unidad: "libros" },
+    { hist: (a, b) => `Un depósito tiene ${a} litros de agua y se sacan ${b}.`, preg: () => `¿Cuántos litros quedan?`, unidad: "litros" },
+  ],
+  multiplicacion: [
+    { hist: (a, b) => `Compras ${a} cajas y en cada caja vienen ${b} lápices.`, preg: () => `¿Cuántos lápices tienes en total?`, unidad: "lápices" },
+    { hist: (a, b) => `Una entrada cuesta ${b} soles y compras ${a} entradas.`, preg: () => `¿Cuánto pagas en total?`, unidad: "soles" },
+    { hist: (a, b) => `Un salón tiene ${a} filas con ${b} sillas cada una.`, preg: () => `¿Cuántas sillas hay?`, unidad: "sillas" },
+  ],
+  division: [
+    { hist: (a, b) => `Repartes ${a} caramelos entre ${b} niños, en partes iguales.`, preg: () => `¿Cuántos caramelos le tocan a cada niño?`, unidad: "caramelos" },
+    { hist: (a, b) => `Tienes ${a} soles y quieres repartirlos en ${b} sobres iguales.`, preg: () => `¿Cuánto pones en cada sobre?`, unidad: "soles" },
+    { hist: (a, b) => `Hay que colocar ${a} botellas en cajas de ${b} botellas.`, preg: () => `¿Cuántas cajas se llenan?`, unidad: "cajas" },
+  ],
+};
+// Lección APLICADA de aritmética: un problema con enunciado resuelto, y otro para el alumno.
+// Devuelve null si la operación no tiene casos (no debería), para caer al comportamiento anterior.
+export function aritmeticaAplicadaLSG(op, opts = {}) {
+  const cfg = ARIT[op], casos = ARIT_VIDA[op];
+  if (!cfg || !casos || !casos.length) return null;
+  const lista = listaNivel(cfg.lista, opts.nivel);
+  const cur = { cursores: opts.cursores, clave: `${op}_vida:normal`, mantener: opts.mantener };
+  const i = idxEscenario(casos, opts.evitar, (c) => c.unidad, cur);
+  const caso = casos[i];
+  // El ejemplo y la práctica salen de la lista del NIVEL activo y rotan con su propio cursor…
+  // …salvo al RE-EXPLICAR: ahí hay que quedarse en el MISMO problema. Sin esto, un "no entendí"
+  // sobre "tienes 24 manzanas y te regalan 17" devolvía otro problema con otros números, que es
+  // cambiarle el ejercicio justo cuando ha pedido ayuda con ése.
+  const listaNivelAct = listaNivel(cfg.lista, opts.nivel);
+  const claveNum = cursorClave(op, opts.nivel);
+  const mapaNum = cursorMapa(opts.cursores);
+  let ejemplo, practica;
+  if (opts.mantener && mapaNum && Number.isInteger(mapaNum[claveNum])) {
+    const idx = ((mapaNum[claveNum] % listaNivelAct.length) + listaNivelAct.length) % listaNivelAct.length;
+    ejemplo = listaNivelAct[idx];
+    practica = listaNivelAct[practicaAcorde(listaNivelAct, idx, null)];
+  } else {
+    ({ ejemplo, practica } = elegirBoton(cfg.lista, { ...opts, seguimiento: true }, op));
+  }
+  const E = cfg.pasos(...parseAB(ejemplo)), P = cfg.pasos(...parseAB(practica));
+  const casoP = casos[(i + 1) % casos.length];
+  const [ea, eb] = parseAB(ejemplo), [pa, pb] = parseAB(practica);
+  const dir = [
+    { tipo: "avatar", accion: "sonreir" },
+    { tipo: "hablar", texto: `${caso.hist(ea, eb)} ${caso.preg(ea, eb)}` },
+    { tipo: "pizarra", accion: "escribir", contenido: caso.hist(ea, eb) },
+    { tipo: "hablar", texto: `Para saberlo hay que ${cfg.verbo}: el enunciado se traduce a una operación.` },
+    { tipo: "pizarra", accion: "escribir", contenido: E.texto },
+    { tipo: "hablar", texto: cfg.partes ? cfg.partes(ea, eb, E.answer) : `Resolvemos ${E.texto}.` },
+    { tipo: "pizarra", accion: "escribir", contenido: `${E.texto} ${E.aproximado ? "≈" : "="} ${E.answer}` },
+    { tipo: "hablar", texto: `Así que la respuesta es ${E.answer} ${caso.unidad}. Lo importante es traducir el enunciado a la operación; el cálculo ya sabes hacerlo. Ahora te toca a ti.` },
+    { tipo: "hablar", texto: `${casoP.hist(pa, pb)} ${casoP.preg(pa, pb)}` },
+    { tipo: "pizarra", accion: "escribir", contenido: casoP.hist(pa, pb) },
+    { tipo: "preguntar", texto: `${casoP.preg(pa, pb)} Escribe solo el número.`, respuesta: String(P.answer),
+      esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
+  ];
+  if (opts.mantener) aperturaReexplicacion(dir, cfg.simple, opts.simplificacion);
+  return { escena: cfg.escena, intencion: "aprender", duracion_estimada: 70, _mock: true, directivas: dir };
+}
+
 export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", currentTopic = "", previo = "", historial = [], cursores = null } = {}) {
   // Normaliza los guiones/menos unicode ("−" U+2212, "–", "—", "‐"…) a "-" ASCII EN EL PUNTO DE ENTRADA, para
   // que TODOS los generadores y clasificadores deterministas (lineal, aritmética, factorización, intención)
@@ -2094,7 +2197,7 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   const esReexplica = !pideOtroDiferente
     && (seguimiento === "reexplicar" || /no (lo )?entend|no comprend|no me qued|explica\w*\s*(me|lo)?\s*mejor|otra vez|de nuevo|nuevamente|por qu[eé]/.test(nQ));
   const nivelRe = nivelReexplicacion(cursores, esReexplica);
-  const ctxAplicado = esContextoAplicado(`${previo} ${contexto} ${currentTopic}`);
+  const ctxAplicado = enModoAplicado(cursores) || esContextoAplicado(`${previo} ${contexto} ${currentTopic}`);
   // Si el alumno EXCLUYE la rapidez/velocidad ("otro ejemplo diferente a la rapidez") en un tema de
   // DERIVADAS, va a la lección APLICADA (que elegirá un escenario NO de velocidad: rampa/costo marginal),
   // aunque el contexto activo fuera el concepto. Queja del cliente: pedía "diferente a la rapidez" y le
@@ -2124,6 +2227,7 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
     const hayDifCuad = /[a-z]\s*(?:\^\s*2|[²])\s*-\s*\d/i.test(enCtx);
     const hayFrac = /\d\s*\/\s*\d/.test(enCtx);
     const apOpts = { evitar: evitarAp, cursores, mantener: mantenerEscenario, simplificacion: nivelRe };
+    marcarAplicado(cursores, true);
     if (/deriv/.test(nQ) || /velocidad|aceleraci|variaci[oó]n/.test(nQ) || /deriv/.test(ctxTema)) return commonRet("derivada", derivadaAplicadaLSG({ ...apOpts, excluir }));
     if (/fracc/.test(tt) || (hayFrac && !hayLineal)) return commonRet("fraccion", fraccionAplicadaLSG(apOpts));
     if (/factoriz|diferencia de cuadrados/.test(tt) || hayDifCuad) return commonRet("factorizacion", factorizacionAplicadaLSG(apOpts));
@@ -2133,7 +2237,15 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
     // significado cotidiano ("sumar es juntar cantidades", "restar es quitar"). Sin esto, pedir
     // "un ejemplo de la vida real" mientras se aprende a sumar acababa en la IA.
     const temaArit = temaNucleo(`${nQ} ${ctxTema}`);
-    if (temaArit && GEN_ARIT[temaArit]) return commonRet(temaArit, GEN_ARIT[temaArit]({ evitar: previo, concepto: true, seguimiento: true, cursores }));
+    if (temaArit && GEN_ARIT[temaArit]) {
+      // Problema de ENUNCIADO (la aplicación real de la operación). Antes aquí se re-enseñaba el
+      // concepto con números sueltos, que no es "la vida real", y además SIN pasar el nivel: en una
+      // clase de nivel difícil el ejemplo aplicado volvía a números de dos cifras y el alumno veía
+      // que la clase retrocedía (queja del cliente con la resta: "luego vuelve a los de dos cifras").
+      const aplicada = aritmeticaAplicadaLSG(temaArit, { evitar: evitarAp, cursores, nivel, mantener: mantenerEscenario, simplificacion: nivelRe });
+      if (aplicada) return commonRet(temaArit, aplicada);
+      return commonRet(temaArit, GEN_ARIT[temaArit]({ evitar: previo, concepto: true, seguimiento: true, cursores, nivel }));
+    }
     return null; // aplicado pero sin tema identificable → explicación conceptual la da Gemini (Nivel 2)
   }
 
@@ -2143,6 +2255,7 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
     // La función a derivar se toma COMPLETA (polinomio incluido): "deriva 3x⁴ - 2x²" debe derivar
     // 3x⁴ - 2x², no solo 3x⁴ (antes se perdía el resto y se respondía a otra pregunta).
     const instancia = extraerFuncionDerivable(base);
+    marcarAplicado(cursores, false);
     return commonRet("derivada", derivadaResueltaLSG({ evitar: previo, instancia, seguimiento: esSeg, nivel, concepto: conceptoOn, practica: pidePracticar, cursores }));
   }
 
@@ -2156,6 +2269,7 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
     // alumno (p. ej. pedir "factoriza x³ - 8" y ver "x² - 9") — incoherente, del tipo de queja del cliente.
     // Solo el pedido GENÉRICO ("enséñame factorización", "ejercicio de factorización") usa un preset.
     if (!instancia && /[a-z]\s*(?:\^\s*\d|[²³⁴⁵⁶⁷⁸⁹])/i.test(base)) return null;
+    marcarAplicado(cursores, false);
     return commonRet("factorizacion", factorizacionResueltaLSG({ evitar: previo, instancia, seguimiento: esSeg, nivel, concepto: conceptoOn, practica: pidePracticar, cursores }));
   }
 
@@ -2170,6 +2284,7 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
     // ejemplo") se IGNORA y se ROTA (igual que los otros temas), si no repetiría siempre la misma suma.
     const instFrac = esSeg ? null : fracInst;
     // "enséñame fracciones" (sin fracción concreta) → CONCEPTO primero; con fracción concreta → resolver ESA.
+    marcarAplicado(cursores, false);
     return commonRet("fraccion", fraccionResueltaLSG({ evitar: evitarFrac, previoTexto: previo, nivel, concepto: !instFrac && conceptoOn, instancia: instFrac, practica: pidePracticar, seguimiento: esSeg, cursores }));
   }
 
@@ -2186,6 +2301,7 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   const instLin = solBase ? solBase.original : null;
   if (!noLineal && (instLin || /\becuaci[oó]n(?:es)?\b|\blineal(?:es)?\b|primer grado/.test(n))) {
     // "enséñame ecuaciones lineales" (sin una ecuación concreta) → enseñar el CONCEPTO primero.
+    marcarAplicado(cursores, false);
     return commonRet("lineal", linealResueltaLSG({ evitar: previo, instancia: instLin, seguimiento: esSeg, nivel, concepto: !instLin && conceptoOn, practica: pidePracticar, cursores }));
   }
 
@@ -2206,6 +2322,7 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   const opActivo = (opInst && opInst.op) || opTema;
   if (opActivo) {
     const instancia = (!esSeg && opInst && opInst.op === opActivo) ? `${opInst.a} ${SIGNO_ARIT[opActivo]} ${opInst.b}` : null;
+    marcarAplicado(cursores, false);
     return commonRet(opActivo, GEN_ARIT[opActivo]({ evitar: previo, instancia, seguimiento: esSeg, nivel, concepto: !instancia && conceptoOn, practica: pidePracticar, cursores }));
   }
 
@@ -2233,7 +2350,13 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   // La aritmética no tiene versión "de la vida real", así que se re-enseña con su propia lección
   // determinista (concepto + ejemplo). Antes no había generador para ella aquí y el seguimiento
   // salía del motor garantizado.
-  const genReteach = GEN_APLICADA[temaActivo] || GEN_RESUELTA[temaActivo];
+  // Si lo que el alumno tiene delante es un PROBLEMA DE ENUNCIADO de aritmética, se re-explica ESE,
+  // no una operación suelta. Antes la aritmética no tenía lección aplicada y aquí solo cabía la
+  // numérica; ahora sí la tiene, y "no entendí" debe quedarse en el problema que está mirando.
+  const ctxAritAplicado = (enModoAplicado(cursores) || esContextoAplicado(`${previo} ${contexto} ${currentTopic}`)) && ARIT[temaActivo];
+  const genReteach = ctxAritAplicado
+    ? (o) => aritmeticaAplicadaLSG(temaActivo, o) || GEN_RESUELTA[temaActivo](o)
+    : (GEN_APLICADA[temaActivo] || GEN_RESUELTA[temaActivo]);
   if (temaActivo && genReteach && esReteachBoton(query, seguimiento)) {
     // `seguimiento: true` es imprescindible: sin él, elegirBoton devuelve SIEMPRE el primer ejemplo
     // de la lista en vez de rotar con `evitar`, así que un "y otro más" que llega por esta red de

@@ -614,6 +614,64 @@ async function unitTests() {
     check(`nivel [${label}]: reabrir el tema vuelve a nivel normal`, cursores["nivel:actual"] === 1, String(cursores["nivel:actual"]));
   }
 
+  // ── ARITMÉTICA: PARTES DE LA OPERACIÓN Y APLICACIÓN A LA VIDA REAL.
+  //    Quejas del cliente sobre la resta: "debe enseñar las partes de una resta (minuendo,
+  //    sustraendo y diferencia)" y "debe enseñar su aplicación", además de "primero de dos cifras,
+  //    luego de tres, pero luego vuelve a las de dos".
+  for (const [op, abrir, partes] of [
+    ["resta", "Enséñame a restar", ["minuendo", "sustraendo", "diferencia"]],
+    ["suma", "Enséñame a sumar", ["sumando", "suma"]],
+    ["multiplicacion", "Enséñame a multiplicar", ["factor", "producto"]],
+    ["division", "Enséñame a dividir", ["dividendo", "divisor", "cociente"]],
+  ]) {
+    const r = correrBoton({ query: abrir, cursores: {} });
+    const todo = ((r?.flat || []).map((d) => `${d.texto || ""} ${d.contenido || ""}`).join(" ")).toLowerCase();
+    check(`aritmética [${op}]: enseña cómo se llama cada parte`, partes.every((w) => todo.includes(w)),
+      partes.filter((w) => !todo.includes(w)).join(", ") || "");
+
+    // Aplicación: un PROBLEMA CON ENUNCIADO, no números sueltos, y calificable.
+    const ap = correrBoton({ query: "dame un ejemplo de la vida real", seguimiento: "continuacion", contexto: abrir, currentTopic: abrir, cursores: {} });
+    const dicho = (ap?.flat || []).filter((d) => d.tipo === "hablar").map((d) => d.texto).join(" ");
+    check(`aritmética [${op}]: la lección aplicada plantea un problema con enunciado`,
+      !!ap && /\?/.test(dicho) && /tienes|tenías|compras|repartes|hay que|una |un /i.test(dicho) && dicho.length > 120,
+      dicho.slice(0, 80));
+    check(`aritmética [${op}]: el problema aplicado es calificable`, !!ap && ap.nPreg === 1 && !!String(ap.q?.respuesta || "").trim(),
+      `nPreg=${ap?.nPreg}`);
+    // Y su respuesta es CORRECTA. Se verifica con los números del ENUNCIADO que se le deja al alumno
+    // (la última línea de pizarra), no con los del ejemplo ya resuelto: son problemas distintos, y
+    // confundirlos fue el primer error de esta propia comprobación.
+    const enunciado = (ap?.pizarras || []).map(String).filter((c) => /\d/.test(c)).pop() || "";
+    const nums = (enunciado.match(/\d+/g) || []).map(Number);
+    if (nums.length >= 2) {
+      const [a, b] = nums;
+      const esperado = op === "suma" ? a + b : op === "resta" ? a - b : op === "multiplicacion" ? a * b : a / b;
+      check(`aritmética [${op}]: la respuesta del problema aplicado es correcta`,
+        Math.abs(Number(ap.q.respuesta) - esperado) < 1e-9,
+        `"${enunciado.slice(0, 54)}" ⇒ ${ap.q.respuesta}, esperado ${esperado}`);
+    }
+  }
+  // El NIVEL no puede caerse al cambiar de tipo de lección: en la resta, pasar de ejercicios de tres
+  // cifras a un ejemplo aplicado devolvía números de dos cifras y la clase parecía retroceder.
+  for (const [op, abrir] of [["resta", "Enséñame a restar"], ["suma", "Enséñame a sumar"]]) {
+    const cursores = {};
+    correrBoton({ query: abrir, cursores });
+    correrBoton({ query: "dame un problema más difícil", seguimiento: "mas_dificil", contexto: abrir, currentTopic: abrir, cursores });
+    // Se quita el rótulo "Ejercicio N:" antes de medir: si no, el número contado es el del rótulo
+    // (el "1" de "Ejercicio 1: 412 - 255") y toda la medición sale mal.
+    const cifras = (r) => {
+      const c = (r?.pizarras || []).map((x) => String(x).replace(/^\s*Ejercicio\s*\d+\s*[:.]?\s*/i, ""))
+        .find((x) => /\d+\s*[+\-−×÷]\s*\d+/.test(x)) || "";
+      return (c.match(/\d+/) || [""])[0].length;
+    };
+    let minimo = 9;
+    for (const [q, seg] of [["dame un ejemplo de la vida real", "continuacion"], ["dame otro ejercicio", "practicar"],
+      ["otro ejemplo", "continuacion"], ["dame un ejemplo de la vida real", "continuacion"]]) {
+      const r = correrBoton({ query: q, seguimiento: seg, contexto: abrir, currentTopic: abrir, cursores });
+      minimo = Math.min(minimo, cifras(r) || 9);
+    }
+    check(`aritmética [${op}]: el nivel NO baja al pasar a la lección aplicada`, minimo >= 3, `mínimo de cifras vistas: ${minimo}`);
+  }
+
   // ── PRONUNCIACIÓN EN ESPAÑOL de TODO lo que el tutor dice en voz alta.
   //    Queja del cliente: "en lugar de decir 'ene', dice 'yeni'". El motor de voz del navegador no se
   //    puede corregir desde aquí; lo que sí se controla es QUÉ se le da a leer. Se recoge todo lo
