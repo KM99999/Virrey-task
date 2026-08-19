@@ -599,9 +599,17 @@ async function unitTests() {
     check(`nivel [${label}]: "más difícil" sube de verdad`, esDuro(cuerpo(subido)), cuerpo(subido));
     // Y los siguientes turnos, que NO piden nivel, tienen que seguir ahí.
     let sigueDuro = true, ejemplos = [];
+    // Se incluye UN "no entendí": re-explicar no puede bajar la dificultad. (Insistir tres veces sí
+    // baja, a propósito, por la escalera de simplificación; eso se comprueba aparte.)
     for (const [q, seg] of [["otro ejemplo", "continuacion"], ["quiero practicar", "practicar"],
-      ["dame otro ejercicio", "practicar"], ["otro ejemplo", "continuacion"]]) {
+      ["no entendí", "reexplicar"], ["dame otro ejercicio", "practicar"], ["otro ejemplo", "continuacion"]]) {
       const r = correrBoton({ query: q, seguimiento: seg, contexto: abrir, currentTopic: abrir, cursores });
+      // Las lecciones APLICADAS (caso real) se saltan: sus números salen de la historia, no de la
+      // lista de dificultad, así que no miden el nivel. Lo que aquí se vigila es que los ejercicios
+      // NUMÉRICOS no se vuelvan más fáciles solos. Se usa la marca que lleva el propio sistema
+      // (`aplicado:actual`), no una corazonada sobre el texto: en lineales la historia se cuenta en
+      // voz alta y la pizarra solo trae la ecuación, así que mirar el tablero no bastaba.
+      if (cursores["aplicado:actual"] === 1) continue;
       const c = cuerpo(r); ejemplos.push(c);
       if (!esDuro(c)) sigueDuro = false;
     }

@@ -2369,12 +2369,19 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
     // MISMA lección palabra por palabra a partir de la segunda vez —comprobado: 4 «no entendí» daban 1
     // sola respuesta distinta en 4 de los 5 temas—, que es justo el "bucle" del que se quejó el cliente,
     // y en el peor momento: cuando el alumno ya ha dicho dos veces que no lo entiende.
-    const opsRe = { evitar: previo, seguimiento: true, concepto: true, cursores, mantener: esReexplica, simplificacion: nivelRe };
+    // `nivel` va también aquí: al re-explicar hay que quedarse en la dificultad en la que está el
+    // alumno. Sin él, un "no entendí" durante una clase de tres cifras devolvía una de dos — el mismo
+    // retroceso que reportó el cliente, por otra puerta.
+    const opsRe = { evitar: previo, seguimiento: true, concepto: true, cursores, mantener: esReexplica, simplificacion: nivelRe, nivel };
     // Al tercer "no entendí" se BAJA LA DIFICULTAD del ejercicio, no solo la explicación: se cambia a la
     // lección numérica del nivel FÁCIL. (Petición del cliente del 7 de agosto, hasta ahora sin construir.)
     if (nivelRe >= 2 && GEN_RESUELTA[temaActivo]) {
       return commonRet(temaActivo, GEN_RESUELTA[temaActivo]({ ...opsRe, nivel: "facil" }));
     }
+    // La red de seguridad re-enseña con la versión APLICADA en los cuatro temas de álgebra (y con el
+    // problema de enunciado en aritmética): hay que dejar constancia del modo, o el sistema "olvida"
+    // que el alumno está en un caso real en cuanto pasa un turno intermedio.
+    marcarAplicado(cursores, !!ctxAritAplicado || !!GEN_APLICADA[temaActivo]);
     return commonRet(temaActivo, genReteach(opsRe));
   }
 
