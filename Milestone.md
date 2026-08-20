@@ -3,8 +3,8 @@
 **Proyecto:** Math IA — prototipo web de tutor de matemáticas (avatar + pizarra + voz).
 **En vivo:** https://math-ia.onrender.com · versión desplegada verificable en `/api/health`.
 **Repositorio:** https://github.com/KM99999/Virrey-task (rama `main`).
-**Periodo:** 9 de julio – 19 de agosto de 2026 · **211 commits**.
-**Estado a 19 de agosto de 2026:** commit `15ed1ff` desplegado; Etapas 1 y 2 completas y verificadas.
+**Periodo:** 9 de julio – 20 de agosto de 2026 · **213 commits**.
+**Estado a 20 de agosto de 2026:** commit `527cd34` desplegado; Etapas 1 y 2 completas y verificadas.
 
 > Este documento es el registro COMPLETO y vigente del desarrollo. `Milestone1.md` es una
 > instantánea anterior (hasta el 11 de agosto) que se conserva por trazabilidad.
@@ -377,13 +377,41 @@ operación suelta. La causa de fondo ya había mordido antes: **saber si el alum
 se deducía leyendo el texto de la lección anterior**, y basta un "ok" o un "hola" en medio para que
 ese texto ya no lo diga. Ese modo se guarda ahora de forma explícita, como el nivel.
 
+### Etapa T — Escuchar la pregunta, no la palabra (20 de agosto)
+
+Tres capturas más, y los tres defectos con la misma raíz: el sistema decidía por **la palabra del
+tema** que aparecía en la consulta, sin mirar **qué se estaba preguntando**.
+
+1. **"¿Cuáles son las partes de una derivada?" resolvía un ejercicio.** La consulta lleva la palabra
+   "derivada", así que la rama de RESOLVER se la llevaba. Pasaba en los ocho temas. La aritmética sí
+   tenía los nombres desde la Etapa S, pero solo **dentro** de la lección de concepto: quien
+   preguntaba por ellos directamente no los recibía. Ahora cada tema tiene su **lección de partes**,
+   sobre un ejemplo a la vista y con pregunta calificable: derivada (función, variable, coeficiente,
+   exponente, `f'(x)`), ecuación (miembros, incógnita, coeficiente, término independiente),
+   factorización (expresión, raíces, factores, producto), fracción (numerador, denominador) y las
+   cuatro operaciones.
+2. **Un "sí" a "¿entendiste?" cambiaba de tema.** En clase de factorización, el alumno contestó "sí"
+   y el sistema se puso a enseñar derivadas. "Sí" y "no" no estaban en ninguna lista —ni saludo, ni
+   muletilla, ni re-explicación—, así que salían del motor determinista y la IA, viendo solo la
+   palabra "sí", elegía tema por su cuenta. Es la respuesta a una pregunta que hace **el propio
+   tutor**: no puede cambiar de tema. "Sí" continúa la clase; "no" re-explica lo mismo más sencillo.
+3. **"Resuélvelo" narraba una diferencia de cuadrados sobre el resultado de una derivada.** El
+   desglose recibía el ejercicio sin saber qué hacer con él —"Ejercicio 1: 4x³ - 3x² + 2x", tal cual
+   sale de la pizarra de práctica— y lo decidía por el **aspecto** de la expresión. Ahora el tema
+   activo viaja con el desglose y manda; y el desglose ya sabe **derivar término a término**, que
+   antes no sabía: escribía el resultado sin procedimiento.
+
+De paso: un "ok" en mitad de la clase respondía "¡Hola de nuevo!", como si el tutor se hubiera
+reiniciado; una respuesta con tilde ("incógnita") se calificaba mal **por la tilde**; y una pregunta
+de nombres recibía la pista de la regla de la potencia en vez de remitir al rótulo de la pizarra.
+
 ---
 
-## 4. Estado verificado a 19 de agosto de 2026
+## 4. Estado verificado a 20 de agosto de 2026
 
 | Prueba | Resultado |
 |---|---|
-| Lógica (`npm run qa`) | **1 266 aprobadas · 0 fallidas** (Node 20 y Node 24) |
+| Lógica (`npm run qa`) | **1 354 aprobadas · 0 fallidas** (Node 20 y Node 24) |
 | Carga del frontend (`node qa/frontend.mjs`) | **10 escenarios · 0 fallidos** (Node 20 y Node 24) |
 | Auditoría independiente | **247 turnos · 304 preguntas · 277 verificadas aparte · 0 fallos** |
 | Barrido por propiedades (`qa/barrido.mjs`) | **200 conversaciones · 1 800 turnos · 0 violaciones** |
@@ -394,6 +422,7 @@ ese texto ya no lo diga. Ese modo se guarda ahora de forma explícita, como el n
 | Código entregado == desplegado | `/api/health` devuelve el MISMO hash que el `.zip` |
 | Versiones de Node verificadas | **18+**, probado en **20.18.1** y **24.5.0** |
 | Protección de `/api/query` | tope general por IP · IA 15/min y 120/h por IP · **500/día global** |
+| Quejas de las capturas, reproducidas por HTTP | **13 comprobaciones · 0 fallidas** |
 
 ---
 
@@ -434,7 +463,9 @@ cuadráticas y grados superiores, sistemas, inecuaciones, trigonometría, logari
 *Puntos cerrados que figuraron aquí:* la rotación en ecuaciones lineales (8 de agosto → corregida el
 10 con el cursor explícito, Etapa J); bajar a un problema más fácil tras varios "no entendí" (7 de
 agosto → construida el 10 como tercer escalón de la escalera, Etapa L); y la falta de aplicación en
-aritmética (→ construida el 19 de agosto con los problemas de enunciado, Etapa S).
+aritmética (→ construida el 19 de agosto con los problemas de enunciado, Etapa S); y **las partes de
+cada tema**, que solo tenía la aritmética y solo dentro del concepto (20 de agosto → lección propia de
+vocabulario en los ocho temas, Etapa T).
 
 ---
 
@@ -463,7 +494,12 @@ aritmética (→ construida el 19 de agosto con los problemas de enunciado, Etap
 8. **Deducir el estado leyendo el texto anterior es frágil por construcción.** Cayó tres veces: la
    rotación (se perdía y repetía la lección), el nivel (duraba un turno) y el modo aplicado (un "ok"
    entre medias lo borraba). Lo que es estado debe guardarse como estado, no inferirse.
-9. **Distinguir el defecto del alcance, y decirlo a tiempo.** Varias peticiones —temario entre temas,
+9. **Escuchar la pregunta, no la palabra.** Tres defectos seguidos salieron de encaminar la consulta
+   por el TEMA que nombraba en vez de por lo que PEDÍA: "¿cuáles son las partes de una derivada?"
+   resolvía un ejercicio, y "sí" —contestando a "¿entendiste?"— cambiaba de tema porque no encajaba
+   en ninguna lista y salía del motor determinista. Lo que el sistema no clasifica, lo clasifica la
+   IA por su cuenta, y ahí es donde se pierde el hilo de la clase.
+10. **Distinguir el defecto del alcance, y decirlo a tiempo.** Varias peticiones —temario entre temas,
    conversación libre— no eran fallos sino producto nuevo. Tratarlas como defectos habría alargado
    el proyecto sin fin; nombrarlas como etapa nueva permite decidir con criterio.
 
