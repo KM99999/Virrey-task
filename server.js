@@ -177,7 +177,11 @@ app.post("/api/query", async (req, res) => {
     //    YA está en pantalla, de forma DETERMINISTA (sin IA, sin coste). Si no llega un ejercicio
     //    reconocible, seguimos el flujo normal como "reexplicar" (re-enseñar el tema).
     if (seguimiento === "desglosar") {
-      const built = processStepByStep(ejercicio, respuestaEj);
+      // El TEMA ACTIVO viaja con el desglose. La pizarra de práctica manda el ejercicio SIN decir qué
+      // hay que hacer con él ("Ejercicio 1: 4x³ - 3x² + 2x"), y sin el tema el desglose lo decidía por
+      // el aspecto de la expresión: el cliente vio la explicación de una DIFERENCIA DE CUADRADOS
+      // encima del resultado de una DERIVADA. La lectura correcta la sabe la clase, no la expresión.
+      const built = processStepByStep(ejercicio, respuestaEj, `${contexto} ${currentTopic}`);
       if (built) {
         return res.json({
           query,
@@ -277,7 +281,7 @@ app.post("/api/query", async (req, res) => {
       if (contexto && !ejercicio) candidatos.push(contexto);
       let mismo = null;
       for (const c of candidatos) {
-        const intento = processStepByStep(c, "");
+        const intento = processStepByStep(c, "", temaCtx);
         if (intento && intento.pasos.filter((p) => p.tipo === "pizarra").length >= 2) { mismo = intento; break; }
       }
       // Solo vale si de verdad DESGLOSÓ algo. Con un tema sin ejercicio concreto ("enséñame

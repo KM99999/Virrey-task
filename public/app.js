@@ -162,6 +162,10 @@ function extraerEjercicio(lsg) {
   // "Resultado: 6x² · Resultado: 4x³", dos resultados sueltos sin ejercicio a la vista. Cuando pasa,
   // se conserva el ejercicio anterior, que es el que el alumno sigue teniendo delante.
   if (/^resultado\s*:/i.test(ejercicio)) return null;
+  // Una pregunta de VOCABULARIO ("¿cómo se llama el 3 que está arriba?") tampoco deja un ejercicio en
+  // pantalla: no hay nada que resolver. Sin esta línea, el siguiente "resuélvelo" pedía desglosar el
+  // rótulo de nombres de la pizarra ("partes: función · variable · …"), que no es un ejercicio.
+  if (/c[oó]mo se llaman?|qu[eé] nombre recibe/i.test(q.texto || "")) return null;
   const respuesta = (q.respuesta && String(q.respuesta).trim()) || "";
   return { ejercicio, respuesta };
 }
@@ -408,8 +412,27 @@ function pideResolverActual(q) {
   return /\bresuelve(la|lo|las|los|mela|melo)\b|resuelve\s+(la|el|este|esta|ese|esa)\s+(ecuacion|ejercicio|problema|operacion)|resuelve\s+(la\s+ecuacion|el\s+ejercicio)|muestra\w*\s*(me)?\s*(la|el)?\s*(solucion|resultado|respuesta)|dame\s+(la|el)?\s*(solucion|resultado|respuesta)|cual\s+es\s+(la|el)\s+(respuesta|resultado|solucion)|como\s+(se\s+resuelve|queda|termina)/.test(n);
 }
 
+// "Sí" / "no" como RESPUESTA a la pregunta del tutor ("¿entendiste?", "¿quieres otro ejemplo?").
+// No es una consulta nueva: es la contestación a algo que preguntó él, así que el tema NO cambia.
+// Queja del cliente, con captura: contestó "sí" en una clase de factorización y el sistema se puso a
+// enseñar derivadas, porque "sí" no encajaba en ningún seguimiento y viajaba sin el tema activo.
+function respuestaSiNo(q) {
+  // Sin puntuación interna: "sí, entendí" y "sí entendí" son la misma respuesta, y una coma no puede
+  // decidir si la clase cambia de tema.
+  const n = q.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[,;:.!¡?¿]+/g, " ").replace(/\s+/g, " ").trim();
+  if (/^(no|noo+|nop|nope|nel|negativo|todavia no|aun no|no mucho|no del todo|la verdad no|no tanto|mas o menos|para nada|no señor|no senor)$/.test(n)) return "no";
+  if (/^(si|sii+|sip|sipi|si claro|si señor|si senor|claro que si|por supuesto|obvio|correcto|exacto|asi es|afirmativo|si entendi|si lo entendi|si entiendo|ya entendi|si gracias|si por favor|si quiero|todo claro|entendido si|yes|yeah|yep|sure)$/.test(n)) return "si";
+  return null;
+}
+
 // Clasifica el tipo de SEGUIMIENTO del tema activo (o null si es un tema nuevo).
 function clasificarSeguimiento(q) {
+  // Lo PRIMERO: un "sí" o un "no" contestan a la pregunta del tutor. "No" es "no lo he entendido"
+  // (re-explicar lo mismo, más sencillo) y "sí" es "sigue" (continuar la clase en el mismo tema).
+  const sn = respuestaSiNo(q);
+  if (sn === "no") return "reexplicar";
+  if (sn === "si") return "continuacion";
   // "Explícame los pasos" o "resuélvela" del ejercicio actual → desglosar ESE ejercicio (solo si hay uno
   // guardado). Se comprueba PRIMERO: si no, la palabra "ejercicio(s)" haría que el clasificador lo tomara
   // como "practicar" y generara ejercicios NUEVOS (el defecto reportado). Sin ejercicio guardado, "pide

@@ -20,7 +20,7 @@ const APP = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
 function cargarFrontend(conEjercicio) {
   let src = conEjercicio ? "let lastExercise = { ejercicio: '2x + 5 = 15', respuesta: '5' };\n" : "let lastExercise = null;\n";
   for (const n of ["esSaludoOMeta", "esSeguimiento", "ajusteNivel", "esContinuacion", "pidePasos",
-    "pideOtroEjercicio", "pideResolverOtro", "pideResolverActual", "nombraOtroTema", "tieneTemaExplicito", "clasificarSeguimiento"]) {
+    "pideOtroEjercicio", "pideResolverOtro", "pideResolverActual", "nombraOtroTema", "tieneTemaExplicito", "respuestaSiNo", "clasificarSeguimiento"]) {
     const i = APP.indexOf(`function ${n}(`), j = APP.indexOf("\n}", i);
     src += APP.slice(i, j + 2) + "\n";
   }

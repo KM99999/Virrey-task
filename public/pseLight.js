@@ -54,6 +54,11 @@ export function extractExpectedAnswer(timeline, questionIndex) {
 export function normalizeAnswer(s) {
   return String(s || "")
     .toLowerCase()
+    // Tildes fuera. Desde que hay preguntas de VOCABULARIO ("¿cómo se llama la letra x?" →
+    // "incógnita"), la respuesta correcta puede llevar tilde y el alumno puede escribirla con o sin
+    // ella: sin normalizar, "incógnita" e "incognita" se comparaban como distintas y una respuesta
+    // buena se calificaba mal. No afecta a las numéricas (ningún número lleva tilde).
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
     // Guiones/menos unicode ("−" U+2212, "–", "—", "‐"…) → "-" ASCII: si el alumno escribe una respuesta
     // NEGATIVA con el "signo menos" real ("−4"), Number("−4") es NaN y se calificaba MAL una respuesta
     // correcta. Misma clase de bug que rompía el parseo del solver.
@@ -566,6 +571,15 @@ export class PSELight {
 export function buildHint(question, board, nivel) {
   const t = `${question || ""} ${board || ""}`.toLowerCase();
   const b = (board || "").toLowerCase();
+  // PREGUNTA DE VOCABULARIO ("¿cómo se llama el 3 que está arriba?"): no se contesta calculando, se
+  // contesta leyendo el nombre en la pizarra. Va la PRIMERA porque el tablero de esa lección nombra el
+  // tema ("derivada", "factorización") y, sin esta parada, el alumno recibía la pista de la regla de
+  // la potencia cuando lo que se le pedía era una PALABRA.
+  if (/c[oó]mo se llaman?|qu[eé] nombre recibe|c[oó]mo se le llama/.test(String(question || "").toLowerCase())) {
+    return nivel >= 2
+      ? "Aquí no hay que calcular: la respuesta es un NOMBRE, y está escrito en la línea de la pizarra que empieza por «partes:»."
+      : "Pista: no hay que calcular nada. Mira en la pizarra la línea con los nombres de cada parte y escribe el que corresponde.";
+  }
   // TEMAS QUE EL MOTOR NO GARANTIZA (integrales, límites, sistemas, matrices, logaritmos,
   // trigonometría…): aquí NO se inventa un método. Antes caían en la rama de aritmética y el alumno
   // recibía, ante una integral, la pista "recuerda el orden: primero × y ÷, luego + y −" —

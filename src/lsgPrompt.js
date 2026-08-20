@@ -1852,6 +1852,19 @@ function esSaludoOMetaBoton(n) {
 // alumno NO ha pedido nada, así que meterle una lección entera es tan malo como mandarlo a la IA;
 // se le responde con una nota breve que retoma el hilo. PEDIR SEGUIR = "siguiente", "adelante",
 // "dale": eso sí es pedir que la clase avance, y ahí toca lección (lo maneja esReteachBoton).
+// RESPUESTA A LA PREGUNTA DEL TUTOR: "sí" / "no". Queja del cliente, con captura: en mitad de una
+// clase de FACTORIZACIÓN el tutor preguntó "¿entendiste?", él contestó "sí", y el sistema se puso a
+// enseñar DERIVADAS. La causa es que "sí" y "no" no estaban en ninguna lista —ni saludo, ni muletilla,
+// ni re-explicación—, así que la consulta salía del motor determinista y la IA, que solo veía la
+// palabra "sí", elegía tema por su cuenta. Es la contestación a una pregunta que hace el PROPIO tutor:
+// nunca puede cambiar de tema. Se traducen a las dos intenciones que el motor ya sabe atender, en vez
+// de abrir un camino nuevo: "no" es un "no entendí" (misma explicación, más sencilla, con la escalera
+// de simplificación) y "sí" es un "sigue" (siguiente ejemplo del MISMO tema).
+// Se comparan sobre el texto SIN puntuación interna: "sí, entendí" y "sí entendí" son la misma
+// respuesta, y la coma no puede decidir si la clase cambia de tema.
+const limpiaSiNo = (n) => String(n || "").replace(/[,;:.!¡?¿]+/g, " ").replace(/\s+/g, " ").trim();
+const AFIRMA_TUTOR = /^(si|sii+|sip|sipi|si claro|si señor|si senor|claro que si|por supuesto|obvio|correcto|exacto|asi es|afirmativo|si entendi|si lo entendi|si entiendo|ya entendi|si gracias|si por favor|si quiero|todo claro|entendido si|yes|yeah|yep|sure)$/;
+const NIEGA_TUTOR = /^(no|noo+|nop|nope|nel|negativo|todavia no|aun no|no mucho|no del todo|la verdad no|no tanto|mas o menos|para nada|no señor|no senor)$/;
 const MULETILLA_ACUSE = /^(ok|okay|oka|vale|listo|lista|perfecto|genial|guay|bien|claro|entendido|entendida|ya|ya esta)\b[\s!.,?]*$/;
 // CORTESÍA: saludo, agradecimiento o despedida. No pide lección, pero tampoco debe salir del motor
 // (con un tema activo se iba a la IA y la pizarra mostraba el texto del alumno).
@@ -1865,9 +1878,13 @@ function cortesiaLSG(tema, query) {
   const n = normBoton(query);
   const despide = /^(adios|chao|hasta luego|nos vemos|bye)/.test(n);
   const agradece = /gracias|thanks|thank you/.test(n);
+  // Un ACUSE ("ok", "vale", "entendido") no es un saludo: contestarle "¡Hola de nuevo!" en mitad de
+  // la clase suena a que el tutor se ha reiniciado. Se separa del saludo real.
+  const acusa = MULETILLA_ACUSE.test(n);
   const t = NOMBRE_TEMA[tema] || "el tema";
   const texto = despide ? `¡Hasta luego! Cuando vuelvas seguimos con ${t} donde lo dejamos.`
     : agradece ? `¡A ti! Seguimos con ${t} cuando quieras.`
+    : acusa ? `Perfecto. Seguimos con ${t} donde lo dejamos.`
     : `¡Hola de nuevo! Estamos con ${t}. Seguimos donde lo dejamos cuando me digas.`;
   return {
     escena: "cortesia", intencion: "explicar", duracion_estimada: 10, _mock: true,
@@ -2048,6 +2065,121 @@ export function aritmeticaAplicadaLSG(op, opts = {}) {
   return { escena: cfg.escena, intencion: "aprender", duracion_estimada: 70, _mock: true, directivas: dir };
 }
 
+// ── PARTES DE UN TEMA: cómo se llama cada pieza ──────────────────────────────
+// Petición del cliente, con captura: preguntó "¿cuáles son las partes de una derivada?" y el sistema
+// le resolvió un ejercicio ("Vamos a derivar x²"). No es un fallo de la IA: la consulta llevaba la
+// palabra "derivada", así que entraba por la rama 1 (resolver) y nadie miraba lo que de verdad se
+// estaba preguntando, que era VOCABULARIO. Pasaba igual en los cinco temas: preguntar por las partes
+// de una ecuación, de una fracción o de una resta devolvía un ejercicio resuelto.
+// La aritmética SÍ tenía los nombres (sumando, minuendo, factor, dividendo…), pero solo dentro de la
+// lección de CONCEPTO: quien preguntaba directamente por ellos no los recibía.
+// Cada lección nombra las piezas sobre UN ejemplo concreto que el alumno está viendo —el nombre solo
+// se retiene si está pegado a un número o a una letra de la pizarra— y termina con una pregunta
+// calificable sobre uno de esos nombres.
+const PARTES = {
+  derivada: {
+    intro: "Vamos a ver cómo se llama cada parte de una derivada. Lo miramos sobre un ejemplo: la función 5x³.",
+    tablero: ["f(x) = 5x³", "partes:  función · variable · coeficiente · exponente · derivada", "f'(x) = 15x²"],
+    frases: [
+      "f de x es la FUNCIÓN: la expresión que vamos a derivar. La letra x es la VARIABLE, la que cambia, y derivamos respecto a ella.",
+      "Dentro de 5x³, el 5 que multiplica delante es el COEFICIENTE, y el 3 de arriba es el EXPONENTE. La x elevada a ese exponente es la POTENCIA.",
+      "El resultado se llama FUNCIÓN DERIVADA y se escribe f prima de x. Aquí, por la regla de la potencia, el exponente 3 baja a multiplicar al coeficiente 5, y al exponente le restamos 1: 5 × 3 = 15, y queda x².",
+    ],
+    preg: "En 5x³, ¿cómo se llama el 3 que está arriba?",
+    resp: "exponente",
+  },
+  lineal: {
+    intro: "Vamos a ver cómo se llama cada parte de una ecuación. Lo miramos sobre 2x + 5 = 15.",
+    tablero: ["2x + 5 = 15", "partes:  primer miembro = segundo miembro", "2 coeficiente · x incógnita · 5 término independiente"],
+    frases: [
+      "Todo lo que está a la izquierda del igual es el PRIMER MIEMBRO: aquí, 2x + 5. Lo que está a la derecha es el SEGUNDO MIEMBRO: aquí, 15.",
+      "La letra x es la INCÓGNITA: el número que no conocemos y que queremos averiguar. El 2 que la multiplica es su COEFICIENTE, y el 5, que va solo y sin letra, es el TÉRMINO INDEPENDIENTE.",
+      "Cada sumando —2x, 5, 15— es un TÉRMINO, y el signo igual es la IGUALDAD: dice que los dos miembros valen lo mismo. Resolver es despejar la incógnita sin romper esa igualdad.",
+    ],
+    preg: "En 2x + 5 = 15, ¿cómo se llama la letra x?",
+    resp: "incognita",
+  },
+  factorizacion: {
+    intro: "Vamos a ver cómo se llama cada parte de una factorización. Lo miramos sobre x² - 9.",
+    tablero: ["x² - 9 = (x - 3)(x + 3)", "partes:  expresión · raíces · factores · producto"],
+    frases: [
+      "x² - 9 es la EXPRESIÓN que vamos a factorizar. Es una DIFERENCIA DE CUADRADOS: una resta entre dos cuadrados, x² y 9.",
+      "La RAÍZ de x² es x, y la raíz de 9 es 3, porque 3 × 3 = 9. Esas dos raíces son las que aparecen dentro de los paréntesis.",
+      "Cada paréntesis, x menos 3 y x más 3, es un FACTOR. Multiplicados forman el PRODUCTO, que es la expresión ya factorizada. Factorizar es exactamente eso: escribir una suma o una resta como un producto de factores.",
+    ],
+    preg: "En (x - 3)(x + 3), ¿cómo se llama cada uno de los dos paréntesis que se multiplican?",
+    resp: "factores",
+  },
+  fraccion: {
+    intro: "Vamos a ver cómo se llama cada parte de una fracción. Lo miramos sobre 3/4.",
+    tablero: ["3/4", "partes:  3 numerador  ·  4 denominador"],
+    frases: [
+      "El número de ABAJO, el 4, es el DENOMINADOR: dice en cuántas partes iguales se ha dividido el todo.",
+      "El número de ARRIBA, el 3, es el NUMERADOR: dice cuántas de esas partes tomamos. Así, 3/4 es quedarse con 3 de las 4 porciones en que se cortó una pizza.",
+      "La rayita del medio es la LÍNEA DE FRACCIÓN y significa dividir. Numerador y denominador, juntos, son los TÉRMINOS de la fracción.",
+    ],
+    preg: "En 3/4, ¿cómo se llama el número de abajo, el 4?",
+    resp: "denominador",
+  },
+};
+const NOMBRE_PARTE = { suma: "suma", resta: "resta", multiplicacion: "multiplicación", division: "división" };
+// Pregunta calificable de las cuatro operaciones (los nombres ya los tiene ARIT en `partes`).
+const PREG_PARTES = {
+  suma: (a, b) => [`En ${a} + ${b}, ¿cómo se llaman los números ${a} y ${b}?`, "sumandos"],
+  resta: (a, b) => [`En ${a} - ${b}, ¿cómo se llama el ${b}, que es lo que se quita?`, "sustraendo"],
+  multiplicacion: (a, b) => [`En ${a} × ${b}, ¿cómo se llaman los números ${a} y ${b}?`, "factores"],
+  division: (a, b) => [`En ${a} ÷ ${b}, ¿cómo se llama el ${a}, que es lo que se reparte?`, "dividendo"],
+};
+// Lección de VOCABULARIO del tema. Devuelve null si el tema no tiene nombres que enseñar (entonces la
+// consulta sigue su curso normal y no se pierde nada).
+export function partesLSG(tema, opts = {}) {
+  const dir = [{ tipo: "avatar", accion: "sonreir" }];
+  const cfg = ARIT[tema];
+  if (cfg && PREG_PARTES[tema]) {
+    // ARITMÉTICA: se nombran las partes sobre un ejemplo del NIVEL en el que va la clase, no sobre
+    // números fijos — si no, preguntar por los nombres en mitad de una clase de tres cifras la haría
+    // retroceder a dos (el retroceso del que ya se quejó el cliente, por otra puerta).
+    const { ejemplo } = elegirBoton(cfg.lista, opts, tema);
+    const E = cfg.pasos(...parseAB(ejemplo));
+    const [a, b] = parseAB(E.texto);
+    const eq = E.aproximado ? "≈" : "=";
+    const [pregTxt, resp] = PREG_PARTES[tema](a, b);
+    dir.push(
+      { tipo: "hablar", texto: `Vamos a ver cómo se llama cada parte de una ${NOMBRE_PARTE[tema]}. Lo miramos sobre ${E.texto}.` },
+      { tipo: "pizarra", accion: "escribir", contenido: `${E.texto} ${eq} ${E.answer}` },
+      { tipo: "pizarra", accion: "escribir", contenido: cfg.rotuloPartes },
+      { tipo: "hablar", texto: cfg.partes(a, b, E.answer) },
+      { tipo: "hablar", texto: "Saber cómo se llama cada número te sirve para entender los enunciados: cuando te pidan «halla la diferencia» o «halla el producto», ya sabrás qué operación te están pidiendo." },
+      { tipo: "preguntar", texto: pregTxt, respuesta: resp, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
+    );
+    return { escena: "partes_tema", intencion: "aprender", duracion_estimada: 45, _mock: true, directivas: dir };
+  }
+  const p = PARTES[tema];
+  if (!p) return null;
+  dir.push({ tipo: "hablar", texto: p.intro });
+  for (let i = 0; i < p.frases.length; i++) {
+    if (p.tablero[i]) dir.push({ tipo: "pizarra", accion: "escribir", contenido: p.tablero[i] });
+    dir.push({ tipo: "hablar", texto: p.frases[i] });
+  }
+  for (let i = p.frases.length; i < p.tablero.length; i++) dir.push({ tipo: "pizarra", accion: "escribir", contenido: p.tablero[i] });
+  dir.push({ tipo: "preguntar", texto: p.preg, respuesta: p.resp, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" });
+  return { escena: "partes_tema", intencion: "aprender", duracion_estimada: 50, _mock: true, directivas: dir };
+}
+// ¿La consulta pregunta por los NOMBRES de las piezas del tema, en vez de pedir que se lo resuelvan?
+// Se excluye "partes iguales" y "repartir", que en aritmética son parte del enunciado, no vocabulario.
+function pidePartesTema(nq) {
+  if (/\bpartes?\s+iguales\b|\brepart/.test(nq)) return false;
+  // Se exige que la pregunta sea POR LOS NOMBRES, no que la palabra "partes" aparezca de pasada: en
+  // aritmética se habla todo el rato de "8 partes" dentro de los enunciados, y bastaba con eso para
+  // que un problema de reparto se convirtiera en una lección de vocabulario.
+  return /\b(partes|componentes|elementos|miembros)\s+(?:de|del)\b/.test(nq)
+    || /\b(cuales|cuantas)\s+son\s+las\s+(partes|componentes|elementos)\b/.test(nq)
+    || /\bcomo\s+se\s+llaman?\b/.test(nq)
+    || /\bque\s+nombre\s+recibe/.test(nq)
+    || /\bnombres?\s+(?:de\s+(?:los|las|cada)|que\s+recibe)/.test(nq)
+    || /\bterminos\s+de\s+(?:una?|la|el)\b/.test(nq);
+}
+
 export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", currentTopic = "", previo = "", historial = [], cursores = null } = {}) {
   // Normaliza los guiones/menos unicode ("−" U+2212, "–", "—", "‐"…) a "-" ASCII EN EL PUNTO DE ENTRADA, para
   // que TODOS los generadores y clasificadores deterministas (lineal, aritmética, factorización, intención)
@@ -2183,6 +2315,16 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   //    vida cotidiana" / "con la variación de la velocidad" y recibía cálculos o ejercicios numéricos.
   const nQ = normBoton(query);
   const ctxTema = normBoton(`${contexto} ${currentTopic}`);
+  // 0.a) ¿PREGUNTA POR LAS PARTES del tema ("¿cuáles son las partes de una derivada?")? Entonces
+  //      quiere los NOMBRES de las piezas, no un ejercicio resuelto. Se comprueba ANTES que nada
+  //      porque la palabra del tema ("derivada") viene en la propia consulta y, sin esta parada, la
+  //      rama 1 se la lleva y resuelve un ejercicio: es literalmente lo que reportó el cliente
+  //      ("no me explica las partes de una derivada… y me salió con otro tema").
+  if (pidePartesTema(nQ)) {
+    const temaPartes = temaNucleo(query) || temaNucleo(contexto) || temaNucleo(currentTopic);
+    const leccPartes = temaPartes ? partesLSG(temaPartes, { evitar: previo, seguimiento: esSeg, nivel, cursores }) : null;
+    if (leccPartes) { marcarAplicado(cursores, false); return commonRet(temaPartes, leccPartes); }
+  }
   const pideAplicado = /vida cotidiana|vida real|vida diaria|mundo real|cotidian|d[ií]a a d[ií]a|para qu[eé]\s+(sirve|sirven|se usa|se utiliza)|aplicaci[oó]n|aplicad|caso real|ejemplo real|situaci[oó]n real|ejemplo pr[aá]ctico|en la pr[aá]ctica|variaci[oó]n de (?:la )?velocidad|\bvelocidad\b|\baceleraci[oó]n\b/.test(nQ);
   // Exclusión pedida ("que no sea un coche") y si pide OTRO/DIFERENTE ejemplo. Si la lección ACTIVA es
   // aplicada (vida real) y el alumno pide otro/diferente/"que no sea X", debe seguir siendo APLICADO
@@ -2194,8 +2336,14 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   // arriba, antes de repartir por temas, porque el contador de insistencia tiene que actualizarse en
   // TODAS las ramas: si solo se tocara en la rama que re-explica, una petición normal ("dame otro
   // ejemplo") no lo reiniciaría y el alumno se quedaría en modo simplificado para el resto de la clase.
+  // Un "no" a secas contestando a "¿entendiste?" es exactamente un "no lo entendí": entra por aquí
+  // para heredar la escalera de simplificación (misma idea, cada vez más sencilla) en lugar de acabar
+  // en la IA, que además se llevaba la clase a otro tema.
+  const nSiNo = limpiaSiNo(nQ);
+  const dijoNo = NIEGA_TUTOR.test(nSiNo);
+  const dijoSi = AFIRMA_TUTOR.test(nSiNo);
   const esReexplica = !pideOtroDiferente
-    && (seguimiento === "reexplicar" || /no (lo )?entend|no comprend|no me qued|explica\w*\s*(me|lo)?\s*mejor|otra vez|de nuevo|nuevamente|por qu[eé]/.test(nQ));
+    && (dijoNo || seguimiento === "reexplicar" || /no (lo )?entend|no comprend|no me qued|explica\w*\s*(me|lo)?\s*mejor|otra vez|de nuevo|nuevamente|por qu[eé]/.test(nQ));
   const nivelRe = nivelReexplicacion(cursores, esReexplica);
   const ctxAplicado = enModoAplicado(cursores) || esContextoAplicado(`${previo} ${contexto} ${currentTopic}`);
   // Si el alumno EXCLUYE la rapidez/velocidad ("otro ejemplo diferente a la rapidez") en un tema de
@@ -2357,7 +2505,10 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   const genReteach = ctxAritAplicado
     ? (o) => aritmeticaAplicadaLSG(temaActivo, o) || GEN_RESUELTA[temaActivo](o)
     : (GEN_APLICADA[temaActivo] || GEN_RESUELTA[temaActivo]);
-  if (temaActivo && genReteach && esReteachBoton(query, seguimiento)) {
+  // El "sí" y el "no" del alumno entran por la red de seguridad como cualquier otro seguimiento: con
+  // "no" se re-explica lo mismo más sencillo (esReexplica ya es true) y con "sí" se pasa al siguiente
+  // ejemplo del MISMO tema. Lo que no puede pasar, y pasaba, es que se cambie de tema.
+  if (temaActivo && genReteach && (esReteachBoton(query, seguimiento) || dijoSi || dijoNo)) {
     // `seguimiento: true` es imprescindible: sin él, elegirBoton devuelve SIEMPRE el primer ejemplo
     // de la lista en vez de rotar con `evitar`, así que un "y otro más" que llega por esta red de
     // seguridad (porque la frase no se reconoció como seguimiento) repetía la misma lección.

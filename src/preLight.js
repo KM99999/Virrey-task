@@ -33,7 +33,11 @@ export function normDashes(s) {
 // CONFIABLES para SALTARSE los "fixers" heurísticos de práctica (fixPracticeAnswer, enforceSingleQuestion),
 // que se diseñaron para reparar la salida imperfecta de Gemini. Al no aplicarlos, cada botón queda
 // AISLADO: cambiar la lógica de reparación de un tema no puede alterar los otros tres.
-const ESCENAS_CONFIABLES = new Set(["lineal_resuelta", "derivada_resuelta", "factorizacion_resuelta", "fraccion_resuelta", "suma_resuelta", "resta_resuelta", "multiplicacion_resuelta", "division_resuelta"]);
+const ESCENAS_CONFIABLES = new Set(["lineal_resuelta", "derivada_resuelta", "factorizacion_resuelta", "fraccion_resuelta", "suma_resuelta", "resta_resuelta", "multiplicacion_resuelta", "division_resuelta",
+  // Lección de VOCABULARIO ("las partes de una derivada"): su pregunta se contesta con una PALABRA
+  // ("exponente"), no con un número. Sin marcarla confiable, los reparadores de práctica intentarían
+  // recalcular la respuesta y la dejarían sin calificar.
+  "partes_tema"]);
 
 // Etiquetas de control válidas para si_correcto / si_incorrecto.
 const CONTROL_LABELS = new Set(["continuar", "felicitar", "mostrar_otro_ejemplo"]);
@@ -795,9 +799,57 @@ function attachAltExample(lsg, pasos) {
 // está en pantalla. Reconstruimos esos pasos de forma DETERMINISTA (sin llamar a la IA):
 //   - ecuación lineal  → `solveLinearSteps` (mismos pasos verificados de la calificación);
 //   - aritmética/fórmula → mostramos el ejercicio, el método y el resultado exacto.
+// Desglose TÉRMINO A TÉRMINO de una derivada polinómica. Hasta ahora el desglose sabía re-narrar una
+// ecuación lineal y una factorización, pero NO una derivada: caía en la rama genérica, que solo sabe
+// escribir "Resultado: …" y una frase de método. Así, pedir "resuélvelo" sobre un ejercicio de
+// derivadas producía una pizarra con el resultado y ninguna explicación de dónde salía — y, encima,
+// con la frase de método equivocada (defecto reportado por el cliente, con captura).
+// Devuelve { expr, pasos:[{escribe, explica}], resultado } o null si no es un polinomio derivable.
+function derivadaPasos(expr) {
+  // Se quita el rótulo del ejercicio ("Ejercicio 1: …") y el verbo ("deriva", "derivada de"), que no
+  // forman parte de la función.
+  const limpio = String(expr || "")
+    .replace(/^\s*ejercicio\s*\d*\s*[:.]?\s*/i, "")
+    .replace(/^\s*(?:halla|calcula|obt[eé]n)\s+la\s+derivada\s+de\s*/i, "")
+    .replace(/deriv\w*\s*(?:de\s*)?/i, "")
+    .replace(/[.?¿]+\s*$/, "")
+    .trim();
+  const total = computeDerivative("derivada de " + limpio);
+  if (!total) return null;
+  const t = normDashes(limpio.toLowerCase())
+    .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]+/g, (m) => "^" + [...m].map((c) => "⁰¹²³⁴⁵⁶⁷⁸⁹".indexOf(c)).join(""));
+  const s = t.replace(/[^0-9x+\-*·^.]/gi, "");
+  const terms = s.match(/[+-]?(?:\d+(?:\.\d+)?)?[*·]?x(?:\^-?\d+)?|[+-]?\d+(?:\.\d+)?/g);
+  if (!terms || terms.join("").length !== s.length) return null;
+  const bonito = (u) => u.replace(/^\+/, "").replace(/\^(-?\d+)/g, (_, e) => toSuper(e));
+  const pasos = [];
+  for (const term of terms) {
+    const mm = term.match(/^([+-]?)(\d+(?:\.\d+)?)?[*·]?x(?:\^(-?\d+))?$/);
+    if (!mm) {
+      pasos.push({ escribe: `${bonito(term)}  →  0`, explica: `El término ${bonito(term)} es una constante: no cambia, así que su derivada es 0.` });
+      continue;
+    }
+    const a = (mm[1] === "-" ? -1 : 1) * (mm[2] != null ? Number(mm[2]) : 1);
+    const n = mm[3] != null ? Number(mm[3]) : 1;
+    const d = computeDerivative("derivada de " + term) || "0";
+    pasos.push({
+      escribe: `${bonito(term)}  →  ${d}`,
+      explica: n === 1
+        ? `En ${bonito(term)} la x está elevada a 1: el exponente baja a multiplicar y el nuevo exponente es 0, así que queda ${d}.`
+        : `En ${bonito(term)} el coeficiente es ${a} y el exponente ${n}: los multiplicamos, ${a} × ${n} = ${a * n}, y al exponente le restamos 1, así que queda ${d}.`,
+    });
+  }
+  if (!pasos.length) return null;
+  return { expr: bonito(limpio.replace(/\^(-?\d+)/g, (_, e) => toSuper(e))), pasos, resultado: total };
+}
+
 // Frase de método según el tipo de operación (breve, sin revelar cuentas ajenas al ejercicio).
-function metodoDe(ejercicio) {
+function metodoDe(ejercicio, tema = "") {
   const t = String(ejercicio || "").toLowerCase();
+  const tm = String(tema || "").toLowerCase();
+  // DERIVAR se nombra si lo dice el enunciado o el TEMA de la clase. Va lo primero: una derivada
+  // puede llevar cuadrados y restas, y sin esta línea se narraba como otra cosa.
+  if (/deriv/.test(t) || /deriv/.test(tm)) return "Derivamos término a término con la regla de la potencia: el exponente baja a multiplicar al coeficiente y al exponente le restamos 1. Los números solos desaparecen, porque una constante no cambia.";
   if (/velocidad|rapidez|distancia|tiempo/.test(t)) return "Aplicamos la fórmula que relaciona los datos (por ejemplo, velocidad = distancia ÷ tiempo) y calculamos con los números del enunciado.";
   if (/[aá]rea|per[ií]metro|volumen/.test(t)) return "Usamos la fórmula de la figura y sustituimos las medidas del enunciado.";
   if (/%|por\s*ciento/.test(t)) return "Un porcentaje se calcula multiplicando la cantidad por el número y dividiendo entre 100.";
@@ -807,7 +859,13 @@ function metodoDe(ejercicio) {
   // La factorización se comprueba ANTES que la resta: "x² - 9" lleva un signo menos, y sin esta línea
   // se narraba como una resta ("restar es quitar") mientras la pizarra factorizaba. El alumno oía una
   // explicación que no correspondía a lo que veía.
-  if (/factoriz|\)\s*\(/.test(t) || (/[a-z]\s*(?:\^\s*2|²)/.test(t) && /-/.test(t))) return "Una diferencia de cuadrados es una resta entre dos cuadrados: se reescribe como el producto de la resta por la suma de sus raíces.";
+  // La FACTORIZACIÓN solo se nombra si el enunciado o el tema lo dicen (o si la expresión ya viene
+  // factorizada). Antes bastaba con que hubiera un cuadrado y un signo menos, y por eso un ejercicio
+  // de DERIVADAS —"4x³ - 3x² + 2x"— se narraba como una diferencia de cuadrados mientras la pizarra
+  // mostraba su derivada: dos operaciones distintas en la misma pantalla. Lo vio el cliente.
+  if (/factoriz/.test(t) || /\)\s*\(/.test(t) || /factoriz/.test(tm)) return "Una diferencia de cuadrados es una resta entre dos cuadrados: se reescribe como el producto de la resta por la suma de sus raíces.";
+  // Expresión ALGEBRAICA sin operación declarada: no se adivina cuál es, se dice lo único que consta.
+  if (/[a-z]\s*(?:\^|[²³⁴⁵⁶⁷⁸⁹])/.test(t)) return "Trabajamos la expresión término a término, aplicando a cada uno la regla que le corresponde.";
   if (/-|\bmenos\b|resta/.test(t)) return "Restar es quitar: al primer número le quitamos el segundo.";
   if (/\+|\bm[aá]s\b|suma/.test(t)) return "Sumar es juntar las cantidades.";
   return "Lo resolvemos con calma, paso a paso, aplicando la operación que pide el ejercicio.";
@@ -816,9 +874,16 @@ function metodoDe(ejercicio) {
 // Construye un LSG (secuencial) que NARRA la solución del ejercicio dado, paso a paso.
 // `respuesta` (opcional) es la respuesta ya calculada por el PRE Light para ese ejercicio.
 // Devuelve un LSG crudo o null si no hay ejercicio.
-export function buildStepByStepLSG(ejercicio, respuesta) {
+export function buildStepByStepLSG(ejercicio, respuesta, tema = "") {
   const ej = str(ejercicio);
   if (!ej) return null;
+  // QUÉ hay que hacer con la expresión. La misma "4x³ - 3x² + 2x" se puede derivar o factorizar, y el
+  // texto del ejercicio no siempre lo dice ("Ejercicio 1: 4x³ - 3x² + 2x", tal cual sale de la pizarra
+  // de práctica). Manda, por este orden: lo que pida el enunciado y, si calla, el TEMA ACTIVO de la
+  // clase. Sin esto el desglose lo decidía por el ASPECTO de la expresión y podía narrar una operación
+  // mientras calculaba otra.
+  const tj = ej.toLowerCase(), tm = String(tema || "").toLowerCase();
+  const quiereDerivar = /deriv/.test(tj) || (!/factoriz/.test(tj) && /deriv/.test(tm));
   const directivas = [
     { tipo: "avatar", accion: "pensando" },
     { tipo: "hablar", texto: "Claro, repasemos juntos —paso a paso— cómo se resuelve este ejercicio." },
@@ -830,7 +895,22 @@ export function buildStepByStepLSG(ejercicio, respuesta) {
   // explicación que no correspondía— justo en el punto donde el alumno ya había dicho que no entendía.
   // Va DESPUÉS de la lineal (una ecuación de primer grado no es esto) y se salta si el enunciado pide
   // explícitamente derivar (la misma expresión sirve para las dos cosas; manda lo que se pide).
-  const fac = /deriv/.test(ej.toLowerCase()) ? null : factorizacionPasos(ej);
+  // DERIVADA, término a término. Va antes que la factorización porque, cuando la clase es de
+  // derivadas, "x² - 9" hay que DERIVARLO, no factorizarlo.
+  const der = quiereDerivar ? derivadaPasos(ej) : null;
+  if (der) {
+    directivas.push({ tipo: "pizarra", accion: "escribir", contenido: der.expr });
+    directivas.push({ tipo: "hablar", texto: "Derivamos con la regla de la potencia: el exponente baja a multiplicar al coeficiente y al exponente le restamos 1. Si hay varios términos, se hace uno a uno." });
+    for (const paso of der.pasos) {
+      directivas.push({ tipo: "hablar", texto: paso.explica });
+      directivas.push({ tipo: "pizarra", accion: "escribir", contenido: paso.escribe });
+    }
+    directivas.push({ tipo: "pizarra", accion: "escribir", contenido: `derivada de ${der.expr} = ${der.resultado}` });
+    directivas.push({ tipo: "hablar", texto: `Juntando lo que salió de cada término, la derivada de ${der.expr} es ${der.resultado}.` });
+    directivas.push({ tipo: "hablar", texto: "Ese es el procedimiento. Si quieres, lo intentamos ahora con otro ejemplo parecido." });
+    return { escena: "desglose_pasos", intencion: "explicar", directivas };
+  }
+  const fac = quiereDerivar ? null : factorizacionPasos(ej);
   if (fac) {
     directivas.push({ tipo: "pizarra", accion: "escribir", contenido: fac.expr });
     directivas.push({ tipo: "hablar", texto: `Primero identificamos los dos cuadrados: ${fac.izq} y ${fac.der}.` });
@@ -855,7 +935,7 @@ export function buildStepByStepLSG(ejercicio, respuesta) {
     // Aritmética / fórmula / problema verbal: enunciado + método + resultado exacto.
     const ans = str(respuesta) || computeAnswer(ej) || "";
     directivas.push({ tipo: "pizarra", accion: "escribir", contenido: ej.length <= 80 ? ej : "Repasemos el ejercicio" });
-    directivas.push({ tipo: "hablar", texto: metodoDe(ej) });
+    directivas.push({ tipo: "hablar", texto: metodoDe(ej, tema) });
     if (ans) {
       directivas.push({ tipo: "pizarra", accion: "escribir", contenido: `Resultado: ${ans}` });
       directivas.push({ tipo: "hablar", texto: `Siguiendo esos pasos, el resultado es ${ans}.` });
@@ -868,8 +948,8 @@ export function buildStepByStepLSG(ejercicio, respuesta) {
 // Finaliza el LSG de desglose SIN la maquinaria de práctica (no añade preguntas ni "otro ejemplo"):
 // solo numera, sanea (corrige operaciones), arma `pasos` y estima duración. Devuelve
 // { lsg, pasos, warnings } o null si no hay ejercicio reconocible.
-export function processStepByStep(ejercicio, respuesta) {
-  const raw = buildStepByStepLSG(ejercicio, respuesta);
+export function processStepByStep(ejercicio, respuesta, tema = "") {
+  const raw = buildStepByStepLSG(ejercicio, respuesta, tema);
   if (!raw) return null;
   const warnings = [];
   const counter = { n: 0 };

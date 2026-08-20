@@ -680,6 +680,80 @@ async function unitTests() {
     check(`aritmética [${op}]: el nivel NO baja al pasar a la lección aplicada`, minimo >= 3, `mínimo de cifras vistas: ${minimo}`);
   }
 
+  // ── LAS PARTES DE CADA TEMA (vocabulario), Y QUE PREGUNTAR POR ELLAS NO CAMBIE DE TEMA.
+  //    Queja del cliente, con captura: preguntó "¿cuáles son las partes de una derivada?" y el
+  //    sistema le resolvió un ejercicio ("Vamos a derivar x²"). La palabra del tema venía en la
+  //    consulta, así que la rama de RESOLVER se la llevaba y nadie miraba qué se estaba preguntando.
+  for (const [tema, consulta, nombres] of [
+    ["derivada", "¿cuáles son las partes de una derivada?", ["funcion", "variable", "coeficiente", "exponente"]],
+    ["lineal", "¿cuáles son las partes de una ecuación lineal?", ["miembro", "incognita", "coeficiente", "termino independiente"]],
+    ["factorizacion", "¿cuáles son las partes de una factorización?", ["factor", "producto", "raiz"]],
+    ["fraccion", "¿cuáles son las partes de una fracción?", ["numerador", "denominador"]],
+    ["suma", "¿cuáles son las partes de una suma?", ["sumando", "suma"]],
+    ["resta", "¿cuáles son las partes de una resta?", ["minuendo", "sustraendo", "diferencia"]],
+    ["multiplicacion", "¿cuáles son las partes de una multiplicación?", ["factor", "producto"]],
+    ["division", "¿cuáles son las partes de una división?", ["dividendo", "divisor", "cociente"]],
+  ]) {
+    const r = correrBoton({ query: consulta, cursores: {} });
+    const plano = ((r?.flat || []).map((d) => `${d.texto || ""} ${d.contenido || ""}`).join(" "))
+      .toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+    check(`partes [${tema}]: responde con el VOCABULARIO, no con un ejercicio resuelto`,
+      !!r && r.tema === tema && r.lsg.escena === "partes_tema", r ? `${r.tema}/${r.lsg.escena}` : "null (se iría a la IA)");
+    check(`partes [${tema}]: nombra todas las piezas`, nombres.every((w) => plano.includes(w)),
+      nombres.filter((w) => !plano.includes(w)).join(", ") || "");
+    // La lección termina con UNA pregunta calificable, y su respuesta es una PALABRA (no un número):
+    // si se colara un número, es que se ha convertido otra vez en un ejercicio de cálculo.
+    check(`partes [${tema}]: una sola pregunta, y se contesta con un nombre`,
+      !!r && r.nPreg === 1 && /^[a-záéíóúñ ]{4,}$/i.test(String(r.q?.respuesta || "")),
+      `nPreg=${r?.nPreg} resp="${r?.q?.respuesta}"`);
+  }
+  // …y "partes iguales" / "repartir" NO son una pregunta de vocabulario: son enunciados de división.
+  for (const q of ["reparte 20 caramelos entre 4", "dividir 12 en partes iguales"]) {
+    const r = correrBoton({ query: q, cursores: {} });
+    check(`partes: "${q}" sigue siendo un ejercicio, no una lección de nombres`,
+      !!r && r.lsg.escena !== "partes_tema", r ? r.lsg.escena : "null");
+  }
+
+  // ── "SÍ" / "NO" SON RESPUESTAS A LA PREGUNTA DEL TUTOR: NUNCA CAMBIAN DE TEMA.
+  //    Queja del cliente, con captura: en una clase de FACTORIZACIÓN el tutor preguntó "¿entendiste?",
+  //    él contestó "sí", y el sistema se puso a enseñar DERIVADAS. "Sí" y "no" no estaban en ninguna
+  //    lista, así que la consulta salía del motor determinista y la IA elegía tema por su cuenta.
+  for (const [tema, abrir] of [["factorizacion", "Explícame la factorización"], ["derivada", "Enséñame derivadas"],
+    ["lineal", "Enséñame ecuaciones lineales"], ["fraccion", "Enséñame fracciones"], ["resta", "Enséñame a restar"]]) {
+    for (const q of ["si", "sí", "sí, entendí", "no", "no del todo", "claro que sí"]) {
+      const r = correrBoton({ query: q, contexto: "", currentTopic: abrir, cursores: {} });
+      check(`sí/no [${tema}]: "${q}" se queda en el tema (no sale a la IA)`,
+        !!r && r.tema === tema, r ? `tema=${r.tema}` : "null (se iría a la IA y elegiría tema)");
+    }
+  }
+
+  // ── EL DESGLOSE PASO A PASO HACE —Y NARRA— LA OPERACIÓN DEL TEMA, NO LA QUE PAREZCA.
+  //    Queja del cliente, con captura: pidió "resuélvelo" sobre "Ejercicio 1: 4x³ - 3x² + 2x" (una
+  //    práctica de DERIVADAS) y la pizarra mostró el resultado de la derivada con la explicación de
+  //    una DIFERENCIA DE CUADRADOS encima. Dos operaciones distintas en la misma pantalla.
+  {
+    const texto = (d) => d ? d.lsg.directivas.map((x) => `${x.texto || ""} ${x.contenido || ""}`).join(" ") : "";
+    const dPoli = processStepByStep("Ejercicio 1: 4x³ - 3x² + 2x", "12x² - 6x + 2", "Enséñame derivadas");
+    check("desglose: un ejercicio de derivadas NO se narra como diferencia de cuadrados",
+      !/diferencia de cuadrados/i.test(texto(dPoli)), texto(dPoli).slice(0, 90));
+    check("desglose: la derivada se explica TÉRMINO A TÉRMINO (no solo el resultado)",
+      /4x³\s*→\s*12x²/.test(texto(dPoli)) && /-3x²\s*→\s*-6x/.test(texto(dPoli)) && /2x\s*→\s*2/.test(texto(dPoli)),
+      texto(dPoli).slice(0, 120));
+    check("desglose: el resultado de la derivada es correcto",
+      /12x²\s*-\s*6x\s*\+\s*2/.test(texto(dPoli)), texto(dPoli).slice(0, 90));
+    // La MISMA expresión, según el tema: en factorización se factoriza; en derivadas se deriva.
+    const dFac = processStepByStep("x² - 9", "", "Explícame la factorización");
+    check("desglose: 'x² - 9' en clase de factorización se FACTORIZA",
+      /\(x - 3\)\(x \+ 3\)/.test(texto(dFac)) && !/regla de la potencia/i.test(texto(dFac)), texto(dFac).slice(0, 90));
+    const dDer = processStepByStep("x² - 9", "", "Enséñame derivadas");
+    check("desglose: 'x² - 9' en clase de derivadas se DERIVA",
+      /= 2x\b/.test(texto(dDer)) && !/diferencia de cuadrados/i.test(texto(dDer)), texto(dDer).slice(0, 90));
+    // Sin tema no se adivina: se dice lo único que consta, nunca una operación que no se ha hecho.
+    const dSin = processStepByStep("Ejercicio 1: 4x³ - 3x² + 2x", "12x² - 6x + 2", "");
+    check("desglose: sin tema, no se inventa la operación",
+      !/diferencia de cuadrados|restar es quitar/i.test(texto(dSin)), texto(dSin).slice(0, 90));
+  }
+
   // ── PRONUNCIACIÓN EN ESPAÑOL de TODO lo que el tutor dice en voz alta.
   //    Queja del cliente: "en lugar de decir 'ene', dice 'yeni'". El motor de voz del navegador no se
   //    puede corregir desde aquí; lo que sí se controla es QUÉ se le da a leer. Se recoge todo lo
@@ -700,6 +774,16 @@ async function unitTests() {
         ["dame un ejemplo de la vida real", "continuacion"], ["no entendí", "reexplicar"]]) {
         for (let i = 0; i < 3; i++) meter(correrBoton({ query: q, seguimiento: seg, contexto: abrir, currentTopic: abrir, cursores }));
       }
+      // …y la lección de VOCABULARIO del tema, que también se dice en voz alta y trae notación nueva
+      // (f(x), f'(x), 5x³, 3/4): si algo de eso se leyera crudo, se oiría como ruido.
+      meter(correrBoton({ query: "¿cuáles son las partes de este tema?", contexto: abrir, currentTopic: abrir, cursores: {} }));
+    }
+    for (const q of ["¿cuáles son las partes de una derivada?", "¿cuáles son las partes de una ecuación lineal?",
+      "¿cuáles son las partes de una factorización?", "¿cuáles son las partes de una fracción?",
+      "¿cuáles son las partes de una suma?", "¿cuáles son las partes de una resta?",
+      "¿cuáles son las partes de una multiplicación?", "¿cuáles son las partes de una división?"]) {
+      const r = correrBoton({ query: q, cursores: {} });
+      if (r) for (const d of r.flat || []) if ((d.tipo === "hablar" || d.tipo === "preguntar") && d.texto) dichos.add(d.texto);
     }
     const malos = [];
     for (const t of dichos) {
@@ -1517,7 +1601,7 @@ async function unitTests() {
     // "resuelve ESTA" y veía otra distinta. Ahora el servidor resuelve la suya o avisa; nunca cambia.
     let srcSin = "let lastExercise = null;\n";
     for (const n of ["esSaludoOMeta", "esSeguimiento", "ajusteNivel", "esContinuacion", "pidePasos",
-      "pideOtroEjercicio", "pideResolverOtro", "pideResolverActual", "nombraOtroTema", "tieneTemaExplicito", "clasificarSeguimiento"]) {
+      "pideOtroEjercicio", "pideResolverOtro", "pideResolverActual", "nombraOtroTema", "tieneTemaExplicito", "respuestaSiNo", "clasificarSeguimiento"]) {
       const i = APP.indexOf(`function ${n}(`), j = APP.indexOf("\n}", i);
       srcSin += APP.slice(i, j + 2) + "\n";
     }
@@ -1574,7 +1658,7 @@ async function unitTests() {
     const APP = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
     let src = "let lastExercise = { ejercicio: '2x³', respuesta: '6x²' };\n";
     for (const n of ["esSaludoOMeta", "esSeguimiento", "ajusteNivel", "esContinuacion", "pidePasos",
-      "pideOtroEjercicio", "pideResolverOtro", "pideResolverActual", "nombraOtroTema", "tieneTemaExplicito", "clasificarSeguimiento"]) {
+      "pideOtroEjercicio", "pideResolverOtro", "pideResolverActual", "nombraOtroTema", "tieneTemaExplicito", "respuestaSiNo", "clasificarSeguimiento"]) {
       const i = APP.indexOf(`function ${n}(`), j = APP.indexOf("\n}", i);
       src += APP.slice(i, j + 2) + "\n";
     }
