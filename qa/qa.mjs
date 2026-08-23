@@ -867,6 +867,31 @@ async function unitTests() {
     check(`pronunciación: "${expr}" se lee bien`, debe.test(normalizeForSpeech(expr)), normalizeForSpeech(expr));
   }
 
+  // ── UN PRODUCTO NO ES UNA SUMA. Defecto de MATEMÁTICAS en el motor garantizado.
+  //    `computeDerivative` admite el "*" como separador del coeficiente ("3*x^2" = 3·x²). Por eso leía
+  //    "x^3 * x^4" como dos TÉRMINOS SUMADOS y devolvía "4x³ + 3x²", cuando la derivada es 7x⁶. No es
+  //    una laguna: es una respuesta rotundamente equivocada salida de la parte GARANTIZADA, y esta
+  //    misma función es la que CALIFICA al alumno. Encontrado revisando en producción lo que devuelve
+  //    la ruta de IA para la regla del producto.
+  for (const t of ["derivada de x³ * x⁴", "derivada de x*x", "derivada de x²·x³", "derivada de 3x² * x",
+    "derivada de f(x) = x³ * x⁴", "derivada de x^2*x^3"]) {
+    check(`producto de potencias ["${t}"]: sin respuesta, nunca una suma inventada`,
+      computeDerivative(t) === null, JSON.stringify(computeDerivative(t)));
+  }
+  // …y el "*" que separa un COEFICIENTE de la x sigue funcionando (no se ha cerrado de más).
+  for (const [t, esp] of [["derivada de 3*x^2", "6x"], ["derivada de 2*x^3 + 4*x", "6x² + 4"],
+    ["derivada de 5x² - 3x", "10x - 3"], ["derivada de x²", "2x"], ["derivada de 3x⁴ - 2x²", "12x³ - 4x"]]) {
+    check(`coeficiente con "*" ["${t}"]: se sigue derivando bien`, computeDerivative(t) === esp,
+      `→ ${JSON.stringify(computeDerivative(t))}, esperado ${JSON.stringify(esp)}`);
+  }
+  // Y la LECCIÓN tampoco recorta el producto al primer factor: "deriva x³ · x⁴" derivaba solo "x³",
+  // así que el alumno pedía una cosa y veía otra, sin aviso.
+  for (const q of ["deriva x³ * x⁴", "deriva x·x", "deriva 3x² * x", "deriva x^2*x^3"]) {
+    const r = leccionBotonLSG({ query: q, cursores: {} });
+    check(`producto de potencias ["${q}"]: no se deriva solo el primer factor`, r === null,
+      r ? (r.pizarras || []).join(" · ") || r.tema : "");
+  }
+
   // ── PRONUNCIACIÓN EN ESPAÑOL de TODO lo que el tutor dice en voz alta.
   //    Queja del cliente: "en lugar de decir 'ene', dice 'yeni'". El motor de voz del navegador no se
   //    puede corregir desde aquí; lo que sí se controla es QUÉ se le da a leer. Se recoge todo lo

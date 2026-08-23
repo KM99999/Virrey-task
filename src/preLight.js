@@ -293,6 +293,13 @@ export function computeDerivative(text) {
   // Aísla SOLO los caracteres matemáticos (quita conectores "de", "la"… que quedan delante).
   const s = fn.replace(/[^0-9x+\-*·^.]/gi, "");
   if (!s || !/x/.test(s)) return null; // sin variable x → no es una función derivable aquí
+  // PRODUCTO DE DOS FACTORES CON x ("x³ · x⁴", "x·x", "3x² * x"): eso es la REGLA DEL PRODUCTO, que
+  // este motor NO calcula. El tokenizador de abajo admite el "*" como separador del coeficiente
+  // ("3*x^2" = 3·x²) y, sin esta puerta, leía "x^3*x^4" como dos TÉRMINOS SUMADOS y devolvía
+  // "4x³ + 3x²" cuando la derivada es 7x⁶. No es una laguna: es una respuesta rotundamente
+  // equivocada salida del motor GARANTIZADO, y encima esta función es la que CALIFICA al alumno.
+  // El "*" que separa un coeficiente de la x no entra aquí, porque va precedido de una cifra.
+  if (/x(?:\^-?\d+)?\s*[*·]/.test(s)) return null;
   // Tokeniza en monomios con signo ("5x^3", "-6x^2", "9x", "-2") y deriva TÉRMINO A TÉRMINO (regla de
   // la potencia: a·xⁿ → a·n·xⁿ⁻¹; constante → 0). Si sobra algo que no encaje, no arriesgamos (null).
   const terms = s.match(/[+-]?(?:\d+(?:\.\d+)?)?[*·]?x(?:\^-?\d+)?|[+-]?\d+(?:\.\d+)?/g);

@@ -2426,6 +2426,10 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
     // comprueba sobre la CONSULTA ACTUAL (no sobre el tema activo), para que un "otro ejemplo"
     // posterior siga teniendo su lección determinista de polinomios.
     if (OP_ENTRE_FUNCIONES.test(nQ)) return null;
+    // …y el producto escrito como EXPRESIÓN ("deriva x³ · x⁴"), que no nombra "funciones" pero es la
+    // misma regla del producto. Antes la expresión se recortaba al PRIMER factor y se derivaba solo
+    // "x³": el alumno pedía una cosa y veía otra, sin aviso ninguno.
+    if (/x\s*(?:\^\s*-?\d+|[⁰¹²³⁴⁵⁶⁷⁸⁹]+)?\s*[*·×]\s*\d*\s*x/i.test(nQ)) return null;
     // SUMA y RESTA sí están cubiertas: derivar un polinomio ES derivarlo término a término, que es
     // exactamente la regla de la suma y la de la resta. Cuando el alumno lo pregunta, se le enseña
     // con un POLINOMIO —los monomios no muestran nada de esto— y se nombra la regla por la que
