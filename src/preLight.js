@@ -1518,9 +1518,17 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
   //    la que se pregunta; solo si la pregunta es GENÉRICA ("¿la derivada de f(x)?", que da null) se
   //    busca la función en la pizarra (derivadaBoardLimpio recorre todas las pizarras).
   if (/deriv/i.test(q.texto) || (board && /deriv/i.test(board))) {
+    // Si la PREGUNTA trae su PROPIA función ("¿cuál es la derivada de h(x) = x³·x⁴?"), la respuesta
+    // tiene que salir de ESA función. Buscarla en la pizarra devuelve la del EJEMPLO —otra función
+    // distinta— y califica al alumno con un resultado que no corresponde a lo que se le preguntó.
+    // Visto en producción: la pregunta era h(x) = x³·x⁴ (derivada 7x⁶) y se calificaba con 3x², que
+    // es la derivada del x³ que estaba en la pizarra del ejemplo. La pizarra solo se consulta cuando
+    // la pregunta es GENÉRICA ("¿cuál es la derivada de f(x)?", sin decir cuánto vale f), que es
+    // justo el caso para el que se añadió ese respaldo.
+    const fnEnPregunta = /[a-z]\s*\(\s*[a-z]\s*\)\s*=/i.test(q.texto);
     const der = computeDerivative(q.texto) || derivarFuncion(q.texto)
-      || (() => { const dl = derivadaBoardLimpio(); return dl && dl.respuesta; })()
-      || (board ? derivarFuncion(board) : null);
+      || (fnEnPregunta ? null : (() => { const dl = derivadaBoardLimpio(); return dl && dl.respuesta; })())
+      || (fnEnPregunta ? null : (board ? derivarFuncion(board) : null));
     if (der) { setResp(der); return; }
     // REGLA DURA: si la pregunta es una DERIVADA y NO pudimos calcularla de forma determinista
     // (polinomio, producto, regla de la cadena…), NO la calificamos con el número de la IA (no deriva

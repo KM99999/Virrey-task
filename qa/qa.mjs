@@ -884,6 +884,29 @@ async function unitTests() {
     check(`coeficiente con "*" ["${t}"]: se sigue derivando bien`, computeDerivative(t) === esp,
       `→ ${JSON.stringify(computeDerivative(t))}, esperado ${JSON.stringify(esp)}`);
   }
+  // Cuando la PREGUNTA trae su propia función, la nota tiene que salir de ESA función y no de la que
+  // haya en la pizarra (que es la del EJEMPLO). En producción, "¿la derivada de h(x) = x³·x⁴?" se
+  // calificaba con 3x² —la derivada del x³ del ejemplo— cuando la respuesta es 7x⁶.
+  {
+    const leccionProd = (preg) => ({ escena: "explicacion", intencion: "aprender", directivas: [
+      { tipo: "hablar", texto: "Vamos a derivar el producto de dos funciones." },
+      { tipo: "pizarra", accion: "escribir", contenido: "u(x) = x³" },
+      { tipo: "pizarra", accion: "escribir", contenido: "v(x) = x⁴" },
+      { tipo: "preguntar", texto: preg, respuesta: "3x²", esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
+    ]});
+    for (const preg of ["¿Cuál es la derivada de h(x) = x³ * x⁴ usando la regla del producto, por favor?",
+      "¿Cuál es la derivada de h(x) = x²·sen(x)?"]) {
+      const { lsg } = processLSG(leccionProd(preg), "aprender", "producto");
+      const q = flattenLSG(lsg).find((d) => d.tipo === "preguntar");
+      check(`función en la PREGUNTA ["${preg.slice(0, 42)}…"]: no se califica con la del ejemplo`,
+        !!q && !String(q.respuesta || "").trim(), `resp=${JSON.stringify(q?.respuesta)}`);
+    }
+    // …y si la función de la pregunta SÍ es derivable, se sigue calificando (no se ha cerrado de más).
+    const { lsg } = processLSG(leccionProd("¿Cuál es la derivada de f(x) = x⁵?"), "aprender", "potencia");
+    const q = flattenLSG(lsg).find((d) => d.tipo === "preguntar");
+    check("función en la PREGUNTA derivable: se sigue calificando bien (x⁵ → 5x⁴)",
+      !!q && String(q.respuesta || "").replace(/\s/g, "") === "5x⁴", `resp=${JSON.stringify(q?.respuesta)}`);
+  }
   // Y la LECCIÓN tampoco recorta el producto al primer factor: "deriva x³ · x⁴" derivaba solo "x³",
   // así que el alumno pedía una cosa y veía otra, sin aviso.
   for (const q of ["deriva x³ * x⁴", "deriva x·x", "deriva 3x² * x", "deriva x^2*x^3"]) {
