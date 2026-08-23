@@ -1407,8 +1407,13 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
     // las calcula → tema no lineal → nunca se confía en la respuesta (posiblemente errónea) de la IA.
     || /\b(sen|sin|cos|tan|cot|sec|csc|ln|log|arc\w+)\s*\(|√|\blim\b|\bderivada\s+de\s+(sen|cos|tan|log|ln|e\^)/i.test(_txtTodo)
     || /[a-z]\s*[+\-]\s*[a-z]\s*=/i.test(_boardTodo);
+  const esLeccionDerivadas = flat.some((d) => /deriv/i.test(d.texto || "") || /deriv/i.test(d.contenido || ""));
   // La ecuación ORIGINAL del ejercicio (la primera pizarra que es una ecuación LINEAL real, no la solución).
-  const ecOriginal = temaNoLineal ? undefined
+  // Una lección de DERIVADAS tampoco puede fabricar una práctica LINEAL: lo que parece una ecuación en su
+  // pizarra es la derivada ya calculada ("C'(q) = 2q"), no un ejercicio de despejar. Sin esta puerta, la
+  // clase acababa pidiendo "resuelve x + 5 = 12" en mitad de una explicación de derivadas — el mismo
+  // defecto off-topic que el cliente ya reportó con los sistemas, entrando por otra puerta.
+  const ecOriginal = (temaNoLineal || esLeccionDerivadas) ? undefined
     : flat.map((d) => d.contenido).find((c) => c && solveLinearFromText(c) !== null && !esResuelta(c));
   // Plantea una ecuación de práctica NUEVA y DISTINTA con su solución, o null. SOLO si la lección tiene
   // una ecuación lineal REAL (ecOriginal); si no (factorización, derivadas, otro tema), devuelve null y
@@ -1446,7 +1451,6 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
     }
     return null;
   };
-  const esLeccionDerivadas = flat.some((d) => /deriv/i.test(d.texto || "") || /deriv/i.test(d.contenido || ""));
   // Reescribe la pregunta (texto + respuesta) para calificar el ejercicio del tablero.
   const setPregunta = (texto, val) => {
     q.texto = texto; setResp(val);
@@ -1459,7 +1463,13 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
   // la respuesta. (La IA a veces genera este texto directamente, no solo la rama genérica.) Se detecta
   // una "letra = número" con la letra aislada (precedida de inicio/espacio/":"; así "3x = 12" NO cuela)
   // y se reemplaza por una ecuación NUEVA y distinta. Va PRIMERO para atrapar cualquier redacción.
-  const presentaResuelta = /(?:^|[\s:(])[a-z]\s*=\s*-?\d+(?:[.,]\d+)?(?=$|[\s.?!¿)])/i.test(q.texto)
+  // EXCEPCIÓN: "con q = 5", "si x = 3", "sustituyendo…". Ese "letra = número" es un DATO que se da para
+  // sustituir, no la solución del ejercicio delatada. Sin esta excepción, una pregunta de sustitución
+  // perfectamente válida —"la derivada es 2q, ¿cuánto vale con q = 5?"— se tomaba por un enunciado que
+  // se delata a sí mismo y se reemplazaba por una ecuación lineal inventada, ajena a la clase.
+  const datoParaSustituir = /sustitu|\b(con|si|para|cuando|siendo|donde)\s+[a-z]\s*=\s*-?\d/i.test(q.texto);
+  const presentaResuelta = !datoParaSustituir
+    && /(?:^|[\s:(])[a-z]\s*=\s*-?\d+(?:[.,]\d+)?(?=$|[\s.?!¿)])/i.test(q.texto)
     && /resu[eé]lv|resuelv|cu[aá]nto\s+vale|calcul|hall|despej|valor\s+de/i.test(q.texto);
   if (presentaResuelta) {
     const np = nuevaPractica();
@@ -1509,6 +1519,18 @@ function fixPracticeAnswer(lsg, pasos, verificacion) {
     // (polinomio, producto, regla de la cadena…), NO la calificamos con el número de la IA (no deriva
     // de forma fiable). Mejor sin nota (comprensión) que dar por incorrecta una respuesta correcta.
     if (/deriv/i.test(q.texto)) { delResp(); return; }
+  }
+
+  // 0.1) PREGUNTA DE DERIVADA ESCRITA CON PRIMA ("¿cuál es g'(x)?"), sin la palabra "derivada". La
+  //      regla dura de arriba no la reconocía —busca "deriv" en el texto— y la pregunta acababa
+  //      calificada por los pasos ARITMÉTICOS de más abajo, que sacan un número suelto de la frase.
+  //      Visto en el sistema en producción: "Si g(x) = 3x²·cos(x), ¿cuál es g'(x)?" quedaba calificada
+  //      con "2", cuando la respuesta es 6x·cos(x) - 3x²·sin(x). Un alumno que contestara BIEN recibía
+  //      un "incorrecto", que es la peor forma de fallar y la primera queja histórica del cliente.
+  //      Sin cálculo verificado no hay nota: se deja como pregunta de comprensión.
+  if (esLeccionDerivadas && /[a-z]\s*['′’]\s*\(\s*[a-z]\s*\)/i.test(q.texto)
+      && !computeDerivative(q.texto) && !derivarFuncion(q.texto)) {
+    delResp(); return;
   }
 
   // 0.5) FACTORIZACIÓN (diferencia de cuadrados): se calcula la factorización CORRECTA (x²-9 → (x-3)(x+3))

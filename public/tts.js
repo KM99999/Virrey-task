@@ -59,6 +59,17 @@ export function normalizeForSpeech(text) {
   //         y así el alumno oye una expresión que NO es la factorización. Es un error de matemáticas
   //         hablado, no solo de estilo.
   const letraNombre = (l) => NOMBRE_LETRA[l.toLowerCase()] || l;
+  // NOMBRES DE FUNCIÓN (seno, coseno, logaritmo…) ANTES que la regla de "letra(variable)": esa regla
+  // mira la letra pegada al paréntesis, así que se comía la ÚLTIMA del nombre y "sin(x)" se leía
+  // "si ENE de equis", y "cos(x)", "co ESE de equis". Se oye en las lecciones que genera la IA para lo
+  // que queda fuera del motor determinista (la regla del producto, por ejemplo), que también se
+  // escuchan. El nombre solo se sustituye si va pegado a un paréntesis, para que el "sin" de "sin
+  // embargo" siga siendo la preposición.
+  const NOMBRE_FUNCION = { sin: "seno", sen: "seno", cos: "coseno", tan: "tangente", cot: "cotangente",
+    sec: "secante", csc: "cosecante", ln: "logaritmo natural", log: "logaritmo", exp: "exponencial",
+    arcsen: "arcoseno", arcsin: "arcoseno", arccos: "arcocoseno", arctan: "arcotangente", lim: "límite" };
+  s = s.replace(/\b(arcsen|arcsin|arccos|arctan|sin|sen|cos|tan|cot|sec|csc|ln|log|exp|lim)\s*\(\s*([^()]{1,24}?)\s*\)/gi,
+    (m, f, arg) => ` ${NOMBRE_FUNCION[f.toLowerCase()] || f} de ${arg} `);
   s = s.replace(/\)\s*\(/g, ") por (");                                  // producto de binomios
   s = s.replace(/([a-zñ])\s*'\s*\(\s*([a-zñ])\s*\)/gi, (_, f, v) => `${letraNombre(f)} prima de ${letraNombre(v)}`);
   s = s.replace(/([a-zñ])\s*\(\s*([a-zñ])\s*\)/gi, (_, f, v) => `${letraNombre(f)} de ${letraNombre(v)}`);

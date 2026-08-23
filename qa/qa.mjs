@@ -810,6 +810,63 @@ async function unitTests() {
     }
   }
 
+  // ── NUNCA SE CALIFICA LO QUE NO SE HA PODIDO CALCULAR.
+  //    Encontrado revisando en PRODUCCIÓN la lección que ahora genera la IA para la regla del producto
+  //    (que ya no la contesta el motor determinista). La pregunta que dejaba —"Si g(x) = 3x²·cos(x),
+  //    ¿cuál es g'(x)?"— venía calificada con "2", cuando la respuesta es 6x·cos(x) - 3x²·sin(x): un
+  //    alumno que contestara BIEN habría recibido un "incorrecto", que es la peor forma de fallar y la
+  //    primera queja histórica del cliente. La regla dura que ya existía buscaba la palabra "derivada"
+  //    en la pregunta, y esta usa la NOTACIÓN PRIMA, así que la pregunta caía en los pasos aritméticos
+  //    y estos sacaban un número suelto de la frase.
+  {
+    const leccionProducto = (respIA) => ({
+      escena: "explicacion", intencion: "aprender",
+      directivas: [
+        { tipo: "hablar", texto: "Hoy vamos a aprender cómo derivar el producto de dos funciones." },
+        { tipo: "pizarra", accion: "escribir", contenido: "Regla del Producto: (u·v)' = u'·v + u·v'" },
+        { tipo: "pizarra", accion: "escribir", contenido: "u(x) = x²" },
+        { tipo: "pizarra", accion: "escribir", contenido: "u'(x) = 2x" },
+        { tipo: "pizarra", accion: "escribir", contenido: "Si g(x) = 3x² * cos(x), ¿cuál es g'(x)?" },
+        { tipo: "preguntar", texto: "Si g(x) = 3x² * cos(x), ¿cuál es g'(x)?", respuesta: respIA, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
+      ],
+    });
+    for (const respIA of ["2", "6x", "10", ""]) {
+      const { lsg } = processLSG(leccionProducto(respIA), "aprender", "regla del producto");
+      const q = flattenLSG(lsg).find((d) => d.tipo === "preguntar");
+      check(`derivada con notación prima [IA dijo "${respIA}"]: se queda SIN nota, no con un número inventado`,
+        !!q && !String(q.respuesta || "").trim(), `resp=${JSON.stringify(q?.respuesta)}`);
+    }
+  }
+  // Una pregunta de SUSTITUCIÓN ("la derivada es 2q, ¿cuánto vale con q = 5?") es válida y del tema:
+  // el "q = 5" es un DATO que se da, no la solución delatada. Se tomaba por lo segundo y se cambiaba
+  // por una ecuación lineal inventada ("resuelve x + 5 = 12") en mitad de una clase de derivadas —
+  // el mismo defecto off-topic que el cliente reportó con los sistemas, por otra puerta.
+  {
+    const sust = { escena: "explicacion", intencion: "aprender", directivas: [
+      { tipo: "hablar", texto: "La derivada del costo es C'(q) = 2q." },
+      { tipo: "pizarra", accion: "escribir", contenido: "C'(q) = 2q" },
+      { tipo: "preguntar", texto: "La derivada ya está calculada, C'(q) = 2q. Sustituyendo, ¿cuánto vale con q = 5?", respuesta: "10", esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
+    ]};
+    const { lsg } = processLSG(sust, "aprender", "sustituir");
+    const flat = flattenLSG(lsg);
+    const q = flat.find((d) => d.tipo === "preguntar");
+    check("sustitución: se conserva la pregunta del tema (no se cambia por una ecuación inventada)",
+      !!q && /sustituyendo|cu[aá]nto vale con q/i.test(q.texto), q?.texto);
+    check("sustitución: en una clase de derivadas no aparece una ecuación lineal ajena",
+      !flat.some((d) => d.tipo === "pizarra" && /^\s*x\s*[+-]\s*\d+\s*=\s*\d+\s*$/.test(String(d.contenido || ""))),
+      flat.filter((d) => d.tipo === "pizarra").map((d) => d.contenido).join(" · "));
+  }
+  // PRONUNCIACIÓN de los nombres de función. La regla de "letra(variable)" se comía la última letra
+  // del nombre: "sin(x)" se leía "si ENE de equis" y "cos(x)", "co ESE de equis". Se oye en las
+  // lecciones que genera la IA para lo que queda fuera del motor determinista.
+  for (const [expr, debe] of [
+    ["sin(x)", /seno de equis/], ["cos(x)", /coseno de equis/], ["ln(x)", /logaritmo natural de equis/],
+    ["f'(x) = 2x·sin(x) + x²·cos(x)", /efe prima de equis.*seno de equis.*coseno de equis/],
+    ["Sin embargo, la derivada de x² es 2x.", /^Sin embargo/],
+  ]) {
+    check(`pronunciación: "${expr}" se lee bien`, debe.test(normalizeForSpeech(expr)), normalizeForSpeech(expr));
+  }
+
   // ── PRONUNCIACIÓN EN ESPAÑOL de TODO lo que el tutor dice en voz alta.
   //    Queja del cliente: "en lugar de decir 'ene', dice 'yeni'". El motor de voz del navegador no se
   //    puede corregir desde aquí; lo que sí se controla es QUÉ se le da a leer. Se recoge todo lo
