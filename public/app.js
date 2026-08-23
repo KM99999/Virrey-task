@@ -204,6 +204,13 @@ function siguienteTramo({ acerto, aciertos, tramos, max }) {
   const n = acerto ? aciertos + 1 : 0;
   // Si falla, primero se refuerza con un ejemplo resuelto antes de volver a examinarle.
   if (!acerto) return { query: "muéstrame otro ejemplo resuelto", aciertos: 0, aviso: "No pasa nada: vemos otro ejemplo resuelto y lo intentas de nuevo…" };
+  // PRIMER TRAMO: cómo se llama cada parte del tema. El cliente pidió este orden explícitamente
+  // —"primero enseña qué es, luego las partes, luego las operaciones"—, y la lección de vocabulario
+  // ya existe: lo único que faltaba era que la clase la enlazara sola, en vez de esperar a que el
+  // alumno se acordara de preguntar por ella.
+  if (tramos === 0) {
+    return { query: "¿cuáles son las partes de este tema?", aciertos: n, aviso: "Antes de seguir, veamos cómo se llama cada parte…" };
+  }
   // VARIAR EL TIPO DE LECCIÓN, no solo el ejercicio. Queja del cliente: "enseña unos cuantos
   // ejercicios y se queda pausado, sin avanzar" y "no pasa de tema: está derivando polinomios y
   // sigue, y sigue". Cada tercer tramo se pasa al ejemplo APLICADO del mismo tema (para qué sirve en

@@ -754,6 +754,62 @@ async function unitTests() {
       !/diferencia de cuadrados|restar es quitar/i.test(texto(dSin)), texto(dSin).slice(0, 90));
   }
 
+  // ── UNA OPERACIÓN QUE NO SABEMOS HACER NO SE CONTESTA CON OTRA QUE SÍ.
+  //    Queja del cliente, con captura: preguntó "¿cómo se multiplica dos funciones en las derivadas?"
+  //    y recibió la lección de la regla de la potencia ("vamos a derivar x²") — "un mensaje
+  //    incoherente". La consulta llevaba la palabra "derivada", así que se capturaba igual aunque el
+  //    motor determinista no calcule el producto de dos funciones. En fracciones era peor: preguntar
+  //    cómo se multiplican dos fracciones enseñaba a SUMARLAS, y eso no es una laguna, es un método
+  //    equivocado. Estas consultas salen ahora del motor determinista (las explica la IA, Nivel 3),
+  //    igual que ya hacían el seno, el logaritmo y la raíz.
+  for (const q of ["¿cómo se multiplica dos funciones en las derivadas?", "¿cómo se multiplican dos funciones al derivar?",
+    "regla del producto en derivadas", "¿cómo se divide dos funciones en las derivadas?", "derivada de un cociente",
+    "derivada de una función compuesta", "¿cómo se multiplican dos fracciones?", "¿cómo se restan las fracciones?",
+    "¿cómo se dividen dos fracciones?", "multiplicación de fracciones"]) {
+    check(`operación no implementada ["${q}"]: no se responde con otra operación`,
+      leccionBotonLSG({ query: q, cursores: {} }) === null,
+      (() => { const r = leccionBotonLSG({ query: q, cursores: {} }); return r ? `${r.tema}/${r.lsg.escena}` : ""; })());
+  }
+  // …y las que SÍ sabemos hacer siguen siendo deterministas (no se ha abierto un agujero).
+  for (const [q, tema] of [["¿cómo se suman las fracciones?", "fraccion"], ["Enséñame fracciones", "fraccion"],
+    ["Resuelve 1/2 + 1/3", "fraccion"], ["Enséñame derivadas", "derivada"], ["deriva 3x⁴ - 2x²", "derivada"],
+    ["¿cuáles son las partes de una fracción?", "fraccion"], ["una fracción es dividir un todo en partes iguales", "fraccion"]]) {
+    const r = correrBoton({ query: q, cursores: {} });
+    check(`operación cubierta ["${q}"]: sigue siendo determinista (${tema})`, !!r && r.tema === tema,
+      r ? `tema=${r.tema}` : "null");
+  }
+  // La SUMA y la RESTA de derivadas sí están cubiertas —derivar un polinomio ES derivarlo término a
+  // término—, así que al preguntar por ellas hay que enseñar un POLINOMIO y nombrar la regla; con un
+  // monomio no se ve nada de lo que se ha preguntado.
+  for (const q of ["¿cómo se suman las derivadas?", "¿cómo se restan dos derivadas?"]) {
+    const r = correrBoton({ query: q, cursores: {} });
+    const todo = ((r?.flat || []).map((d) => `${d.texto || ""} ${d.contenido || ""}`).join(" ")).toLowerCase();
+    check(`derivadas ["${q}"]: se enseña con un POLINOMIO, no con un monomio`,
+      !!r && (r.pizarras || []).some((c) => /[+-]/.test(String(c).replace(/^derivada de /, "")) && /x/.test(String(c))),
+      (r?.pizarras || []).slice(0, 3).join(" · "));
+    check(`derivadas ["${q}"]: se nombra la regla por la que preguntó`,
+      /derivada de una suma es la suma de las derivadas/.test(todo), todo.slice(0, 90));
+  }
+
+  // ── LA CLASE ENSEÑA LAS PARTES ANTES DE ENCADENAR EJERCICIOS.
+  //    Orden que pidió el cliente: "primero enseña qué es, luego las partes, luego las operaciones".
+  //    La lección de vocabulario ya existía; faltaba que la clase la enlazara sola.
+  {
+    const { readFileSync } = await import("node:fs");
+    const APP = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
+    const i = APP.indexOf("function siguienteTramo("), j = APP.indexOf("\n}", i);
+    const { siguienteTramo } = new Function(APP.slice(i, j + 2) + "\nreturn { siguienteTramo };")();
+    const primero = siguienteTramo({ acerto: true, aciertos: 0, tramos: 0, max: 12 });
+    check("la clase enseña las PARTES en el primer tramo encadenado", /partes/.test(primero.query || ""), primero.query);
+    // …y esa petición produce lección determinista de VOCABULARIO en los ocho temas.
+    for (const ctx of ["Enséñame derivadas", "Enséñame ecuaciones lineales", "Explícame la factorización",
+      "Enséñame fracciones", "Enséñame a sumar", "Enséñame a restar", "Enséñame a multiplicar", "Enséñame a dividir"]) {
+      const r = correrBoton({ query: primero.query, currentTopic: ctx, cursores: {} });
+      check(`clase encadenada [${ctx}]: el tramo de partes es determinista`,
+        !!r && r.lsg.escena === "partes_tema", r ? r.lsg.escena : "null");
+    }
+  }
+
   // ── PRONUNCIACIÓN EN ESPAÑOL de TODO lo que el tutor dice en voz alta.
   //    Queja del cliente: "en lugar de decir 'ene', dice 'yeni'". El motor de voz del navegador no se
   //    puede corregir desde aquí; lo que sí se controla es QUÉ se le da a leer. Se recoge todo lo

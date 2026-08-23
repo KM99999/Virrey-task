@@ -1266,6 +1266,10 @@ export function derivadaResueltaLSG(opts = {}) {
   );
   // En un POLINOMIO se muestra de dónde sale cada pieza (término a término), no solo el resultado:
   // sin este desglose el alumno veía aparecer "12x³ - 4x" sin saber qué parte venía de cada término.
+  // Se nombra la REGLA DE LA SUMA / DE LA RESTA cuando el alumno ha preguntado justamente por ella.
+  // Es lo que ya se está haciendo al derivar el polinomio término a término; lo único que faltaba era
+  // decir cómo se llama. (Petición del cliente: "cada tema debe enseñar las operaciones".)
+  if (opts.reglaSuma) dir.push({ tipo: "hablar", texto: "Y así se suman y se restan las derivadas: la derivada de una SUMA es la suma de las derivadas, y la de una RESTA, la resta de las derivadas. Por eso un polinomio se deriva término a término, cada uno por su cuenta, y luego se juntan con sus signos." });
   const desglose = pm ? null : desglosePolinomio(ejemplo);
   if (desglose) dir.push({ tipo: "pizarra", accion: "escribir", contenido: `Término a término:  ${desglose.join("   ·   ")}` });
   dir.push(
@@ -2065,6 +2069,24 @@ export function aritmeticaAplicadaLSG(op, opts = {}) {
   return { escena: cfg.escena, intencion: "aprender", duracion_estimada: 70, _mock: true, directivas: dir };
 }
 
+// ── OPERACIONES QUE EL MOTOR DETERMINISTA NO CALCULA ─────────────────────────
+// Un mismo defecto en dos temas, y de los que peor sientan: la consulta pide una OPERACIÓN que la
+// lección determinista no sabe hacer, pero lleva la palabra del tema, así que se capturaba igual y
+// se respondía con la operación que SÍ sabe. El alumno preguntaba cómo se multiplican dos funciones
+// y recibía "vamos a derivar x²"; preguntaba cómo se multiplican dos fracciones y aprendía a
+// sumarlas. Queja del cliente, con captura: "me muestra un mensaje incoherente".
+// Lo correcto es lo que ya hacían el seno, el logaritmo y la raíz en derivadas: salir del motor
+// determinista y que lo explique la IA (Nivel 3), en vez de contestar a otra pregunta.
+//
+// DERIVADAS. Lo determinista es la regla de la POTENCIA sobre polinomios y, con ella, la suma y la
+// resta término a término. El producto y el cociente de DOS FUNCIONES, y la regla de la cadena, no.
+const OP_ENTRE_FUNCIONES = /regla del (producto|cociente|cadena)|funcion(?:es)? compuesta|(producto|cociente|multiplicacion|division) de (?:dos )?funciones|deriva\w* de un (producto|cociente)|\b(multiplic|divid)\w*\s+(?:dos\s+|las\s+)?funciones/;
+// FRACCIONES. Lo determinista es la SUMA (mismo y distinto denominador). Restar, multiplicar y
+// dividir fracciones, no. Aquí el defecto era peor que en derivadas, porque la respuesta equivocada
+// PARECE una respuesta: quien pregunta cómo se multiplican dos fracciones y ve sumar numeradores se
+// lleva un método incorrecto, no una laguna.
+const OP_NO_SUMA_FRAC = /(rest|multiplic|divid)\w*\s+(?:dos\s+|las\s+|una\s+|la\s+)?fracc|\b(resta|multiplicacion|division|producto|cociente)\s+de\s+fracc|fracc\w*\s+(?:se\s+)?(restan|multiplican|dividen)\b/;
+
 // ── PARTES DE UN TEMA: cómo se llama cada pieza ──────────────────────────────
 // Petición del cliente, con captura: preguntó "¿cuáles son las partes de una derivada?" y el sistema
 // le resolvió un ejercicio ("Vamos a derivar x²"). No es un fallo de la IA: la consulta llevaba la
@@ -2400,11 +2422,22 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   // 1) DERIVADAS. Si nombra una función NO polinómica (trig, log, raíz, eˣ) → null (lo hace Gemini, Nivel 3).
   if (/deriv/.test(n)) {
     if (/\b(sen|sin|cos|tan|cot|sec|csc|log|ln|exp|ra[ií]z|sqrt)\b|√|e\s*\^/.test(n)) return null;
+    // Producto, cociente o regla de la cadena entre DOS FUNCIONES: no lo calcula este motor. Se
+    // comprueba sobre la CONSULTA ACTUAL (no sobre el tema activo), para que un "otro ejemplo"
+    // posterior siga teniendo su lección determinista de polinomios.
+    if (OP_ENTRE_FUNCIONES.test(nQ)) return null;
+    // SUMA y RESTA sí están cubiertas: derivar un polinomio ES derivarlo término a término, que es
+    // exactamente la regla de la suma y la de la resta. Cuando el alumno lo pregunta, se le enseña
+    // con un POLINOMIO —los monomios no muestran nada de esto— y se nombra la regla por la que
+    // preguntó, en vez de dejarle deducirla.
+    const reglaSuma = /\b(suma|sumar|suman|sumando|resta|restar|restan|restando)\w*\b/.test(nQ);
     // La función a derivar se toma COMPLETA (polinomio incluido): "deriva 3x⁴ - 2x²" debe derivar
     // 3x⁴ - 2x², no solo 3x⁴ (antes se perdía el resto y se respondía a otra pregunta).
     const instancia = extraerFuncionDerivable(base);
     marcarAplicado(cursores, false);
-    return commonRet("derivada", derivadaResueltaLSG({ evitar: previo, instancia, seguimiento: esSeg, nivel, concepto: conceptoOn, practica: pidePracticar, cursores }));
+    return commonRet("derivada", derivadaResueltaLSG({ evitar: previo, instancia, seguimiento: esSeg,
+      nivel: (reglaSuma && !instancia && !nivelPedido) ? "dificil" : nivel,
+      concepto: conceptoOn, practica: pidePracticar, reglaSuma, cursores }));
   }
 
   // 2) FACTORIZACIÓN (diferencia de cuadrados). Con una expresión concreta NO factorizable así
@@ -2426,6 +2459,9 @@ export function leccionBotonLSG({ query = "", seguimiento = "", contexto = "", c
   //    otros 3 temas); antes una fracción concreta caía a Gemini (lección no determinista, sin práctica
   //    calificable) — hueco detectado en QA.
   const fracInst = extraerFraccionSuma(base);
+  // Restar, multiplicar o dividir fracciones no lo calcula este motor: antes de capturar la consulta
+  // por llevar la palabra "fracción", se comprueba que la operación pedida sea una que sí sabemos.
+  if (!fracInst && OP_NO_SUMA_FRAC.test(nQ)) return null;
   if (/fracc/.test(n) || fracInst) {
     const evitarFrac = (String(previo).match(/\d+\s*\/\s*\d+\s*[+\-]\s*\d+\s*\/\s*\d+/) || [])[0] || "";
     // La instancia concreta se usa SOLO en una consulta NUEVA ("5/8 + 2/8"); en un seguimiento ("otro
