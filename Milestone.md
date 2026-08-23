@@ -3,8 +3,8 @@
 **Proyecto:** Math IA — prototipo web de tutor de matemáticas (avatar + pizarra + voz).
 **En vivo:** https://math-ia.onrender.com · versión desplegada verificable en `/api/health`.
 **Repositorio:** https://github.com/KM99999/Virrey-task (rama `main`).
-**Periodo:** 9 de julio – 20 de agosto de 2026 · **213 commits**.
-**Estado a 20 de agosto de 2026:** commit `527cd34` desplegado; Etapas 1 y 2 completas y verificadas.
+**Periodo:** 9 de julio – 20 de agosto de 2026 · **218 commits**.
+**Estado a 20 de agosto de 2026:** commit `d40eee3` desplegado; Etapas 1 y 2 completas y verificadas.
 
 > Este documento es el registro COMPLETO y vigente del desarrollo. `Milestone1.md` es una
 > instantánea anterior (hasta el 11 de agosto) que se conserva por trazabilidad.
@@ -405,13 +405,52 @@ De paso: un "ok" en mitad de la clase respondía "¡Hola de nuevo!", como si el 
 reiniciado; una respuesta con tilde ("incógnita") se calificaba mal **por la tilde**; y una pregunta
 de nombres recibía la pista de la regla de la potencia en vez de remitir al rótulo de la pizarra.
 
+### Etapa U — Lo que no se sabe hacer, no se finge (20 de agosto)
+
+El cliente preguntó "¿cómo se multiplica dos funciones en las derivadas?" y recibió la lección de la
+regla de la potencia. La consulta lleva la palabra "derivada", así que la rama determinista la
+capturaba **aunque el motor no calcule el producto de dos funciones**, y respondía con la operación
+que sí sabe. El mismo agujero estaba en fracciones y allí era peor: preguntar cómo se multiplican dos
+fracciones enseñaba a **sumarlas**. Eso no es una laguna; es un método equivocado con aspecto de
+respuesta. Ahora ambas salen del motor determinista y las explica la IA (Nivel 3), igual que ya hacían
+el seno, el logaritmo y la raíz.
+
+La **suma y la resta de derivadas** sí estaban cubiertas desde el principio —derivar un polinomio ES
+derivarlo término a término—, pero no se decía. Al preguntar por ellas se enseña ahora con un
+polinomio y se nombra la regla. Y el orden que pidió el cliente —"primero qué es, luego las partes,
+luego las operaciones"— se cumple solo: la clase encadenada enlaza la lección de vocabulario en el
+primer tramo, en los ocho temas.
+
+**Lo que apareció al comprobarlo en producción.** Abrir la ruta de IA hizo alcanzables tres defectos
+que estaban esperando ahí, y que ninguna consulta de las que se prueban habitualmente escribe:
+
+1. **Un producto se leía como una suma.** `computeDerivative` admite el `*` como separador del
+   coeficiente (`3*x^2` es 3·x²), así que leía `x³ * x⁴` como dos términos sumados y devolvía
+   **4x³ + 3x²** cuando la derivada es **7x⁶**. No es una laguna: es una respuesta rotundamente
+   equivocada salida de la parte **garantizada**, y esa misma función es la que **califica** al alumno.
+2. **La nota salía de la función del ejemplo.** Rechazado ya el cálculo del producto, el sistema
+   buscaba una función derivable en la pizarra y encontraba la del ejemplo: calificaba
+   "¿la derivada de h(x) = x³·x⁴?" con **3x²**. Un alumno que respondiera bien recibía un
+   "incorrecto" — la peor forma de fallar, y la primera queja histórica del cliente.
+3. **Notación prima sin la palabra "derivada".** La regla dura que evita calificar lo que no se ha
+   podido calcular buscaba la palabra en la pregunta; con `g'(x)` no la encontraba y la pregunta
+   acababa calificada por los pasos aritméticos, que sacan un número suelto de la frase.
+
+Los tres tienen la misma raíz: **cuando no podía calcular lo que se preguntaba, el sistema seguía
+buscando algo que calcular en vez de admitir que no lo sabía.**
+
+De paso, dos más: una pregunta de **sustitución** ("la derivada es C'(q) = 2q, ¿cuánto vale con
+q = 5?") se cambiaba por una ecuación lineal ajena, porque el "q = 5" se leía como la solución
+delatada y no como el dato que se da; y `sin(x)` se leía en voz alta "si **ene** de equis", porque la
+regla que convierte `f(x)` en "efe de equis" se comía la última letra del nombre de la función.
+
 ---
 
 ## 4. Estado verificado a 20 de agosto de 2026
 
 | Prueba | Resultado |
 |---|---|
-| Lógica (`npm run qa`) | **1 354 aprobadas · 0 fallidas** (Node 20 y Node 24) |
+| Lógica (`npm run qa`) | **1 413 aprobadas · 0 fallidas** (Node 20 y Node 24) |
 | Carga del frontend (`node qa/frontend.mjs`) | **10 escenarios · 0 fallidos** (Node 20 y Node 24) |
 | Auditoría independiente | **247 turnos · 304 preguntas · 277 verificadas aparte · 0 fallos** |
 | Barrido por propiedades (`qa/barrido.mjs`) | **200 conversaciones · 1 800 turnos · 0 violaciones** |
@@ -423,6 +462,7 @@ de nombres recibía la pista de la regla de la potencia en vez de remitir al ró
 | Versiones de Node verificadas | **18+**, probado en **20.18.1** y **24.5.0** |
 | Protección de `/api/query` | tope general por IP · IA 15/min y 120/h por IP · **500/día global** |
 | Quejas de las capturas, reproducidas por HTTP | **13 comprobaciones · 0 fallidas** |
+| Clase encadenada completa, por HTTP | **12 tramos × 5 temas · deterministas de principio a fin** |
 
 ---
 
@@ -454,7 +494,16 @@ cuadráticas y grados superiores, sistemas, inecuaciones, trigonometría, logari
 4. **Sin verificación por navegador:** todas las pruebas llegan al sistema por su interfaz de datos.
    La sincronización de voz y pizarra y el comportamiento en móvil no están cubiertos por ellas.
 
-5. **Temario que avance ENTRE temas:** el cliente lo ha pedido tres veces. Hoy la clase progresa y
+5. **Las cuatro operaciones en cada tema:** el cliente pide que todo tema enseñe sumar, restar,
+   multiplicar y dividir. Hoy: la **aritmética** ya las tiene las cuatro (son sus cuatro temas); en
+   **derivadas** están la suma y la resta (derivar un polinomio término a término), y faltan el
+   producto, el cociente y la cadena; en **fracciones** está la suma, y faltan resta, multiplicación y
+   división; en **factorización** y **ecuaciones lineales** la petición habría que concretarla, porque
+   "las operaciones de la factorización" no designa un contenido definido. Lo que falta es CONTENIDO
+   NUEVO, no un defecto: mientras no exista, esas consultas salen del motor determinista y las explica
+   la IA, en vez de contestarse con otra operación (Etapa U). Sería una **etapa nueva**, con su
+   alcance y su presupuesto.
+6. **Temario que avance ENTRE temas:** el cliente lo ha pedido tres veces. Hoy la clase progresa y
    cambia de registro DENTRO de un tema (ejercicio → subir nivel → ejemplo aplicado), pero no decide
    por su cuenta dar por terminada la resta y pasar a otra materia. Un temario con secuencia entre
    temas, criterios de avance y cierre es un producto distinto del prototipo acordado en las Etapas
@@ -465,7 +514,8 @@ cuadráticas y grados superiores, sistemas, inecuaciones, trigonometría, logari
 agosto → construida el 10 como tercer escalón de la escalera, Etapa L); y la falta de aplicación en
 aritmética (→ construida el 19 de agosto con los problemas de enunciado, Etapa S); y **las partes de
 cada tema**, que solo tenía la aritmética y solo dentro del concepto (20 de agosto → lección propia de
-vocabulario en los ocho temas, Etapa T).
+vocabulario en los ocho temas, Etapa T); y **la suma y la resta de derivadas**, que estaban cubiertas
+desde siempre sin decirse (20 de agosto → se enseñan con un polinomio y se nombra la regla, Etapa U).
 
 ---
 
@@ -499,7 +549,13 @@ vocabulario en los ocho temas, Etapa T).
    resolvía un ejercicio, y "sí" —contestando a "¿entendiste?"— cambiaba de tema porque no encajaba
    en ninguna lista y salía del motor determinista. Lo que el sistema no clasifica, lo clasifica la
    IA por su cuenta, y ahí es donde se pierde el hilo de la clase.
-10. **Distinguir el defecto del alcance, y decirlo a tiempo.** Varias peticiones —temario entre temas,
+10. **Comprobar lo que de verdad se está sirviendo, no lo que uno cree que sirve.** Los tres defectos
+   más graves de todo el proyecto —un producto leído como una suma, una nota sacada de la función
+   equivocada, una pregunta calificada con un número inventado— no los encontró ninguna de las 1 413
+   comprobaciones. Aparecieron al volver a consultar el sistema EN PRODUCCIÓN después de desplegar, y
+   cada uno salió de un borrador distinto de la IA: ninguna consulta escrita por una persona escribe
+   un producto de potencias. Desplegar no es terminar; hay que ir a mirar.
+11. **Distinguir el defecto del alcance, y decirlo a tiempo.** Varias peticiones —temario entre temas,
    conversación libre— no eran fallos sino producto nuevo. Tratarlas como defectos habría alargado
    el proyecto sin fin; nombrarlas como etapa nueva permite decidir con criterio.
 
