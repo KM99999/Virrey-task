@@ -1081,6 +1081,11 @@ export function processLSG(rawLsg, intent, mensaje = "") {
 
   // Poda de RELLENO descontrolado: la IA a veces emite una cola de "esperar"/"puntero" (se han visto 41
   // pausas seguidas TRAS la pregunta) que hace avanzar el cronograma sin contenido. Se recorta aquí.
+  // La estructura modular del contrato se garantiza AQUÍ, en el PRE Light, antes de podar y de
+  // recalcular los pasos: así el timeline, la duración y lo que ve el alumno salen ya con los cuatro
+  // módulos pactados, venga la lección del motor determinista o de la IA.
+  garantizarSecuenciaAprendizaje(lsg, intent, warnings);
+
   podarRelleno(lsg, pasos);
 
   lsg.duracion_estimada = Number(rawLsg.duracion_estimada) > 0
@@ -1120,6 +1125,90 @@ function podarRelleno(lsg, pasos) {
   pasos.length = 0;
   if (Array.isArray(lsg.modulos)) { for (const m of lsg.modulos) for (const d of m.directivas) pasos.push({ ...d }); }
   else if (Array.isArray(lsg.directivas)) { for (const d of lsg.directivas) pasos.push({ ...d }); }
+}
+
+// ── SECUENCIA MODULAR OBLIGATORIA DE "APRENDER" (Fase 1) ─────────────────────
+// El entregable fija que una lección de TEMA se estructure, en este orden, en:
+//   concepto → regla (propiedad/fórmula) → ejemplo_guiado (resuelto paso a paso) → practica.
+// Los generadores deterministas ya la emiten así, pero un tema FUERA del motor garantizado
+// (integrales, logaritmos, trigonometría…) lo redacta la IA, y la IA improvisa los nombres: se han
+// visto en pantalla "CONCEPTO_DERIVADA" y "REGLA_POTENCIA", que no son los módulos pactados. Pedirle
+// la estructura a la IA en el prompt no es garantizarla; garantizarla es trabajo del PRE Light, que
+// es exactamente donde el cliente pidió que estuviera.
+// Aquí NO se inventa contenido: solo se RENOMBRA a los cuatro módulos del contrato, se FUNDEN los que
+// hablan de lo mismo, se ORDENAN y, si la lección llegó plana, se reparte por sus propias marcas.
+const MODULOS_APRENDER = ["concepto", "regla", "ejemplo_guiado", "practica"];
+// El orden de la tabla importa: "practica" se comprueba antes que "ejemplo", porque un módulo llamado
+// "ejercicio_de_practica" es práctica, no ejemplo.
+const CANON_MODULO = [
+  [/practic|ejercicio|reto|tu\s*turno|te\s*toca|eval[uú]a/i, "practica"],
+  [/ejemplo|guiad|resuelt|paso\s*a\s*paso/i, "ejemplo_guiado"],
+  [/regla|f[oó]rmula|propiedad|ley\b|teorema|m[eé]todo|procedimiento/i, "regla"],
+  [/concept|introduc|qu[eé]\s*es|definic|\bidea\b|fundament|intuici/i, "concepto"],
+];
+function canonizarModulo(id, pos) {
+  for (const [re, canon] of CANON_MODULO) if (re.test(String(id || ""))) return canon;
+  // Sin nombre reconocible se asigna por POSICIÓN, nunca a "practica": la práctica se decide después
+  // por dónde está la pregunta calificable, que es el único criterio fiable.
+  return MODULOS_APRENDER[Math.min(pos, MODULOS_APRENDER.length - 2)];
+}
+// Reparte una lección PLANA en los cuatro módulos, usando sus propias marcas de texto. Si no se
+// reconoce alguna frontera, se reparte por posición: es preferible una división aproximada a
+// devolver la lección sin estructura, que es lo que el entregable prohíbe.
+function repartirEnModulos(dir) {
+  const txt = (d) => `${d.texto || ""} ${d.contenido || ""}`;
+  const iPreg = dir.map((d) => d.tipo).lastIndexOf("preguntar");
+  let iPractica = iPreg >= 0 ? iPreg : dir.length;
+  if (iPreg > 0) for (let i = iPreg - 1; i >= 0; i--) if (dir[i].tipo === "pizarra") { iPractica = i; break; }
+  const cuerpo = dir.slice(0, iPractica);
+  let iEjemplo = cuerpo.findIndex((d) => /vamos a |veamos un ejemplo|por ejemplo|ejemplo:|lo vemos con|calculemos|resolvamos/i.test(txt(d)));
+  let iRegla = cuerpo.findIndex((d) => /regla|f[oó]rmula|propiedad|se calcula as[ií]|el m[eé]todo|se hace as[ií]/i.test(txt(d)));
+  if (iRegla < 0) iRegla = Math.max(1, Math.floor(cuerpo.length / 3));
+  if (iEjemplo < 0 || iEjemplo <= iRegla) iEjemplo = Math.max(iRegla + 1, Math.floor((cuerpo.length * 2) / 3));
+  return [
+    { id: "concepto", directivas: cuerpo.slice(0, iRegla) },
+    { id: "regla", directivas: cuerpo.slice(iRegla, iEjemplo) },
+    { id: "ejemplo_guiado", directivas: cuerpo.slice(iEjemplo) },
+    { id: "practica", directivas: dir.slice(iPractica) },
+  ];
+}
+function garantizarSecuenciaAprendizaje(lsg, intent, warnings) {
+  if (intent !== "aprender") return;
+  let grupos = null;
+  if (Array.isArray(lsg.modulos) && lsg.modulos.length) {
+    grupos = lsg.modulos.map((m, i) => ({ id: canonizarModulo(m.id, i), directivas: (m.directivas || []).slice() }));
+  } else if (Array.isArray(lsg.directivas) && lsg.directivas.length) {
+    grupos = repartirEnModulos(lsg.directivas);
+  }
+  if (!grupos || !grupos.length) return;
+  // Se funden los módulos que caen en el mismo id del contrato, conservando el orden de llegada.
+  const porId = new Map();
+  for (const g of grupos) {
+    if (!porId.has(g.id)) porId.set(g.id, []);
+    porId.get(g.id).push(...g.directivas);
+  }
+  const mods = MODULOS_APRENDER.filter((id) => porId.has(id)).map((id) => ({ id, directivas: porId.get(id) }));
+  // La PRÁCTICA es donde está la pregunta calificable. Si la IA la dejó dentro del ejemplo, se mueve
+  // su cola (el enunciado escrito + la pregunta) al módulo de práctica, que es su sitio.
+  const iConPreg = mods.findIndex((m) => m.directivas.some((d) => d.tipo === "preguntar"));
+  const iPractica = mods.findIndex((m) => m.id === "practica");
+  if (iConPreg >= 0 && mods[iConPreg].id !== "practica") {
+    const origen = mods[iConPreg];
+    const p = origen.directivas.map((d) => d.tipo).lastIndexOf("preguntar");
+    let corte = p;
+    for (let i = p - 1; i >= 0; i--) if (origen.directivas[i].tipo === "pizarra") { corte = i; break; }
+    const cola = origen.directivas.splice(corte);
+    if (iPractica >= 0) mods[iPractica].directivas.unshift(...cola);
+    else mods.push({ id: "practica", directivas: cola });
+  }
+  const final = mods.filter((m) => m.directivas.length);
+  // Se avisa de lo que falte, pero no se rellena con contenido inventado: una lección con un módulo
+  // de menos es un aviso; una con un módulo fabricado es un engaño.
+  const faltan = MODULOS_APRENDER.filter((id) => !final.some((m) => m.id === id));
+  if (faltan.length) warnings.push(`PRE Light: la lección de aprendizaje no trae los módulos: ${faltan.join(", ")}.`);
+  if (!final.length) return;
+  lsg.modulos = final;
+  delete lsg.directivas;
 }
 
 // Normaliza un array de directivas, numerándolas y saneándolas.

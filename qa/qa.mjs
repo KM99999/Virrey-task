@@ -953,6 +953,53 @@ async function unitTests() {
     }
   }
 
+  // ── LA SECUENCIA MODULAR LA GARANTIZA EL PRE LIGHT, TAMBIÉN PARA LO QUE ESCRIBE LA IA.
+  //    Petición del cliente, con los ficheros nombrados: "cuando la intención sea aprender, la lección
+  //    debe estructurarse obligatoriamente en concepto → regla → ejemplo_guiado → practica".
+  //    Los ocho temas garantizados ya salían así de sus generadores, pero un tema FUERA del motor
+  //    (integrales, logaritmos, trigonometría) lo redacta la IA, y la IA improvisa los nombres: en una
+  //    captura del propio cliente se leía "MÓDULO: CONCEPTO_DERIVADA" y "MÓDULO: REGLA_POTENCIA".
+  //    Pedir la estructura en el prompt no es garantizarla. Ahora la impone el PRE Light.
+  {
+    const SEC = "concepto,regla,ejemplo_guiado,practica";
+    const idsDe = (lsg) => (lsg.modulos || []).map((m) => m.id).join(",");
+    const preguntaEn = (lsg) => (lsg.modulos || []).filter((m) => m.directivas.some((d) => d.tipo === "preguntar")).map((m) => m.id);
+    // a) La IA con los nombres improvisados de la captura del cliente.
+    const ia1 = processLSG({ escena: "leccion", intencion: "aprender", verificacion_respuesta: "", modulos: [
+      { id: "CONCEPTO_DERIVADA", directivas: [{ tipo: "hablar", texto: "Una derivada mide la razón de cambio instantánea de una función." }] },
+      { id: "REGLA_POTENCIA", directivas: [{ tipo: "hablar", texto: "Si f(x) = xⁿ entonces f'(x) = n·xⁿ⁻¹." }] },
+      { id: "EJEMPLO_1", directivas: [{ tipo: "hablar", texto: "Vamos a derivar x³." }, { tipo: "pizarra", accion: "escribir", contenido: "derivada de x³ = 3x²" }] },
+      { id: "TU_TURNO", directivas: [{ tipo: "pizarra", accion: "escribir", contenido: "x⁵" }, { tipo: "preguntar", texto: "¿Cuál es la derivada de x⁵?", respuesta: "5x⁴", esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" }] },
+    ] }, "aprender", "enséñame derivadas").lsg;
+    check("PRE Light: renombra los módulos improvisados de la IA a los del contrato", idsDe(ia1) === SEC, idsDe(ia1));
+    // b) La IA que devuelve la lección PLANA, sin módulos.
+    const ia2 = processLSG({ escena: "leccion", intencion: "aprender", verificacion_respuesta: "", directivas: [
+      { tipo: "hablar", texto: "Un logaritmo responde a qué exponente hay que elevar la base para obtener el número." },
+      { tipo: "pizarra", accion: "escribir", contenido: "log_b(x) = y" },
+      { tipo: "hablar", texto: "La regla básica: el logaritmo de un producto es la suma de los logaritmos." },
+      { tipo: "hablar", texto: "Vamos a calcular log base 2 de 8." },
+      { tipo: "pizarra", accion: "escribir", contenido: "log2(8) = 3" },
+      { tipo: "pizarra", accion: "escribir", contenido: "log2(16) = ?" },
+      { tipo: "preguntar", texto: "¿Cuánto vale log base 2 de 16?", respuesta: "4", esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" },
+    ] }, "aprender", "enséñame logaritmos").lsg;
+    check("PRE Light: estructura en módulos una lección que llegó PLANA", idsDe(ia2) === SEC, idsDe(ia2));
+    // c) La pregunta metida dentro del ejemplo: su sitio es el módulo de práctica.
+    const ia3 = processLSG({ escena: "leccion", intencion: "aprender", verificacion_respuesta: "", modulos: [
+      { id: "concepto", directivas: [{ tipo: "hablar", texto: "Una integral acumula cantidades a lo largo de un intervalo." }] },
+      { id: "regla", directivas: [{ tipo: "hablar", texto: "Para integrar una potencia se sube el exponente en uno y se divide por el nuevo exponente." }] },
+      { id: "ejemplo_guiado", directivas: [{ tipo: "hablar", texto: "Vamos a integrar x²." }, { tipo: "pizarra", accion: "escribir", contenido: "∫x² dx = x³/3 + C" },
+        { tipo: "pizarra", accion: "escribir", contenido: "∫x³ dx = ?" },
+        { tipo: "preguntar", texto: "¿Cuál es la integral de x³?", respuesta: "x⁴/4 + C", esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" }] },
+    ] }, "aprender", "enséñame integrales").lsg;
+    check("PRE Light: la pregunta calificable acaba en el módulo de práctica", idsDe(ia3) === SEC && preguntaEn(ia3).join(",") === "practica", `${idsDe(ia3)} · pregunta en ${preguntaEn(ia3)}`);
+    // d) Una lección de PRACTICAR no se toca (sus módulos son otros, por contrato).
+    const pr = processLSG({ escena: "practica", intencion: "practicar", verificacion_respuesta: "", modulos: [
+      { id: "recordatorio", directivas: [{ tipo: "hablar", texto: "Recuerda la regla de la potencia." }] },
+      { id: "practica", directivas: [{ tipo: "pizarra", accion: "escribir", contenido: "x⁴" }, { tipo: "preguntar", texto: "¿Cuál es la derivada de x⁴?", respuesta: "4x³", esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" }] },
+    ] }, "practicar", "dame ejercicios").lsg;
+    check("PRE Light: una lección de PRACTICAR conserva sus propios módulos", idsDe(pr) === "recordatorio,practica", idsDe(pr));
+  }
+
   // ── PRONUNCIACIÓN EN ESPAÑOL de TODO lo que el tutor dice en voz alta.
   //    Queja del cliente: "en lugar de decir 'ene', dice 'yeni'". El motor de voz del navegador no se
   //    puede corregir desde aquí; lo que sí se controla es QUÉ se le da a leer. Se recoge todo lo
