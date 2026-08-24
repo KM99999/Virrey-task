@@ -3,8 +3,8 @@
 **Proyecto:** Math IA — prototipo web de tutor de matemáticas (avatar + pizarra + voz).
 **En vivo:** https://math-ia.onrender.com · versión desplegada verificable en `/api/health`.
 **Repositorio:** https://github.com/KM99999/Virrey-task (rama `main`).
-**Periodo:** 9 de julio – 20 de agosto de 2026 · **218 commits**.
-**Estado a 20 de agosto de 2026:** commit `d40eee3` desplegado; Etapas 1 y 2 completas y verificadas.
+**Periodo:** 9 de julio – 20 de agosto de 2026 · **221 commits**.
+**Estado a 20 de agosto de 2026:** commit `5443979` desplegado; Etapas 1 y 2 completas y verificadas.
 
 > Este documento es el registro COMPLETO y vigente del desarrollo. `Milestone1.md` es una
 > instantánea anterior (hasta el 11 de agosto) que se conserva por trazabilidad.
@@ -444,13 +444,42 @@ q = 5?") se cambiaba por una ecuación lineal ajena, porque el "q = 5" se leía 
 delatada y no como el dato que se da; y `sin(x)` se leía en voz alta "si **ene** de equis", porque la
 regla que convierte `f(x)` en "efe de equis" se comía la última letra del nombre de la función.
 
+### Etapa V — La estructura pactada, garantizada por quien debe garantizarla (20 de agosto)
+
+El cliente reclamó, citando el entregable y nombrando los ficheros, dos cosas: que `Enséñame [tema]`
+se clasifique como **aprender**, y que la lección de aprendizaje se estructure obligatoriamente en
+**concepto → regla → ejemplo_guiado → practica**, y que esa garantía viva en el PRE Light.
+
+**Sobre la clasificación, no había defecto.** `src/classifier.js` devuelve **aprender al 100 %** para
+"Enséñame [tema]", "Aprender [tema]" y "quiero aprender [tema]", dentro y fuera del motor
+determinista. Se probó además la **matriz de rutas alcanzables** —95 combinaciones de consulta ×
+tema activo, derivando el seguimiento con el clasificador REAL del navegador—: ninguna da resolver.
+Una primera medición mía sí pareció darle la razón, pero era mi propia herramienta de prueba
+estropeando la tilde de "Enséñame" antes de enviarla; de haberme quedado ahí habría "corregido" un
+defecto inexistente.
+
+**Sobre la estructura, tenía razón, y en el sitio importaba.** La Etapa T había puesto los cuatro
+módulos en los GENERADORES deterministas, así que los ocho temas garantizados ya salían bien. Pero un
+tema **fuera** del motor —integrales, logaritmos, trigonometría— lo redacta la IA, y la IA improvisa
+los nombres: en una captura del propio cliente se leía "MÓDULO: CONCEPTO_DERIVADA" y "MÓDULO:
+REGLA_POTENCIA", que no son los módulos pactados. **Pedir la estructura en el prompt no es
+garantizarla.** Ahora la impone el PRE Light: renombra a los cuatro módulos del contrato, funde los
+que hablan de lo mismo, los ordena, reparte una lección que llegue plana, y mueve al módulo de
+práctica la pregunta calificable si la IA la dejó dentro del ejemplo. No fabrica contenido: si falta
+un módulo lo registra en `advertencias`, porque una lección con un módulo de menos es un aviso y una
+con un módulo inventado es un engaño.
+
+**Límite conocido, declarado.** Si la IA no está disponible y el tema está fuera del conjunto básico,
+la respuesta es un AVISO de modo demostración, no una lección, y sale con dos módulos y su
+advertencia. No se rellenan los otros dos con contenido de adorno.
+
 ---
 
 ## 4. Estado verificado a 20 de agosto de 2026
 
 | Prueba | Resultado |
 |---|---|
-| Lógica (`npm run qa`) | **1 413 aprobadas · 0 fallidas** (Node 20 y Node 24) |
+| Lógica (`npm run qa`) | **1 462 aprobadas · 0 fallidas** (Node 20 y Node 24) |
 | Carga del frontend (`node qa/frontend.mjs`) | **10 escenarios · 0 fallidos** (Node 20 y Node 24) |
 | Auditoría independiente | **247 turnos · 304 preguntas · 277 verificadas aparte · 0 fallos** |
 | Barrido por propiedades (`qa/barrido.mjs`) | **200 conversaciones · 1 800 turnos · 0 violaciones** |
@@ -463,6 +492,7 @@ regla que convierte `f(x)` en "efe de equis" se comía la última letra del nomb
 | Protección de `/api/query` | tope general por IP · IA 15/min y 120/h por IP · **500/día global** |
 | Quejas de las capturas, reproducidas por HTTP | **13 comprobaciones · 0 fallidas** |
 | Clase encadenada completa, por HTTP | **12 tramos × 5 temas · deterministas de principio a fin** |
+| Secuencia modular `aprender`, en producción | **concepto → regla → ejemplo_guiado → practica** en los 8 temas y en los de IA |
 
 ---
 
