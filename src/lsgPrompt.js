@@ -556,7 +556,7 @@ export function fraccionResueltaLSG(opts) {
   }
   if (!dificil) {
     dir.push(
-      { tipo: "hablar", texto: `Vamos a resolver juntos esta suma de fracciones: ${A.texto}. Fíjate que las dos tienen el mismo número de abajo, el denominador ${A.d}.` },
+      { tipo: "hablar", texto: `Vamos a resolver juntos esta suma de fracciones: ${A.texto}. Fíjate que las dos tienen el mismo número de abajo, el denominador ${A.d}.`, _mod: o.concepto ? "ejemplo_guiado" : undefined },
       { tipo: "pizarra", accion: "escribir", contenido: A.texto },
       { tipo: "esperar", segundos: 1 },
       { tipo: "hablar", texto: `Con el mismo denominador, solo se suman los números de arriba (los numeradores): ${A.n1} + ${A.n2} = ${A.suma}. El denominador ${A.d} se queda igual.` },
@@ -569,7 +569,7 @@ export function fraccionResueltaLSG(opts) {
     }
   } else {
     dir.push(
-      { tipo: "hablar", texto: `Vamos a resolver ${A.texto}. Aquí los denominadores son DISTINTOS (${A.d1} y ${A.d2}), así que no podemos sumar todavía: primero hay que igualarlos.` },
+      { tipo: "hablar", texto: `Vamos a resolver ${A.texto}. Aquí los denominadores son DISTINTOS (${A.d1} y ${A.d2}), así que no podemos sumar todavía: primero hay que igualarlos.`, _mod: o.concepto ? "ejemplo_guiado" : undefined },
       { tipo: "pizarra", accion: "escribir", contenido: A.texto },
       { tipo: "esperar", segundos: 1 },
       { tipo: "hablar", texto: `Buscamos el mínimo común denominador de ${A.d1} y ${A.d2}: es ${A.L}. Convertimos cada fracción a denominador ${A.L} multiplicando arriba y abajo por lo mismo.` },
@@ -594,7 +594,7 @@ export function fraccionResueltaLSG(opts) {
   // abrían con la misma frase de concepto y el alumno las veía idénticas aunque las fracciones cambiaran.
   if (o.seguimiento && !o.practica) aperturaEjemplo(dir, `Vamos con otra suma de fracciones: ${A.texto}.`, A.texto);
   if (o.mantener) aperturaReexplicacion(dir, SIMPLE_FRACCION, o.simplificacion);
-  return { escena: "fraccion_resuelta", intencion: o.concepto ? "aprender" : "resolver", duracion_estimada: 60, _mock: true, directivas: dir };
+  return conModulos({ escena: "fraccion_resuelta", intencion: o.concepto ? "aprender" : "resolver", duracion_estimada: 60, _mock: true }, dir);
 }
 
 // ════════ LECCIONES DE BOTÓN DETERMINISTAS (los 4 chips de "Tu consulta") ════════
@@ -620,13 +620,63 @@ function varianteConcepto(previo, variantes) {
   for (const v of variantes) if (!p.includes(v.marca)) return v;
   return variantes[0];
 }
+// ── MÓDULOS PEDAGÓGICOS DE LA FASE 1 ─────────────────────────────────────────
+// El entregable pactado dice, textualmente, que el PRE Light entrega "pasos didácticos (ejercicios)
+// o MÓDULOS (temas: concepto, regla, ejemplo guiado, práctica)". Las lecciones deterministas ya
+// seguían ese ORDEN —concepto, luego la regla, luego el ejemplo resuelto, luego la práctica—, pero
+// salían como una lista PLANA de directivas: el orden estaba, la estructura no. Y sin estructura la
+// interfaz no puede rotular los módulos, así que el alumno no ve dónde acaba la teoría y empieza el
+// ejemplo. Reclamación del cliente, citando el entregable; tenía razón.
+// El armazón ya existía entero (esquema LSG, PRE Light y reproductor lo soportan desde el principio,
+// y las lecciones de Gemini sí lo usaban); lo que faltaba era que lo emitieran los generadores
+// deterministas que sustituyeron a Gemini en los temas garantizados.
+// Los generadores marcan dónde empieza cada módulo con `_mod`. La PRÁCTICA se deduce siempre igual
+// —el último ejercicio escrito antes de la pregunta final—, así que no hace falta marcarla a mano.
+function agruparModulos(dir) {
+  if (!Array.isArray(dir) || !dir.some((d) => d && d._mod)) return null;
+  const mods = [];
+  const previos = [];
+  for (const d of dir) {
+    const { _mod, ...limpia } = d;
+    if (_mod) mods.push({ id: _mod, directivas: [] });
+    if (!mods.length) { previos.push(limpia); continue; } // lo que va ANTES del primer módulo
+    mods[mods.length - 1].directivas.push(limpia);
+  }
+  if (!mods.length) return null;
+  // Una apertura añadida después (p. ej. "Vamos con otro ejemplo") queda delante del primer módulo:
+  // se le une, en vez de inventar un módulo que no está en el temario pactado.
+  if (previos.length) mods[0].directivas.unshift(...previos);
+  const ultimo = mods[mods.length - 1];
+  if (ultimo.id !== "practica") {
+    const iPreg = ultimo.directivas.findIndex((d) => d.tipo === "preguntar");
+    if (iPreg > 0) {
+      let corte = iPreg;
+      for (let i = iPreg - 1; i >= 0; i--) if (ultimo.directivas[i].tipo === "pizarra") { corte = i; break; }
+      const practica = ultimo.directivas.slice(corte);
+      ultimo.directivas = ultimo.directivas.slice(0, corte);
+      mods.push({ id: "practica", directivas: practica });
+    }
+  }
+  return mods.filter((m) => m.directivas.length);
+}
+// Devuelve el LSG con `modulos` si la lección es de TEMA (concepto) y se ha podido agrupar; si no,
+// con la lista plana de siempre. Un EJERCICIO concreto sigue entregándose como pasos, que es lo que
+// dice el entregable.
+function conModulos(base, dir) {
+  const mods = agruparModulos(dir);
+  return mods ? { ...base, modulos: mods } : { ...base, directivas: dir.map(({ _mod, ...d }) => d) };
+}
+
 // Convierte una redacción en directivas (hablar/pizarra alternados).
+const MODULO_BLOQUE = ["concepto", "regla"];
 const dirsConcepto = (v) => {
   const out = [];
-  for (const par of v.bloques) {
-    out.push({ tipo: "hablar", texto: par[0] });
+  v.bloques.forEach((par, i) => {
+    // Las redacciones ya venían en este orden: el primer bloque dice QUÉ ES (concepto) y el segundo,
+    // la REGLA o propiedad. Solo faltaba nombrarlo para poder entregarlo como módulos.
+    out.push({ tipo: "hablar", texto: par[0], _mod: MODULO_BLOQUE[i] || "regla" });
     if (par[1]) out.push({ tipo: "pizarra", accion: "escribir", contenido: par[1] });
-  }
+  });
   return out;
 };
 
@@ -1116,7 +1166,7 @@ function aritmeticaLSG(opts, cfg) {
   });
   const dir = [{ tipo: "avatar", accion: "sonreir" }];
   if (opts.concepto) {
-    dir.push({ tipo: "hablar", texto: cfg.concepto[0] });
+    dir.push({ tipo: "hablar", texto: cfg.concepto[0], _mod: "concepto" });
     dir.push({ tipo: "pizarra", accion: "escribir", contenido: cfg.concepto[1] });
     // CÓMO SE LLAMA CADA NÚMERO. Petición del cliente: "debe enseñar las partes de una resta
     // (minuendo, sustraendo y diferencia)". Es vocabulario básico del tema y no se enseñaba en
@@ -1124,10 +1174,10 @@ function aritmeticaLSG(opts, cfg) {
     // para que el nombre quede pegado a un número que el alumno está viendo.
     if (cfg.rotuloPartes) dir.push({ tipo: "pizarra", accion: "escribir", contenido: cfg.rotuloPartes });
     if (cfg.partes) dir.push({ tipo: "hablar", texto: cfg.partes(...parseAB(E.texto), E.answer) });
-    dir.push({ tipo: "hablar", texto: cfg.concepto[2] });
+    dir.push({ tipo: "hablar", texto: cfg.concepto[2], _mod: "regla" });
   }
   dir.push(
-    { tipo: "hablar", texto: `Vamos a ${cfg.verbo} ${E.texto} paso a paso.` },
+    { tipo: "hablar", texto: `Vamos a ${cfg.verbo} ${E.texto} paso a paso.`, _mod: opts.concepto ? "ejemplo_guiado" : undefined },
     { tipo: "pizarra", accion: "escribir", contenido: E.texto },
     { tipo: "esperar", segundos: 1 },
   );
@@ -1137,7 +1187,7 @@ function aritmeticaLSG(opts, cfg) {
   dir.push({ tipo: "preguntar", texto: pregArit(P), respuesta: String(P.answer), esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" });
   if (opts.seguimiento && !opts.practica) aperturaEjemplo(dir, `Vamos con otro: ${E.texto}.`, E.texto);
   if (opts.mantener) aperturaReexplicacion(dir, cfg.simple, opts.simplificacion);
-  return { escena: cfg.escena, intencion: opts.concepto ? "aprender" : "resolver", duracion_estimada: 60, _mock: true, directivas: dir };
+  return conModulos({ escena: cfg.escena, intencion: opts.concepto ? "aprender" : "resolver", duracion_estimada: 60, _mock: true }, dir);
 }
 export function sumaResueltaLSG(opts = {}) { return aritmeticaLSG(opts, ARIT.suma); }
 export function restaResueltaLSG(opts = {}) { return aritmeticaLSG(opts, ARIT.resta); }
@@ -1193,12 +1243,12 @@ export function linealResueltaLSG(opts = {}) {
   // ENSEÑAR el tema ("enséñame ecuaciones lineales"): primero el CONCEPTO y la REGLA, no saltar directo
   // a resolver un ejercicio (queja del cliente: "pido que me enseñe y de frente va a los ejercicios").
   if (opts.concepto) {
-    dir.push({ tipo: "hablar", texto: "Una ecuación lineal, o de primer grado, es una igualdad donde la incógnita (la x) está elevada solo a la 1: no tiene x² ni raíces. Resolverla significa encontrar el valor de x que hace verdadera la igualdad." });
+    dir.push({ tipo: "hablar", texto: "Una ecuación lineal, o de primer grado, es una igualdad donde la incógnita (la x) está elevada solo a la 1: no tiene x² ni raíces. Resolverla significa encontrar el valor de x que hace verdadera la igualdad.", _mod: "concepto" });
     dir.push({ tipo: "pizarra", accion: "escribir", contenido: "Ecuación lineal:  a·x + b = c" });
-    dir.push({ tipo: "hablar", texto: "La regla para hallar la x es despejarla: los números que la acompañan pasan al otro lado con la operación inversa (lo que suma, resta; lo que resta, suma; lo que multiplica, divide), hasta dejar la x sola. Veámoslo con un ejemplo." });
+    dir.push({ _mod: "regla", tipo: "hablar", texto: "La regla para hallar la x es despejarla: los números que la acompañan pasan al otro lado con la operación inversa (lo que suma, resta; lo que resta, suma; lo que multiplica, divide), hasta dejar la x sola. Veámoslo con un ejemplo." });
   }
   dir.push(
-    { tipo: "hablar", texto: `Vamos a resolver ${sol.original} paso a paso. La meta es dejar la ${sol.varName} sola en un lado del igual.` },
+    { tipo: "hablar", texto: `Vamos a resolver ${sol.original} paso a paso. La meta es dejar la ${sol.varName} sola en un lado del igual.`, _mod: opts.concepto ? "ejemplo_guiado" : undefined },
     { tipo: "pizarra", accion: "escribir", contenido: sol.original },
     { tipo: "esperar", segundos: 1 },
   );
@@ -1211,7 +1261,7 @@ export function linealResueltaLSG(opts = {}) {
   dir.push({ tipo: "preguntar", texto: `¿Cuánto vale ${solP.varName} en ${solP.original}? Escribe solo el número.`, respuesta: solP.answer, esperar_respuesta: true, si_correcto: "felicitar", si_incorrecto: "mostrar_otro_ejemplo" });
   if (opts.seguimiento && !opts.practica) aperturaEjemplo(dir, `Vamos con otra ecuación: ${sol.original}.`, sol.original);
   if (opts.mantener) aperturaReexplicacion(dir, SIMPLE_LINEAL, opts.simplificacion);
-  return { escena: "lineal_resuelta", intencion: opts.concepto ? "aprender" : "resolver", duracion_estimada: 70, _mock: true, directivas: dir };
+  return conModulos({ escena: "lineal_resuelta", intencion: opts.concepto ? "aprender" : "resolver", duracion_estimada: 70, _mock: true }, dir);
 }
 
 // ── 2) DERIVADAS: deriva un monomio con la regla de la potencia + práctica de otro distinto. ──
@@ -1255,7 +1305,7 @@ export function derivadaResueltaLSG(opts = {}) {
   // del cliente: "le digo 'enséñame derivadas' y de frente me enseña a resolver ejercicios").
   if (opts.concepto) {
     for (const d of dirsConcepto(varianteConcepto(opts.evitar, CONCEPTO_DERIVADA))) dir.push(d);
-    dir.push({ tipo: "hablar", texto: `Vamos a derivar ${ejemplo}.` });
+    dir.push({ tipo: "hablar", texto: `Vamos a derivar ${ejemplo}.`, _mod: "ejemplo_guiado" });
   } else {
     dir.push({ tipo: "hablar", texto: `Vamos a derivar ${ejemplo}. Derivar mide qué tan rápido cambia una función. Para una potencia usamos la regla de la potencia: el exponente baja a multiplicar delante y se le resta una unidad.` });
   }
@@ -1280,7 +1330,7 @@ export function derivadaResueltaLSG(opts = {}) {
   );
   if (opts.seguimiento && !opts.practica) aperturaEjemplo(dir, `Vamos con otra función: ${ejemplo}.`, ejemplo);
   if (opts.mantener) aperturaReexplicacion(dir, SIMPLE_DERIVADA, opts.simplificacion);
-  return { escena: "derivada_resuelta", intencion: opts.concepto ? "aprender" : "resolver", duracion_estimada: 65, _mock: true, directivas: dir };
+  return conModulos({ escena: "derivada_resuelta", intencion: opts.concepto ? "aprender" : "resolver", duracion_estimada: 65, _mock: true }, dir);
 }
 
 // Elige el ÍNDICE de escenario aplicado que NO se acaba de mostrar (rota con `evitar` = resumen de la
@@ -1610,7 +1660,7 @@ export function factorizacionResueltaLSG(opts = {}) {
   // LUEGO el ejemplo — no saltar directo a resolver (misma queja del cliente que en derivadas).
   if (opts.concepto) {
     for (const d of dirsConcepto(varianteConcepto(opts.evitar, CONCEPTO_FACTORIZ))) dir.push(d);
-    dir.push({ tipo: "hablar", texto: `Vamos a factorizar ${ejemplo}.` });
+    dir.push({ tipo: "hablar", texto: `Vamos a factorizar ${ejemplo}.`, _mod: "ejemplo_guiado" });
   } else {
     dir.push({ tipo: "hablar", texto: `Vamos a factorizar ${ejemplo}. Es una "diferencia de cuadrados": un cuadrado menos otro cuadrado. La regla es a² - b² = (a - b)(a + b).` });
   }
@@ -1625,7 +1675,7 @@ export function factorizacionResueltaLSG(opts = {}) {
   );
   if (opts.seguimiento && !opts.practica) aperturaEjemplo(dir, `Vamos con otra expresión: ${ejemplo}.`, ejemplo);
   if (opts.mantener) aperturaReexplicacion(dir, SIMPLE_FACTORIZ, opts.simplificacion);
-  return { escena: "factorizacion_resuelta", intencion: opts.concepto ? "aprender" : "resolver", duracion_estimada: 65, _mock: true, directivas: dir };
+  return conModulos({ escena: "factorizacion_resuelta", intencion: opts.concepto ? "aprender" : "resolver", duracion_estimada: 65, _mock: true }, dir);
 }
 
 // ════════ EJEMPLOS APLICADOS / DE LA VIDA REAL (los otros 3 temas núcleo) ════════

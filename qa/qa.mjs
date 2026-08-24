@@ -915,6 +915,44 @@ async function unitTests() {
       r ? (r.pizarras || []).join(" · ") || r.tema : "");
   }
 
+  // ── ESTRUCTURA MODULAR PACTADA EN LA FASE 1 (concepto → regla → ejemplo guiado → práctica).
+  //    El entregable dice textualmente que el PRE Light entrega "pasos didácticos (ejercicios) o
+  //    MÓDULOS (temas: concepto, regla, ejemplo guiado, práctica)". Las lecciones deterministas ya
+  //    seguían ese ORDEN, pero salían como una lista PLANA: la interfaz no podía rotular los módulos
+  //    y el alumno no veía dónde acaba la teoría y empieza el ejemplo. Reclamación del cliente,
+  //    citando el entregable; tenía razón. El armazón ya existía (esquema, PRE Light y reproductor):
+  //    faltaba que lo emitieran los generadores deterministas que sustituyeron a Gemini.
+  {
+    const ESPERADO = ["concepto", "regla", "ejemplo_guiado", "practica"];
+    for (const q of ["Enséñame derivadas", "Enséñame ecuaciones lineales", "Explícame la factorización",
+      "Enséñame fracciones", "Enséñame a sumar", "Enséñame a restar", "Enséñame a multiplicar", "Enséñame a dividir"]) {
+      const b = leccionBotonLSG({ query: q, cursores: {} });
+      check(`modulos ["${q}"]: la intención es APRENDER, no resolver`, !!b && b.intencion === "aprender", b?.intencion);
+      const { lsg } = processLSG(b.lsg, b.intencion, q);
+      const ids = (lsg.modulos || []).map((m) => m.id);
+      check(`modulos ["${q}"]: se entregan los cuatro módulos, en orden`,
+        ids.join(",") === ESPERADO.join(","), ids.join(" → ") || "ninguno (lista plana)");
+      check(`modulos ["${q}"]: ningún módulo llega vacío`,
+        (lsg.modulos || []).every((m) => m.directivas.length > 0), ids.join(" → "));
+      // El módulo de PRÁCTICA es el que lleva el ejercicio calificable, y ningún otro pregunta.
+      const conPreg = (lsg.modulos || []).filter((m) => m.directivas.some((d) => d.tipo === "preguntar")).map((m) => m.id);
+      check(`modulos ["${q}"]: la pregunta calificable está SOLO en el módulo de práctica`,
+        conPreg.length === 1 && conPreg[0] === "practica", conPreg.join(", ") || "ninguno");
+      // El CONCEPTO va primero: la primera frase hablada de la lección es la del módulo concepto.
+      const primera = (lsg.modulos || [])[0]?.directivas.find((d) => d.tipo === "hablar")?.texto || "";
+      check(`modulos ["${q}"]: la lección abre por el concepto`, primera.length > 40, primera.slice(0, 60));
+    }
+    // Un EJERCICIO CONCRETO se entrega como PASOS, no como módulos: es la otra mitad de la frase del
+    // entregable ("pasos didácticos (ejercicios) O módulos (temas)").
+    for (const q of ["Resuelve 2x + 5 = 15", "deriva 5x³", "factoriza x² - 9", "Resuelve 47 + 38", "Resuelve 1/2 + 1/3"]) {
+      const b = leccionBotonLSG({ query: q, cursores: {} });
+      const { lsg } = processLSG(b.lsg, b.intencion, q);
+      check(`ejercicio concreto ["${q}"]: se entrega como pasos, no como módulos`,
+        !Array.isArray(lsg.modulos) && Array.isArray(lsg.directivas),
+        `modulos=${Array.isArray(lsg.modulos)} directivas=${Array.isArray(lsg.directivas)}`);
+    }
+  }
+
   // ── PRONUNCIACIÓN EN ESPAÑOL de TODO lo que el tutor dice en voz alta.
   //    Queja del cliente: "en lugar de decir 'ene', dice 'yeni'". El motor de voz del navegador no se
   //    puede corregir desde aquí; lo que sí se controla es QUÉ se le da a leer. Se recoge todo lo
